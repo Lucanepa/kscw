@@ -4,40 +4,63 @@ import pb from '../pb'
 
 export function usePB<T extends RecordModel>(
   collection: string,
-  options?: RecordListOptions & { page?: number; perPage?: number },
+  options?: RecordListOptions & {
+    page?: number
+    perPage?: number
+    enabled?: boolean
+    all?: boolean
+  },
 ) {
   const [data, setData] = useState<T[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
+  const enabled = options?.enabled ?? true
+  const all = options?.all ?? false
   const page = options?.page ?? 1
   const perPage = options?.perPage ?? 50
   const sort = options?.sort ?? ''
   const filter = options?.filter ?? ''
   const expand = options?.expand ?? ''
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    if (!enabled) {
+      setData([])
+      setTotal(0)
+      setIsLoading(false)
+      return
+    }
     setIsLoading(true)
     setError(null)
     try {
-      const result: ListResult<T> = await pb.collection(collection).getList(page, perPage, {
-        sort,
-        filter,
-        expand,
-      })
-      setData(result.items)
-      setTotal(result.totalItems)
+      if (all) {
+        const items = await pb.collection(collection).getFullList<T>({
+          sort,
+          filter,
+          expand,
+        })
+        setData(items)
+        setTotal(items.length)
+      } else {
+        const result: ListResult<T> = await pb.collection(collection).getList(page, perPage, {
+          sort,
+          filter,
+          expand,
+        })
+        setData(result.items)
+        setTotal(result.totalItems)
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       setIsLoading(false)
     }
-  }, [collection, page, perPage, sort, filter, expand])
+  }, [collection, enabled, all, page, perPage, sort, filter, expand])
 
   useEffect(() => {
-    fetch()
-  }, [fetch])
+    fetchData()
+  }, [fetchData])
 
-  return { data, total, isLoading, error, refetch: fetch }
+  return { data, total, isLoading, error, refetch: fetchData }
 }
