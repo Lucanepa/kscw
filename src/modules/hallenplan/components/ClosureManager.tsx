@@ -1,0 +1,244 @@
+import { useState } from 'react'
+import Modal from '../../../components/Modal'
+import pb from '../../../pb'
+import type { Hall, HallClosure } from '../../../types'
+
+const SOURCE_OPTIONS = [
+  { value: 'hauswart', label: 'Hauswart' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'auto', label: 'Automatisch' },
+]
+
+interface ClosureManagerProps {
+  halls: Hall[]
+  closures: HallClosure[]
+  onClose: () => void
+  onChanged: () => void
+}
+
+const emptyForm: {
+  hall: string
+  start_date: string
+  end_date: string
+  reason: string
+  source: HallClosure['source']
+} = {
+  hall: '',
+  start_date: '',
+  end_date: '',
+  reason: '',
+  source: 'admin',
+}
+
+export default function ClosureManager({ halls, closures, onClose, onChanged }: ClosureManagerProps) {
+  const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function startEdit(closure: HallClosure) {
+    setEditingId(closure.id)
+    setForm({
+      hall: closure.hall,
+      start_date: closure.start_date.split(' ')[0],
+      end_date: closure.end_date.split(' ')[0],
+      reason: closure.reason,
+      source: closure.source,
+    })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setError(null)
+  }
+
+  async function handleSave() {
+    if (!form.hall || !form.start_date || !form.end_date || !form.reason) {
+      setError('Alle Felder sind Pflichtfelder.')
+      return
+    }
+    if (form.start_date > form.end_date) {
+      setError('Enddatum muss nach Startdatum liegen.')
+      return
+    }
+
+    setIsSaving(true)
+    setError(null)
+    try {
+      if (editingId) {
+        await pb.collection('hall_closures').update(editingId, form)
+      } else {
+        await pb.collection('hall_closures').create(form)
+      }
+      setForm(emptyForm)
+      setEditingId(null)
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Diese Hallensperre wirklich löschen?')) return
+    try {
+      await pb.collection('hall_closures').delete(id)
+      if (editingId === id) cancelEdit()
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
+    }
+  }
+
+  function formatDateDE(dateStr: string): string {
+    if (!dateStr) return ''
+    const [y, m, d] = dateStr.split('T')[0].split('-')
+    return `${d}.${m}.${y}`
+  }
+
+  function getHallName(hallId: string): string {
+    return halls.find((h) => h.id === hallId)?.name ?? hallId
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Hallensperren verwalten" size="lg">
+      <div className="space-y-6">
+        {/* Existing closures */}
+        {closures.length > 0 ? (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-gray-700">Aktuelle Sperren</h3>
+            <div className="divide-y rounded-md border">
+              {closures.map((closure) => (
+                <div key={closure.id} className="flex items-center justify-between p-3">
+                  <div className="text-sm">
+                    <span className="font-medium">{getHallName(closure.hall)}</span>
+                    <span className="mx-2 text-gray-400">|</span>
+                    <span>{formatDateDE(closure.start_date)} – {formatDateDE(closure.end_date)}</span>
+                    <span className="mx-2 text-gray-400">|</span>
+                    <span className="text-gray-600">{closure.reason}</span>
+                    <span className="ml-2 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                      {closure.source}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => startEdit(closure)}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Bearbeiten
+                    </button>
+                    <button
+                      onClick={() => handleDelete(closure.id)}
+                      className="text-sm text-red-600 hover:text-red-800"
+                    >
+                      Löschen
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Keine Hallensperren vorhanden.</p>
+        )}
+
+        {/* Add/edit form */}
+        <div className="space-y-4 rounded-lg border bg-gray-50 p-4">
+          <h3 className="text-sm font-medium text-gray-700">
+            {editingId ? 'Sperre bearbeiten' : 'Neue Sperre hinzufügen'}
+          </h3>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Halle</label>
+              <select
+                value={form.hall}
+                onChange={(e) => update('hall', e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">-- Wählen --</option>
+                {halls.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Quelle</label>
+              <select
+                value={form.source}
+                onChange={(e) => update('source', e.target.value as typeof form.source)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                {SOURCE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Von</label>
+              <input
+                type="date"
+                value={form.start_date}
+                onChange={(e) => update('start_date', e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Bis</label>
+              <input
+                type="date"
+                value={form.end_date}
+                onChange={(e) => update('end_date', e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Grund</label>
+            <input
+              type="text"
+              value={form.reason}
+              onChange={(e) => update('reason', e.target.value)}
+              placeholder="z.B. Herbstferien, Putzaktion, Renovation"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            {editingId && (
+              <button
+                onClick={cancelEdit}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Abbrechen
+              </button>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSaving ? 'Speichern...' : editingId ? 'Aktualisieren' : 'Hinzufügen'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}

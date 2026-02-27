@@ -49,7 +49,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
             </svg>
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-6">{children}</div>
       </div>
     </dialog>
   )
