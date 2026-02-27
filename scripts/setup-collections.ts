@@ -278,11 +278,34 @@ const dependentCollections: CollectionDef[] = [
       relation('created_by', membersId),
     ],
   },
+
+  // participations (RSVP for trainings, games, events)
+  {
+    name: 'participations',
+    type: 'base',
+    fields: [
+      relation('member', membersId, { required: true }),
+      select('activity_type', ['training', 'game', 'event'], { required: true }),
+      text('activity_id', { required: true }),
+      select('status', ['confirmed', 'declined', 'tentative'], { required: true }),
+      text('note'),
+    ],
+  },
 ]
 
 for (const def of dependentCollections) {
   await createCollection(def)
 }
+
+// Add unique index to participations
+console.log('\n=== Adding participations unique index ===')
+const participationsCol = await pb.collections.getOne('participations')
+await pb.collections.update(participationsCol.id, {
+  indexes: [
+    'CREATE UNIQUE INDEX idx_participation_unique ON participations (member, activity_type, activity_id)',
+  ],
+})
+console.log('  ✓ participations unique index added')
 
 // Phase 3: collections that depend on phase 2
 console.log('\n=== Phase 3: Create collections with phase-2 dependencies ===')
