@@ -5,6 +5,7 @@ import {
   startOfWeek as fnsStartOfWeek,
   endOfWeek as fnsEndOfWeek,
   addMonths as fnsAddMonths,
+  addWeeks as fnsAddWeeks,
   eachDayOfInterval as fnsEachDayOfInterval,
   isSameDay as fnsIsSameDay,
   isSameMonth as fnsIsSameMonth,
@@ -41,6 +42,10 @@ export function endOfWeek(date: Date): Date {
 
 export function addMonths(date: Date, n: number): Date {
   return fnsAddMonths(date, n)
+}
+
+export function addWeeks(date: Date, n: number): Date {
+  return fnsAddWeeks(date, n)
 }
 
 export function eachDayOfInterval(start: Date, end: Date): Date[] {

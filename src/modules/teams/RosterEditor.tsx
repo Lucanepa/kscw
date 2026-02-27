@@ -55,46 +55,46 @@ export default function RosterEditor() {
   }
 
   if (isLoading) {
-    return <div className="py-12 text-center text-gray-500">Laden...</div>
+    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Laden...</div>
   }
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
-        <Link to="/teams" className="hover:text-gray-700">Teams</Link>
+      <div className="mb-6 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">Teams</Link>
         <span>/</span>
-        <Link to={`/teams/${teamId}`} className="hover:text-gray-700">
+        <Link to={`/teams/${teamId}`} className="hover:text-gray-700 dark:text-gray-300">
           {team?.full_name ?? 'Team'}
         </Link>
         <span>/</span>
-        <span className="text-gray-900">Kader bearbeiten</span>
+        <span className="text-gray-900 dark:text-gray-100">Kader bearbeiten</span>
       </div>
 
       <div className="flex items-center gap-3">
         {team && <TeamChip team={team.name} />}
-        <h1 className="text-2xl font-bold text-gray-900">Kader bearbeiten</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Kader bearbeiten</h1>
       </div>
 
       {/* Add member */}
       <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700">Spieler hinzufügen</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Spieler hinzufügen</label>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Name suchen..."
-          className="mt-1 w-full max-w-md rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+          className="mt-1 w-full max-w-md rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
         />
         {search.length >= 2 && (
-          <div className="mt-2 max-h-48 max-w-md overflow-y-auto rounded-lg border bg-white shadow-sm">
+          <div className="mt-2 max-h-48 max-w-md overflow-y-auto rounded-lg border bg-white dark:bg-gray-800 shadow-sm">
             {availableMembers.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500">Keine Ergebnisse</p>
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Keine Ergebnisse</p>
             ) : (
               availableMembers.slice(0, 10).map((m) => (
                 <button
                   key={m.id}
                   onClick={() => handleAdd(m.id)}
-                  className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-gray-50"
+                  className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   {m.photo ? (
                     <img
@@ -117,7 +117,7 @@ export default function RosterEditor() {
 
       {/* Current roster */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
           Aktuelles Kader ({members.length})
         </h2>
 
@@ -131,7 +131,7 @@ export default function RosterEditor() {
               const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
 
               return (
-                <div key={mt.id} className="flex items-center gap-4 rounded-lg border bg-white px-4 py-3">
+                <div key={mt.id} className="flex items-center gap-4 rounded-lg border bg-white dark:bg-gray-800 px-4 py-3">
                   {member.photo ? (
                     <img
                       src={getFileUrl('members', member.id, member.photo)}
@@ -139,15 +139,15 @@ export default function RosterEditor() {
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600 dark:text-gray-400">
                       {initials}
                     </div>
                   )}
-                  <span className="flex-1 text-sm font-medium text-gray-900">{member.name}</span>
+                  <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">{member.name}</span>
                   <select
                     value={mt.role}
                     onChange={(e) => handleRoleChange(mt.id, e.target.value)}
-                    className="rounded border px-2 py-1 text-sm text-gray-700"
+                    className="rounded border px-2 py-1 text-sm text-gray-700 dark:text-gray-300"
                   >
                     <option value="player">Spieler</option>
                     <option value="captain">Captain</option>

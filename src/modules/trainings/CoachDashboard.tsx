@@ -11,7 +11,7 @@ const trendColors: Record<string, string> = {
   present: 'bg-green-500',
   absent: 'bg-red-500',
   late: 'bg-amber-500',
-  excused: 'bg-blue-500',
+  excused: 'bg-brand-500',
 }
 
 export default function CoachDashboard({ teamId }: CoachDashboardProps) {
@@ -27,17 +27,17 @@ export default function CoachDashboard({ teamId }: CoachDashboardProps) {
   })
 
   if (isLoading) {
-    return <div className="py-8 text-center text-gray-500">Laden...</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
   }
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
-        <label className="text-sm font-medium text-gray-700">Saison</label>
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Saison</label>
         <select
           value={season}
           onChange={(e) => setSeason(e.target.value)}
-          className="rounded-lg border px-3 py-1.5 text-sm"
+          className="rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-1.5 text-sm"
         >
           {seasonOptions.map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -52,29 +52,29 @@ export default function CoachDashboard({ teamId }: CoachDashboardProps) {
           description="Noch keine Trainingsdaten für diese Saison vorhanden."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <div className="overflow-x-auto rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800">
           <table className="w-full">
             <thead>
-              <tr className="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 <th className="px-4 py-3">Spieler</th>
-                <th className="px-4 py-3 text-center">#Nr</th>
+                <th className="hidden px-4 py-3 text-center sm:table-cell">#Nr</th>
                 <th className="px-4 py-3 text-center">Trainings</th>
                 <th className="px-4 py-3 text-center">Anwesend</th>
                 <th className="px-4 py-3 text-center">Abwesend</th>
                 <th className="px-4 py-3 text-center">Quote</th>
-                <th className="px-4 py-3">Trend</th>
+                <th className="hidden px-4 py-3 sm:table-cell">Trend</th>
               </tr>
             </thead>
             <tbody>
               {stats.map((player) => (
-                <tr key={player.memberId} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                <tr key={player.memberId} className="border-b dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                     {player.memberName}
                   </td>
-                  <td className="px-4 py-3 text-center text-sm text-gray-500">
+                  <td className="hidden px-4 py-3 text-center text-sm text-gray-500 sm:table-cell dark:text-gray-400">
                     {player.jerseyNumber || '—'}
                   </td>
-                  <td className="px-4 py-3 text-center text-sm text-gray-500">
+                  <td className="px-4 py-3 text-center text-sm text-gray-500 dark:text-gray-400">
                     {player.total}
                   </td>
                   <td className="px-4 py-3 text-center text-sm text-green-600">
@@ -96,7 +96,7 @@ export default function CoachDashboard({ teamId }: CoachDashboardProps) {
                       {player.percentage}%
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <div className="flex gap-1">
                       {player.trend.map((status, i) => (
                         <div

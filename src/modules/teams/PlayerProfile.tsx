@@ -61,7 +61,7 @@ export default function PlayerProfile() {
   }, [memberId, start, end])
 
   if (loading) {
-    return <div className="py-12 text-center text-gray-500">Laden...</div>
+    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Laden...</div>
   }
 
   if (!member) {
@@ -75,10 +75,10 @@ export default function PlayerProfile() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
-        <Link to="/teams" className="hover:text-gray-700">Teams</Link>
+      <div className="mb-6 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">Teams</Link>
         <span>/</span>
-        <span className="text-gray-900">{member.name}</span>
+        <span className="text-gray-900 dark:text-gray-100">{member.name}</span>
       </div>
 
       {/* Header */}
@@ -90,19 +90,19 @@ export default function PlayerProfile() {
             className="h-24 w-24 rounded-full object-cover"
           />
         ) : (
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gray-200 text-2xl font-bold text-gray-500">
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gray-200 text-2xl font-bold text-gray-500 dark:text-gray-400">
             {initials}
           </div>
         )}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{member.name}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{member.name}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
             {member.number && <span>#{member.number}</span>}
             <span className="capitalize">{member.position}</span>
             <StatusBadge status={member.role} />
           </div>
           {isCoach && (
-            <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500">
+            <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
               {member.email && <span>{member.email}</span>}
               {member.phone && <span>{member.phone}</span>}
               {member.license_nr && <span>Lizenz: {member.license_nr}</span>}
@@ -113,7 +113,7 @@ export default function PlayerProfile() {
 
       {/* Teams */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900">Teams</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Teams</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {memberTeams.map((mt) => (
             <Link key={mt.id} to={`/teams/${mt.team}`}>
@@ -121,30 +121,30 @@ export default function PlayerProfile() {
             </Link>
           ))}
           {memberTeams.length === 0 && (
-            <p className="text-sm text-gray-500">Keinem Team zugewiesen</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Keinem Team zugewiesen</p>
           )}
         </div>
       </div>
 
       {/* Stats */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900">Statistiken ({season})</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Statistiken ({season})</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm text-gray-500">Trainings besucht</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+          <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Trainings besucht</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {attendanceStats ? `${attendanceStats.present}/${attendanceStats.total}` : '—'}
             </p>
           </div>
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm text-gray-500">Anwesenheitsquote</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">
+          <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Anwesenheitsquote</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {attendancePct !== null ? `${attendancePct}%` : '—'}
             </p>
           </div>
-          <div className="rounded-lg border bg-white p-4">
-            <p className="text-sm text-gray-500">Aktive Absenzen</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{absences.length}</p>
+          <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Aktive Absenzen</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{absences.length}</p>
           </div>
         </div>
       </div>
@@ -152,12 +152,12 @@ export default function PlayerProfile() {
       {/* Active Absences */}
       {absences.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-lg font-semibold text-gray-900">Aktuelle Absenzen</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Aktuelle Absenzen</h2>
           <div className="mt-3 space-y-2">
             {absences.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-white px-4 py-3">
+              <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-white dark:bg-gray-800 px-4 py-3">
                 <StatusBadge status={a.reason} />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
                   {formatDate(a.start_date)}
                   {a.start_date !== a.end_date && ` — ${formatDate(a.end_date)}`}
                 </span>

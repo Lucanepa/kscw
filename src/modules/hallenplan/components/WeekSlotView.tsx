@@ -89,18 +89,18 @@ export default function WeekSlotView({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg bg-white dark:bg-gray-800 shadow-sm">
       <div className="min-w-[700px]">
         {/* Day headers */}
         <div className="grid border-b" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
-          <div className="border-r bg-gray-50 p-2" />
+          <div className="border-r bg-gray-50 dark:bg-gray-900 p-2" />
           {weekDays.map((day, i) => {
             const dateStr = `${String(day.getDate()).padStart(2, '0')}.${String(day.getMonth() + 1).padStart(2, '0')}.`
             return (
               <div
                 key={i}
                 className={`border-r p-2 text-center text-sm last:border-r-0 ${
-                  i === todayIndex ? 'bg-blue-50 font-bold text-blue-700' : 'text-gray-700'
+                  i === todayIndex ? 'bg-brand-50 font-bold text-brand-700' : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="font-medium">{DAY_HEADERS[i]}</div>
@@ -113,12 +113,12 @@ export default function WeekSlotView({
         {/* Time grid body */}
         <div className="grid" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
           {/* Time labels column */}
-          <div className="sticky left-0 z-30 border-r bg-gray-50">
+          <div className="sticky left-0 z-30 border-r bg-gray-50 dark:bg-gray-900">
             {timeLabels.map(({ time, isFullHour }) => (
               <div
                 key={time}
                 className={`flex items-start justify-end pr-2 text-xs ${
-                  isFullHour ? 'font-medium text-gray-500' : 'text-gray-300'
+                  isFullHour ? 'font-medium text-gray-500 dark:text-gray-400' : 'text-gray-300'
                 }`}
                 style={{ height: SLOT_HEIGHT }}
               >
@@ -141,7 +141,7 @@ export default function WeekSlotView({
                 return (
                   <div
                     key={time}
-                    className={`absolute inset-x-0 ${isFullHour ? 'border-b border-gray-200' : 'border-b border-dashed border-gray-100'}`}
+                    className={`absolute inset-x-0 ${isFullHour ? 'border-b border-gray-200 dark:border-gray-700' : 'border-b border-dashed border-gray-100'}`}
                     style={{ top: rowIndex * SLOT_HEIGHT, height: SLOT_HEIGHT }}
                   />
                 )

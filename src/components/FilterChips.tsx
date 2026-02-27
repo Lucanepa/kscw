@@ -3,7 +3,7 @@ import { getTeamColor } from '../utils/teamColors'
 interface FilterChipOption {
   value: string
   label: string
-  /** Tailwind classes for selected state (e.g. "bg-blue-100 text-blue-800 border-blue-200") */
+  /** Tailwind classes for selected state (e.g. "bg-brand-100 text-brand-800 border-brand-200") */
   colorClasses?: string
 }
 
@@ -33,7 +33,7 @@ export default function FilterChips({
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2 sm:gap-1.5">
       {options.map((option) => {
         const isSelected = selected.includes(option.value)
 
@@ -42,10 +42,10 @@ export default function FilterChips({
             <button
               key={option.value}
               onClick={() => handleClick(option.value)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors sm:py-1 sm:text-xs ${
                 isSelected
                   ? option.colorClasses
-                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
               }`}
             >
               {option.label}
@@ -58,8 +58,8 @@ export default function FilterChips({
           <button
             key={option.value}
             onClick={() => handleClick(option.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              !isSelected ? 'border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100' : ''
+            className={`rounded-full px-3 py-2 text-sm font-medium transition-colors sm:py-1 sm:text-xs ${
+              !isSelected ? 'border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600' : ''
             }`}
             style={
               isSelected

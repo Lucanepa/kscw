@@ -54,13 +54,13 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center justify-between border-b dark:border-gray-700 px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            <span className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400">
               {game.league}
             </span>
             {game.round && (
@@ -69,7 +69,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 sm:min-h-0 sm:min-w-0 sm:p-1 dark:hover:bg-gray-700"
           >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path
@@ -117,10 +117,10 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
 
           {/* Sets breakdown */}
           {sets.length > 0 && (
-            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
               <table className="w-full text-center text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500">
+                  <tr className="bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400">
                     <th className="px-3 py-2"></th>
                     {sets.map((_, i) => (
                       <th key={i} className="px-3 py-2">
@@ -130,8 +130,8 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-t">
-                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500">Heim</td>
+                  <tr className="border-t dark:border-gray-700">
+                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Heim</td>
                     {sets.map((s, i) => (
                       <td
                         key={i}
@@ -141,8 +141,8 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                       </td>
                     ))}
                   </tr>
-                  <tr className="border-t">
-                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500">Gast</td>
+                  <tr className="border-t dark:border-gray-700">
+                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Gast</td>
                     {sets.map((s, i) => (
                       <td
                         key={i}
@@ -159,7 +159,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
         </div>
 
         {/* Details */}
-        <div className="space-y-3 border-t px-6 py-4">
+        <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
           <DetailRow label="Datum" value={dateStr} />
           <DetailRow label="Anpfiff" value={game.time || '–'} />
           {hall && (
@@ -170,12 +170,12 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               )}
               {hall.maps_url && (
                 <div className="flex items-start gap-3 text-sm">
-                  <span className="w-20 shrink-0 text-gray-500">Karte</span>
+                  <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">Karte</span>
                   <a
                     href={hall.maps_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
+                    className="text-brand-600 hover:underline"
                   >
                     Google Maps
                   </a>
@@ -188,8 +188,8 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
 
         {/* Scorer / Täfeler */}
         {(game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
-          <div className="space-y-3 border-t px-6 py-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               Schreibereinsätze
             </h4>
             {(game.scorer_team || game.scorer_person) && (
@@ -218,8 +218,8 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start gap-3 text-sm">
-      <span className="w-20 shrink-0 text-gray-500">{label}</span>
-      <span className="text-gray-900">{value}</span>
+      <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="text-gray-900 dark:text-gray-100">{value}</span>
     </div>
   )
 }

@@ -7,6 +7,7 @@ import GameTabs from './components/GameTabs'
 import type { TabKey } from './components/GameTabs'
 import GameCard from './components/GameCard'
 import RankingsTable from './components/RankingsTable'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 function buildTeamFilter(team: string): string {
   if (!team) return ''
@@ -85,24 +86,20 @@ export default function EmbedGamesPage() {
   const isLoading = activeTab === 'rankings' ? rankingsLoading : gamesLoading
 
   return (
-    <div className="min-h-screen bg-white p-4">
+    <div className="min-h-screen bg-white dark:bg-gray-800 p-4">
       {teamParam && (
-        <h2 className="mb-4 text-lg font-bold text-gray-900">{teamParam} — Spiele</h2>
+        <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-gray-100">{teamParam} — Spiele</h2>
       )}
 
       <GameTabs activeTab={activeTab} onChange={setActiveTab} />
 
       <div className="mt-4">
-        {isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-          </div>
-        )}
+        {isLoading && <LoadingSpinner size="sm" />}
 
         {!isLoading && activeTab !== 'rankings' && (
           <>
             {games.length === 0 ? (
-              <p className="py-8 text-center text-sm text-gray-500">Keine Spiele gefunden.</p>
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Keine Spiele gefunden.</p>
             ) : (
               <div className="space-y-3">
                 {games.map((g) => (
@@ -116,7 +113,7 @@ export default function EmbedGamesPage() {
         {!isLoading && activeTab === 'rankings' && (
           <>
             {leagueGroups.size === 0 ? (
-              <p className="py-8 text-center text-sm text-gray-500">Keine Ranglisten verfügbar.</p>
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Keine Ranglisten verfügbar.</p>
             ) : (
               <div className="space-y-6">
                 {[...leagueGroups.entries()].map(([league, rows]) => (

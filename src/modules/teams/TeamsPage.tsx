@@ -2,6 +2,7 @@ import { usePB } from '../../hooks/usePB'
 import EmptyState from '../../components/EmptyState'
 import TeamCard from './TeamCard'
 import type { Team, MemberTeam } from '../../types'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import { getCurrentSeason } from '../../utils/dateHelpers'
 
 export default function TeamsPage() {
@@ -22,7 +23,7 @@ export default function TeamsPage() {
   }, {})
 
   if (isLoading) {
-    return <div className="py-12 text-center text-gray-500">Laden...</div>
+    return <LoadingSpinner />
   }
 
   if (teams.length === 0) {
@@ -31,8 +32,8 @@ export default function TeamsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Teams & Mitglieder</h1>
-      <p className="mt-1 text-sm text-gray-500">Saison {season}</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Teams & Mitglieder</h1>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Saison {season}</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {teams.map((team) => (

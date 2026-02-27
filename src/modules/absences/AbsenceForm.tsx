@@ -103,11 +103,11 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
       <form onSubmit={handleSubmit} className="space-y-4">
         {isCoach && (
           <div>
-            <label className="block text-sm font-medium text-gray-700">Mitglied</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Mitglied</label>
             <select
               value={memberId}
               onChange={(e) => setMemberId(e.target.value)}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             >
               <option value="">Auswählen...</option>
               {allMembers.map((m) => (
@@ -117,9 +117,9 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Von</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Von</label>
             <input
               type="date"
               value={startDate}
@@ -127,27 +127,27 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
                 setStartDate(e.target.value)
                 if (!endDate || endDate < e.target.value) setEndDate(e.target.value)
               }}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Bis</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bis</label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="mt-1 w-full rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Grund</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Grund</label>
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value as Absence['reason'])}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            className="mt-1 w-full rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
           >
             <option value="injury">Verletzung</option>
             <option value="vacation">Ferien</option>
@@ -158,26 +158,26 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Details (optional)</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Details (optional)</label>
           <textarea
             value={reasonDetail}
             onChange={(e) => setReasonDetail(e.target.value)}
             rows={2}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            className="mt-1 w-full rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
             placeholder="Zusätzliche Informationen..."
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Betrifft</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Betrifft</label>
           <div className="mt-2 flex gap-4">
             {(['trainings', 'games', 'all'] as const).map((value) => (
-              <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
+              <label key={value} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                 <input
                   type="checkbox"
                   checked={affects.includes(value)}
                   onChange={() => toggleAffect(value)}
-                  className="rounded border-gray-300"
+                  className="rounded border-gray-300 dark:border-gray-600"
                 />
                 {value === 'trainings' ? 'Trainings' : value === 'games' ? 'Spiele' : 'Alles'}
               </label>
@@ -193,14 +193,14 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             Abbrechen
           </button>
           <button
             type="submit"
             disabled={isLoading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
           >
             {isLoading ? 'Speichern...' : 'Speichern'}
           </button>

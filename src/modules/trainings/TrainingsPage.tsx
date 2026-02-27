@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState'
 import TrainingCard from './TrainingCard'
 import AttendanceSheet from './AttendanceSheet'
 import CoachDashboard from './CoachDashboard'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import type { Training, Team, Hall, Member } from '../../types'
 
 type TrainingExpanded = Training & {
@@ -36,8 +37,8 @@ export default function TrainingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Trainings</h1>
-      <p className="mt-1 text-sm text-gray-500">Trainingsübersicht mit Anwesenheitskontrolle</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Trainings</h1>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Trainingsübersicht mit Anwesenheitskontrolle</p>
 
       <div className="mt-6">
         <TeamFilter selected={selectedTeam} onChange={setSelectedTeam} />
@@ -46,11 +47,11 @@ export default function TrainingsPage() {
       {/* Tabs (coach view) */}
       {isCoach && selectedTeam && (
         <div className="mt-4">
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+          <div className="flex gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
             <button
               onClick={() => setActiveTab('trainings')}
               className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'trainings' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                activeTab === 'trainings' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               Trainings
@@ -58,7 +59,7 @@ export default function TrainingsPage() {
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                activeTab === 'dashboard' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               Coach Dashboard
@@ -72,7 +73,7 @@ export default function TrainingsPage() {
         {activeTab === 'dashboard' && selectedTeam ? (
           <CoachDashboard teamId={selectedTeam} />
         ) : isLoading ? (
-          <div className="py-8 text-center text-gray-500">Laden...</div>
+          <LoadingSpinner />
         ) : trainings.length === 0 ? (
           <EmptyState
             icon="🎯"

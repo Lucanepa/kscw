@@ -18,7 +18,7 @@ export default function ClosureOverlay({ reason, hallName }: ClosureOverlayProps
           'repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(156, 163, 175, 0.2) 8px, rgba(156, 163, 175, 0.2) 16px)',
       }}
     >
-      <span className="rounded bg-gray-200/80 px-2 py-0.5 text-xs italic text-gray-600">
+      <span className="rounded bg-gray-200/80 px-2 py-0.5 text-xs italic text-gray-600 dark:text-gray-400">
         Gesperrt: {label}
       </span>
     </div>

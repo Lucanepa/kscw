@@ -54,17 +54,17 @@ export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRo
   const dateStr = game.date ? dateFormatter.format(new Date(game.date)) : ''
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
       {/* Game info */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-gray-500 dark:text-gray-400">
           {dateStr} · {game.time}
         </div>
         {kscwTeam && <TeamChip team={kscwTeam} size="sm" />}
         <div className="text-sm font-medium">
           {game.home_team} – {game.away_team}
         </div>
-        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{game.league}</span>
+        <span className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">{game.league}</span>
         <DutyStatus game={game} />
       </div>
 
@@ -95,9 +95,9 @@ export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRo
               checked={game.duty_confirmed ?? false}
               onChange={(e) => onUpdate(game.id, { duty_confirmed: e.target.checked })}
               disabled={!canEdit}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600"
+              className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600"
             />
-            <span className={canEdit ? 'text-gray-700' : 'text-gray-400'}>Bestätigt</span>
+            <span className={canEdit ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400'}>Bestätigt</span>
           </label>
         </div>
       </div>

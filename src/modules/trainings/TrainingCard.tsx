@@ -17,16 +17,16 @@ export default function TrainingCard({ training, onOpenAttendance }: TrainingCar
   const coach = training.expand?.coach
 
   return (
-    <div className={`rounded-lg border bg-white p-4 ${training.cancelled ? 'opacity-60' : ''}`}>
+    <div className={`rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4 ${training.cancelled ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             {team && <TeamChip team={team.name} size="sm" />}
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
               {formatWeekday(training.date)}, {formatDate(training.date)}
             </span>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {formatTime(training.start_time)} – {formatTime(training.end_time)}
             {hall && <span> · {hall.name}</span>}
             {coach && <span> · {coach.name}</span>}
@@ -43,7 +43,7 @@ export default function TrainingCard({ training, onOpenAttendance }: TrainingCar
         {!training.cancelled && (
           <button
             onClick={() => onOpenAttendance(training.id, training.team)}
-            className="shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:py-1.5 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Anwesenheit
           </button>

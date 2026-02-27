@@ -11,15 +11,15 @@ interface ViewToggleProps {
 
 export default function ViewToggle({ options, value, onChange }: ViewToggleProps) {
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+    <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 dark:border-gray-600 dark:bg-gray-700">
       {options.map((option) => (
         <button
           key={option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:py-1.5 ${
             value === option.value
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-gold-400 text-brand-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
           }`}
         >
           {option.label}

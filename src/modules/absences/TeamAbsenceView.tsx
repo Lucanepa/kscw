@@ -32,28 +32,28 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
   const availableMembers = memberIds.filter((id) => !membersWithAbsences.has(id))
 
   if (isLoading) {
-    return <div className="py-8 text-center text-gray-500">Laden...</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
   }
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500">Von</label>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Von</label>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="rounded-lg border px-3 py-1.5 text-sm"
+            className="rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-1.5 text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500">Bis</label>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Bis</label>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="rounded-lg border px-3 py-1.5 text-sm"
+            className="rounded-lg border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-1.5 text-sm"
           />
         </div>
       </div>
@@ -70,13 +70,13 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
           {Object.entries(groupedByMember).map(([memberId, memberAbsences]) => {
             const member = memberMap[memberId]
             return (
-              <div key={memberId} className="rounded-lg border bg-white p-4">
-                <h3 className="font-medium text-gray-900">{member?.name ?? 'Unbekannt'}</h3>
+              <div key={memberId} className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                <h3 className="font-medium text-gray-900 dark:text-gray-100">{member?.name ?? 'Unbekannt'}</h3>
                 <div className="mt-2 space-y-2">
                   {memberAbsences.map((a) => (
                     <div key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
                       <StatusBadge status={a.reason} />
-                      <span className="text-gray-600">
+                      <span className="text-gray-600 dark:text-gray-400">
                         {formatDate(a.start_date)}
                         {a.start_date !== a.end_date && ` — ${formatDate(a.end_date)}`}
                       </span>
@@ -92,9 +92,9 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
 
           {/* Members without absences */}
           {availableMembers.length > 0 && (
-            <div className="rounded-lg border bg-white p-4">
+            <div className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
               <h3 className="text-sm font-medium text-green-700">Verfügbar</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {availableMembers.map((id) => memberMap[id]?.name).filter(Boolean).join(', ')}
               </p>
             </div>

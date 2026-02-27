@@ -40,6 +40,7 @@ export interface Hall extends RecordModel {
   courts: number
   notes: string
   maps_url: string
+  homologation: boolean
 }
 
 export interface HallSlot extends RecordModel {

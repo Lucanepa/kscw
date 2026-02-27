@@ -32,7 +32,7 @@ export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
   const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
 
   return (
-    <tr className="border-b last:border-0 hover:bg-gray-50">
+    <tr className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           {member.photo ? (
@@ -42,22 +42,22 @@ export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
               className="h-8 w-8 rounded-full object-cover"
             />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600 dark:text-gray-400">
               {initials}
             </div>
           )}
           <Link
             to={`/teams/player/${member.id}?from=${teamId}`}
-            className="text-sm font-medium text-gray-900 hover:text-blue-600"
+            className="text-sm font-medium text-gray-900 hover:text-brand-600"
           >
             {member.name}
           </Link>
         </div>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500">
+      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
         {member.number || '—'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500">
+      <td className="hidden px-4 py-3 text-sm text-gray-500 sm:table-cell dark:text-gray-400">
         {positionLabels[member.position] ?? member.position}
       </td>
       <td className="px-4 py-3">

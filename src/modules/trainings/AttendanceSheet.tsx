@@ -100,11 +100,11 @@ export default function AttendanceSheet({ trainingId, teamId, onClose }: Attenda
       size="lg"
     >
       {loading ? (
-        <div className="py-8 text-center text-gray-500">Laden...</div>
+        <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
       ) : memberList.length === 0 ? (
         <EmptyState icon="👤" title="Keine Spieler" description="Diesem Team sind noch keine Spieler zugewiesen." />
       ) : (
-        <div className="max-h-[60vh] overflow-y-auto rounded-lg border">
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg border dark:border-gray-700">
           {memberList.map((member) => {
             const attendance = attendanceRecords.find((a) => a.member === member.id) ?? null
             const activeAbsence = absences.find((a) => a.member === member.id) ?? null

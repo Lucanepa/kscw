@@ -24,11 +24,11 @@ export default function WeekNavigation({
   onOpenClosureManager,
 }: WeekNavigationProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-4 shadow-sm">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white dark:bg-gray-800 p-4 shadow-sm">
       <div className="flex items-center gap-2">
         <button
           onClick={onPrev}
-          className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100"
+          className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
           title="Vorherige Woche"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -40,7 +40,7 @@ export default function WeekNavigation({
         </span>
         <button
           onClick={onNext}
-          className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100"
+          className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
           title="Nächste Woche"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,7 +49,7 @@ export default function WeekNavigation({
         </button>
         <button
           onClick={onToday}
-          className="rounded-md border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           Heute
         </button>
@@ -59,7 +59,7 @@ export default function WeekNavigation({
         <select
           value={selectedHallId}
           onChange={(e) => onSelectHall(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         >
           <option value="">Alle Hallen</option>
           {halls.map((hall) => (
@@ -72,7 +72,7 @@ export default function WeekNavigation({
         {isAdmin && (
           <button
             onClick={onOpenClosureManager}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             Hallensperren
           </button>

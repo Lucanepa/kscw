@@ -20,29 +20,29 @@ export default function AbsenceCard({ absence, onEdit, onDelete, showMemberName,
   const memberName = absence.expand?.member?.name
 
   return (
-    <div className="rounded-lg border bg-white px-4 py-3">
+    <div className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={absence.reason} />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-gray-700 dark:text-gray-300">
             {formatDate(absence.start_date)}
             {absence.start_date !== absence.end_date && ` — ${formatDate(absence.end_date)}`}
           </span>
           {showMemberName && memberName && (
-            <span className="text-sm font-medium text-gray-900">{memberName}</span>
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{memberName}</span>
           )}
         </div>
         {canEdit && (
           <div className="flex gap-2">
             <button
               onClick={() => onEdit(absence)}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="min-h-[44px] rounded px-3 py-2 text-sm text-brand-600 hover:bg-brand-50 hover:text-brand-700 sm:min-h-0 sm:py-1"
             >
               Bearbeiten
             </button>
             <button
               onClick={() => onDelete(absence.id)}
-              className="text-sm text-red-600 hover:text-red-800"
+              className="min-h-[44px] rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-800 sm:min-h-0 sm:py-1"
             >
               Löschen
             </button>
@@ -50,12 +50,12 @@ export default function AbsenceCard({ absence, onEdit, onDelete, showMemberName,
         )}
       </div>
       {absence.reason_detail && (
-        <p className="mt-1 text-sm text-gray-500">{absence.reason_detail}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{absence.reason_detail}</p>
       )}
       {absence.affects && absence.affects.length > 0 && (
         <div className="mt-2 flex gap-1">
           {absence.affects.map((a) => (
-            <span key={a} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            <span key={a} className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-600 dark:text-gray-400">
               {affectsLabels[a] ?? a}
             </span>
           ))}

@@ -6,6 +6,8 @@ import ListView from './ListView'
 import { useSpielplanungData } from './hooks/useSpielplanungData'
 import { useTeams } from '../../hooks/useTeams'
 import { startOfMonth, getSeasonYear } from '../../utils/dateUtils'
+import { useIsMobile } from '../../hooks/useMediaQuery'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import type { ViewMode, SpielplanungFilterState } from '../../types/calendar'
 
 const viewOptions = [
@@ -22,7 +24,8 @@ function getInitialMonth(): Date {
 }
 
 export default function SpielplanungPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
+  const isMobile = useIsMobile()
+  const [viewMode, setViewMode] = useState<ViewMode>(() => isMobile ? 'list-date' : 'calendar')
   const [filters, setFilters] = useState<SpielplanungFilterState>({
     sport: 'all',
     selectedTeamIds: [],
@@ -50,8 +53,8 @@ export default function SpielplanungPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Spielplanung</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Spielplanung</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Saisonübersicht {seasonYear}/{(seasonYear + 1).toString().slice(2)}
           </p>
         </div>
@@ -66,13 +69,7 @@ export default function SpielplanungPage() {
       <SpielplanungFilters filters={filters} onChange={setFilters} />
 
       {/* Loading / Error */}
-      {isLoading && (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100" />
-          ))}
-        </div>
-      )}
+      {isLoading && <LoadingSpinner />}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

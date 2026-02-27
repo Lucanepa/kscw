@@ -8,6 +8,7 @@ import type { TabKey } from './components/GameTabs'
 import GameCard from './components/GameCard'
 import RankingsTable from './components/RankingsTable'
 import GameDetailModal from './components/GameDetailModal'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 function buildTeamFilter(teams: string[]): string {
   if (teams.length === 0) return ''
@@ -93,8 +94,8 @@ export default function GamesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Spiele & Resultate</h1>
-      <p className="mt-1 text-gray-600">Swiss Volley Daten — nächste Spiele, Resultate, Ranglisten.</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Spiele & Resultate</h1>
+      <p className="mt-1 text-gray-600 dark:text-gray-400">Swiss Volley Daten — nächste Spiele, Resultate, Ranglisten.</p>
 
       <div className="mt-6 space-y-4">
         <TeamFilterBar selected={selectedTeams} onChange={setSelectedTeams} />
@@ -102,11 +103,7 @@ export default function GamesPage() {
       </div>
 
       <div className="mt-6">
-        {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-          </div>
-        )}
+        {isLoading && <LoadingSpinner />}
 
         {/* Upcoming / Recent: card grid */}
         {showGames && (activeTab === 'upcoming' || activeTab === 'recent') && (
@@ -129,7 +126,7 @@ export default function GamesPage() {
             {games.length === 0 ? (
               <EmptyState tab={activeTab} />
             ) : (
-              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 {games.map((g) => (
                   <GameCard key={g.id} game={g} onClick={setSelectedGame} variant="compact" />
                 ))}
@@ -168,7 +165,7 @@ function EmptyState({ tab }: { tab: string }) {
   }
 
   return (
-    <div className="py-12 text-center text-gray-500">
+    <div className="py-12 text-center text-gray-500 dark:text-gray-400">
       <p>{messages[tab] ?? 'Keine Daten gefunden.'}</p>
       <p className="mt-1 text-sm">Versuche, den Teamfilter anzupassen.</p>
     </div>

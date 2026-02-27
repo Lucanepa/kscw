@@ -63,12 +63,12 @@ export default function SpielplanungFilters({ filters, onChange }: SpielplanungF
 
       <ViewToggle options={typeOptions} value={filters.gameType} onChange={handleTypeChange} />
 
-      <label className="flex items-center gap-2 text-sm text-gray-600">
+      <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <input
           type="checkbox"
           checked={filters.showAbsences}
           onChange={handleAbsencesToggle}
-          className="rounded border-gray-300"
+          className="rounded border-gray-300 dark:border-gray-600"
         />
         Absenzen anzeigen
       </label>

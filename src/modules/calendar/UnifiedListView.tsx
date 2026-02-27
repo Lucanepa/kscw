@@ -8,7 +8,7 @@ interface UnifiedListViewProps {
 }
 
 const typeDots: Record<CalendarEntry['type'], string> = {
-  game: 'bg-blue-500',
+  game: 'bg-brand-500',
   training: 'bg-green-500',
   closure: 'bg-red-500',
   event: 'bg-purple-500',
@@ -43,38 +43,38 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
   }, [entries])
 
   if (entries.length === 0) {
-    return <div className="py-8 text-center text-gray-500">Keine Einträge gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Einträge gefunden</div>
   }
 
   return (
     <div className="space-y-4">
       {grouped.map((group) => (
-        <div key={group.dateKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <div className="border-b border-gray-100 bg-gray-50 px-4 py-2">
-            <h3 className="text-sm font-semibold text-gray-700">{group.label}</h3>
+        <div key={group.dateKey} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="border-b border-gray-100 bg-gray-50 dark:bg-gray-900 px-4 py-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{group.label}</h3>
           </div>
           <div className="divide-y divide-gray-100">
             {group.entries.map((entry) => (
               <div
                 key={entry.id}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 {/* Type indicator */}
                 <div className="flex w-20 shrink-0 items-center gap-2">
                   <div className={`h-2 w-2 shrink-0 rounded-full ${typeDots[entry.type]}`} />
-                  <span className="text-xs text-gray-500">{typeLabels[entry.type]}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{typeLabels[entry.type]}</span>
                 </div>
 
                 {/* Title */}
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm text-gray-900">{entry.title}</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">{entry.title}</span>
                   {entry.description && (
                     <span className="ml-2 text-xs text-gray-400">{entry.description}</span>
                   )}
                 </div>
 
                 {/* Time */}
-                <div className="w-24 shrink-0 text-right text-sm text-gray-600">
+                <div className="w-24 shrink-0 text-right text-sm text-gray-600 dark:text-gray-400">
                   {entry.allDay
                     ? 'Ganztags'
                     : entry.startTime

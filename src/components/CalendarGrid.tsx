@@ -51,19 +51,19 @@ export default function CalendarGrid<T>({
         <button
           onClick={() => onMonthChange(addMonths(month, -1))}
           disabled={!canGoPrev}
-          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent"
+          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-700"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
           {formatDateDE(month, 'MMMM yyyy')}
         </h2>
         <button
           onClick={() => onMonthChange(addMonths(month, 1))}
           disabled={!canGoNext}
-          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent"
+          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-700"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -72,11 +72,11 @@ export default function CalendarGrid<T>({
       </div>
 
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-b border-gray-200">
+      <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700">
         {DAY_HEADERS.map((d) => (
           <div
             key={d}
-            className="py-2 text-center text-xs font-medium text-gray-500"
+            className="py-2 text-center text-[10px] font-medium text-gray-500 sm:text-xs dark:text-gray-400"
           >
             {d}
           </div>
@@ -84,7 +84,7 @@ export default function CalendarGrid<T>({
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 border-l border-gray-200">
+      <div className="grid grid-cols-7 border-l border-gray-200 dark:border-gray-700">
         {days.map((date) => {
           const key = toDateKey(date)
           const inMonth = isSameMonth(date, month)
@@ -96,8 +96,8 @@ export default function CalendarGrid<T>({
           return (
             <div
               key={key}
-              className={`relative min-h-[5rem] border-b border-r border-gray-200 p-1 lg:min-h-[6.5rem] lg:p-2 ${
-                !inMonth ? 'bg-gray-50' : isHighlighted ? 'bg-amber-50' : 'bg-white'
+              className={`relative min-h-[3rem] border-b border-r border-gray-200 p-0.5 sm:min-h-[5rem] sm:p-1 lg:min-h-[6.5rem] lg:p-2 dark:border-gray-700 ${
+                !inMonth ? 'bg-gray-50 dark:bg-gray-900' : isHighlighted ? 'bg-amber-50 dark:bg-amber-950' : 'bg-white dark:bg-gray-800'
               }`}
             >
               {/* Closure overlay */}
@@ -107,12 +107,12 @@ export default function CalendarGrid<T>({
 
               {/* Day number */}
               <div
-                className={`mb-1 text-xs font-medium ${
+                className={`mb-0.5 text-[10px] font-medium sm:mb-1 sm:text-xs ${
                   isToday
-                    ? 'inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white'
+                    ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-gold-400 text-brand-900 sm:h-5 sm:w-5'
                     : !inMonth
-                      ? 'text-gray-300'
-                      : 'text-gray-700'
+                      ? 'text-gray-300 dark:text-gray-600'
+                      : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
                 {date.getDate()}

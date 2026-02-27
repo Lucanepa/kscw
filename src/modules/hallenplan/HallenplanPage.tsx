@@ -1,19 +1,30 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useRealtime } from '../../hooks/useRealtime'
+import { useIsMobile } from '../../hooks/useMediaQuery'
 import { useWeekNavigation } from './hooks/useWeekNavigation'
 import { useHallenplanData } from './hooks/useHallenplanData'
 import WeekNavigation from './components/WeekNavigation'
 import WeekSlotView from './components/WeekSlotView'
+import DayNavigation from './components/DayNavigation'
+import DaySlotView from './components/DaySlotView'
 import SlotEditor from './components/SlotEditor'
 import ClosureManager from './components/ClosureManager'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import type { HallSlot, HallClosure } from '../../types'
+
+function getTodayDayIndex(): number {
+  const dow = new Date().getDay()
+  return dow === 0 ? 6 : dow - 1
+}
 
 export default function HallenplanPage() {
   const { isAdmin } = useAuth()
+  const isMobile = useIsMobile()
   const { weekDays, goNext, goPrev, goToday, weekLabel, mondayStr, sundayStr } = useWeekNavigation()
 
   const [selectedHallId, setSelectedHallId] = useState('')
+  const [selectedDayIndex, setSelectedDayIndex] = useState(getTodayDayIndex)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingSlot, setEditingSlot] = useState<HallSlot | null>(null)
   const [prefill, setPrefill] = useState<{ day: number; time: string; hall: string } | null>(null)
@@ -25,7 +36,6 @@ export default function HallenplanPage() {
     sundayStr,
   )
 
-  // Realtime: auto-refresh when another user makes changes
   const handleRealtimeUpdate = useCallback(() => {
     refetch()
   }, [refetch])
@@ -53,42 +63,83 @@ export default function HallenplanPage() {
     setPrefill(null)
   }
 
+  function handleToday() {
+    goToday()
+    setSelectedDayIndex(getTodayDayIndex())
+  }
+
   return (
     <div>
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Hallenplan</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Wochenansicht der Hallenbelegung — Trainings, Spiele, Events.
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Hallenplan</h1>
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          {isMobile
+            ? 'Tagesansicht der Hallenbelegung.'
+            : 'Wochenansicht der Hallenbelegung — Trainings, Spiele, Events.'}
         </p>
       </div>
 
-      <WeekNavigation
-        weekLabel={weekLabel}
-        onPrev={goPrev}
-        onNext={goNext}
-        onToday={goToday}
-        halls={halls}
-        selectedHallId={selectedHallId}
-        onSelectHall={setSelectedHallId}
-        isAdmin={isAdmin}
-        onOpenClosureManager={() => setClosureManagerOpen(true)}
-      />
+      {isMobile ? (
+        <>
+          <DayNavigation
+            weekDays={weekDays}
+            selectedDayIndex={selectedDayIndex}
+            onSelectDay={setSelectedDayIndex}
+            onPrevWeek={goPrev}
+            onNextWeek={goNext}
+            onToday={handleToday}
+            halls={halls}
+            selectedHallId={selectedHallId}
+            onSelectHall={setSelectedHallId}
+            isAdmin={isAdmin}
+            onOpenClosureManager={() => setClosureManagerOpen(true)}
+          />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500">Laden...</div>
-        </div>
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <DaySlotView
+              slots={slots}
+              closures={closures}
+              day={weekDays[selectedDayIndex]}
+              dayIndex={selectedDayIndex}
+              halls={halls}
+              selectedHallId={selectedHallId}
+              isAdmin={isAdmin}
+              onSlotClick={handleSlotClick}
+              onEmptyCellClick={handleEmptyCellClick}
+            />
+          )}
+        </>
       ) : (
-        <WeekSlotView
-          slots={slots}
-          closures={closures}
-          weekDays={weekDays}
-          halls={halls}
-          selectedHallId={selectedHallId}
-          isAdmin={isAdmin}
-          onSlotClick={handleSlotClick}
-          onEmptyCellClick={handleEmptyCellClick}
-        />
+        <>
+          <WeekNavigation
+            weekLabel={weekLabel}
+            onPrev={goPrev}
+            onNext={goNext}
+            onToday={goToday}
+            halls={halls}
+            selectedHallId={selectedHallId}
+            onSelectHall={setSelectedHallId}
+            isAdmin={isAdmin}
+            onOpenClosureManager={() => setClosureManagerOpen(true)}
+          />
+
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <WeekSlotView
+              slots={slots}
+              closures={closures}
+              weekDays={weekDays}
+              halls={halls}
+              selectedHallId={selectedHallId}
+              isAdmin={isAdmin}
+              onSlotClick={handleSlotClick}
+              onEmptyCellClick={handleEmptyCellClick}
+            />
+          )}
+        </>
       )}
 
       {editorOpen && (

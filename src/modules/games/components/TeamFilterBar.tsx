@@ -38,7 +38,7 @@ export default function TeamFilterBar({
           className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold transition-opacity ${
             allSelected
               ? 'border-gray-400 bg-gray-600 text-white'
-              : 'border-gray-300 bg-gray-100 text-gray-500 opacity-50 hover:opacity-75'
+              : 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-50 hover:opacity-75'
           }`}
         >
           Alle

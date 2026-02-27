@@ -16,7 +16,7 @@ export interface CalendarEntry {
 }
 
 export type ViewMode = 'calendar' | 'list-date' | 'list-team'
-export type CalendarViewMode = 'month' | 'list'
+export type CalendarViewMode = 'hallenplan' | 'week' | 'month' | 'list'
 
 export type SportFilter = 'volleyball' | 'basketball' | 'all'
 export type GameTypeFilter = 'home' | 'away' | 'all'

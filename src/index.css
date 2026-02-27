@@ -1,1 +1,33 @@
 @import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand-50: #eef0fa;
+  --color-brand-100: #d5d9f0;
+  --color-brand-200: #a8b0e0;
+  --color-brand-300: #7b87d1;
+  --color-brand-400: #5e6cba;
+  --color-brand-500: #4A55A2;
+  --color-brand-600: #3e4889;
+  --color-brand-700: #333b70;
+  --color-brand-800: #272e57;
+  --color-brand-900: #1c213e;
+  --color-brand-950: #121528;
+
+  --color-gold-50: #fff9e6;
+  --color-gold-100: #ffefb3;
+  --color-gold-200: #ffe580;
+  --color-gold-300: #ffdb4d;
+  --color-gold-400: #FFC832;
+  --color-gold-500: #e6b020;
+  --color-gold-600: #cc9a10;
+  --color-gold-700: #997308;
+  --color-gold-800: #664d05;
+  --color-gold-900: #332602;
+}
+
+/* Safe area utilities for notched phones */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

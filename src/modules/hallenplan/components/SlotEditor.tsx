@@ -118,13 +118,13 @@ export default function SlotEditor({
     >
       <div className="space-y-4">
         {/* Row 1: Hall + Team */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Halle</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Halle</label>
             <select
               value={form.hall}
               onChange={(e) => update('hall', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
               <option value="">-- Wählen --</option>
               {halls.map((h) => (
@@ -133,11 +133,11 @@ export default function SlotEditor({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Team</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Team</label>
             <select
               value={form.team}
               onChange={(e) => update('team', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
               <option value="">-- Wählen --</option>
               {teams.map((t) => (
@@ -148,13 +148,13 @@ export default function SlotEditor({
         </div>
 
         {/* Row 2: Day + Type */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Wochentag</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Wochentag</label>
             <select
               value={form.day_of_week}
               onChange={(e) => update('day_of_week', Number(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
               {DAY_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -162,11 +162,11 @@ export default function SlotEditor({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Typ</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Typ</label>
             <select
               value={form.slot_type}
               onChange={(e) => update('slot_type', e.target.value as typeof form.slot_type)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
               {TYPE_OPTIONS.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -176,23 +176,23 @@ export default function SlotEditor({
         </div>
 
         {/* Row 3: Times */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Startzeit</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Startzeit</label>
             <input
               type="time"
               value={form.start_time}
               onChange={(e) => update('start_time', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Endzeit</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Endzeit</label>
             <input
               type="time"
               value={form.end_time}
               onChange={(e) => update('end_time', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
         </div>
@@ -203,30 +203,30 @@ export default function SlotEditor({
             type="checkbox"
             checked={form.recurring}
             onChange={(e) => update('recurring', e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
           />
-          <span className="text-sm text-gray-700">Wiederkehrend</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Wiederkehrend</span>
         </label>
 
         {/* Row 5: Validity dates (only if recurring) */}
         {form.recurring && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Gültig von</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Gültig von</label>
               <input
                 type="date"
                 value={form.valid_from}
                 onChange={(e) => update('valid_from', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Gültig bis</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Gültig bis</label>
               <input
                 type="date"
                 value={form.valid_until}
                 onChange={(e) => update('valid_until', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
           </div>
@@ -234,24 +234,24 @@ export default function SlotEditor({
 
         {/* Row 6: Label */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Bezeichnung</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Bezeichnung</label>
           <input
             type="text"
             value={form.label}
             onChange={(e) => update('label', e.target.value)}
             placeholder="z.B. Training H3, Heimspiel vs. TVA"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
 
         {/* Row 7: Notes */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Notizen</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Notizen</label>
           <textarea
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
 
@@ -293,14 +293,14 @@ export default function SlotEditor({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               Abbrechen
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
             >
               {isSaving ? 'Speichern...' : 'Speichern'}
             </button>

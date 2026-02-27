@@ -112,7 +112,7 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
         {/* Existing closures */}
         {closures.length > 0 ? (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-700">Aktuelle Sperren</h3>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Aktuelle Sperren</h3>
             <div className="divide-y rounded-md border">
               {closures.map((closure) => (
                 <div key={closure.id} className="flex items-center justify-between p-3">
@@ -121,21 +121,21 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
                     <span className="mx-2 text-gray-400">|</span>
                     <span>{formatDateDE(closure.start_date)} – {formatDateDE(closure.end_date)}</span>
                     <span className="mx-2 text-gray-400">|</span>
-                    <span className="text-gray-600">{closure.reason}</span>
-                    <span className="ml-2 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                    <span className="text-gray-600 dark:text-gray-400">{closure.reason}</span>
+                    <span className="ml-2 inline-flex rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400">
                       {closure.source}
                     </span>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => startEdit(closure)}
-                      className="text-sm text-blue-600 hover:text-blue-800"
+                      className="min-h-[44px] rounded px-3 py-2 text-sm text-brand-600 hover:bg-brand-50 hover:text-brand-700 sm:min-h-0 sm:py-1"
                     >
                       Bearbeiten
                     </button>
                     <button
                       onClick={() => handleDelete(closure.id)}
-                      className="text-sm text-red-600 hover:text-red-800"
+                      className="min-h-[44px] rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-800 sm:min-h-0 sm:py-1"
                     >
                       Löschen
                     </button>
@@ -145,22 +145,22 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">Keine Hallensperren vorhanden.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Keine Hallensperren vorhanden.</p>
         )}
 
         {/* Add/edit form */}
-        <div className="space-y-4 rounded-lg border bg-gray-50 p-4">
-          <h3 className="text-sm font-medium text-gray-700">
+        <div className="space-y-4 rounded-lg border bg-gray-50 dark:bg-gray-900 p-4">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             {editingId ? 'Sperre bearbeiten' : 'Neue Sperre hinzufügen'}
           </h3>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Halle</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Halle</label>
               <select
                 value={form.hall}
                 onChange={(e) => update('hall', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="">-- Wählen --</option>
                 {halls.map((h) => (
@@ -169,11 +169,11 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Quelle</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Quelle</label>
               <select
                 value={form.source}
                 onChange={(e) => update('source', e.target.value as typeof form.source)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 {SOURCE_OPTIONS.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -182,35 +182,35 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Von</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Von</label>
               <input
                 type="date"
                 value={form.start_date}
                 onChange={(e) => update('start_date', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Bis</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Bis</label>
               <input
                 type="date"
                 value={form.end_date}
                 onChange={(e) => update('end_date', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Grund</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Grund</label>
             <input
               type="text"
               value={form.reason}
               onChange={(e) => update('reason', e.target.value)}
               placeholder="z.B. Herbstferien, Putzaktion, Renovation"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
 
@@ -224,7 +224,7 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
             {editingId && (
               <button
                 onClick={cancelEdit}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Abbrechen
               </button>
@@ -232,7 +232,7 @@ export default function ClosureManager({ halls, closures, onClose, onChanged }: 
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
             >
               {isSaving ? 'Speichern...' : editingId ? 'Aktualisieren' : 'Hinzufügen'}
             </button>

@@ -58,9 +58,9 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
     return (
       <div
         onClick={() => onClick?.(game)}
-        className={`flex items-center gap-4 border-b border-gray-100 px-4 py-3 ${onClick ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+        className={`flex items-center gap-4 border-b border-gray-100 dark:border-gray-700 px-4 py-3 ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700' : ''}`}
       >
-        <div className="w-28 shrink-0 text-sm text-gray-500">
+        <div className="w-28 shrink-0 text-sm text-gray-500 dark:text-gray-400">
           <div>{dateStr}</div>
           <div>{game.time}</div>
         </div>
@@ -85,14 +85,14 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
   return (
     <div
       onClick={() => onClick?.(game)}
-      className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow ${onClick ? 'cursor-pointer hover:shadow-md' : ''}`}
+      className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm transition-shadow ${onClick ? 'cursor-pointer hover:shadow-md' : ''}`}
     >
       {/* Top: date + league */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span>
           {dateStr} {game.time && `· ${game.time}`}
         </span>
-        <span className="rounded bg-gray-100 px-2 py-0.5 font-medium">{game.league}</span>
+        <span className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 font-medium">{game.league}</span>
       </div>
 
       {/* Teams */}

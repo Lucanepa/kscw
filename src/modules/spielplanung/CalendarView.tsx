@@ -63,10 +63,10 @@ export default function CalendarView({ entries, closedDates, month, onMonthChang
             <button
               key={m.toISOString()}
               onClick={() => onMonthChange(m)}
-              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+              className={`rounded px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-2 sm:py-1 sm:text-xs ${
                 isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                  ? 'bg-gold-400 text-brand-900'
+                  : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:text-gray-300'
               }`}
             >
               {formatDateDE(m, 'MMM')}
@@ -100,7 +100,7 @@ export default function CalendarView({ entries, closedDates, month, onMonthChang
                     className="flex items-center gap-1 truncate text-[10px] leading-tight"
                   >
                     <TeamChip team={entry.teamNames[0] ?? '?'} size="sm" className="!text-[9px] !px-1.5 !py-0" />
-                    <span className="truncate text-gray-600">
+                    <span className="truncate text-gray-600 dark:text-gray-400">
                       {opponent.length > 12 ? opponent.slice(0, 12) + '…' : opponent}
                     </span>
                     {cup && <span className="shrink-0">{cup}</span>}

@@ -14,6 +14,7 @@ import { format } from 'date-fns'
 interface UseCalendarDataOptions {
   filters: CalendarFilterState
   month: Date
+  enabled?: boolean
 }
 
 function buildDateFilter(field: string, monthStart: string, monthEnd: string): string {
@@ -104,14 +105,14 @@ function closureToEntries(closure: HallClosure): CalendarEntry[] {
   }))
 }
 
-export function useCalendarData({ filters, month }: UseCalendarDataOptions) {
+export function useCalendarData({ filters, month, enabled = true }: UseCalendarDataOptions) {
   const monthStart = format(startOfMonth(month), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(month), 'yyyy-MM-dd')
 
-  const fetchGames = filters.sources.length === 0 || filters.sources.includes('game')
-  const fetchTrainings = filters.sources.length === 0 || filters.sources.includes('training')
-  const fetchClosures = filters.sources.length === 0 || filters.sources.includes('closure')
-  const fetchEvents = filters.sources.length === 0 || filters.sources.includes('event')
+  const fetchGames = enabled && (filters.sources.length === 0 || filters.sources.includes('game'))
+  const fetchTrainings = enabled && (filters.sources.length === 0 || filters.sources.includes('training'))
+  const fetchClosures = enabled && (filters.sources.length === 0 || filters.sources.includes('closure'))
+  const fetchEvents = enabled && (filters.sources.length === 0 || filters.sources.includes('event'))
 
   const { data: games, isLoading: gamesLoading } = usePB<Game>('games', {
     enabled: fetchGames,

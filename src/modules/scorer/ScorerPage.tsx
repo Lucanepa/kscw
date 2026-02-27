@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import pb from '../../pb'
 import TeamFilterBar from '../games/components/TeamFilterBar'
 import ScorerRow from './components/ScorerRow'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 type StatusFilter = 'all' | 'open' | 'assigned' | 'confirmed'
 
@@ -94,22 +95,22 @@ export default function ScorerPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Schreibereinsätze</h1>
-      <p className="mt-1 text-gray-600">Schreiber- und Täfeler-Einteilung pro Heimspiel.</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Schreibereinsätze</h1>
+      <p className="mt-1 text-gray-600 dark:text-gray-400">Schreiber- und Täfeler-Einteilung pro Heimspiel.</p>
 
       <div className="mt-6 space-y-4">
         <TeamFilterBar selected={selectedTeams} onChange={setSelectedTeams} />
 
         {/* Status filter */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.key}
               onClick={() => setStatusFilter(opt.key)}
-              className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+              className={`rounded-full px-3 py-2 text-sm font-medium transition-colors sm:py-1 ${
                 statusFilter === opt.key
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-brand-100 text-brand-700'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               {opt.label}
@@ -119,14 +120,10 @@ export default function ScorerPage() {
       </div>
 
       <div className="mt-6">
-        {gamesLoading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-          </div>
-        )}
+        {gamesLoading && <LoadingSpinner />}
 
         {!gamesLoading && filteredGames.length === 0 && (
-          <div className="py-12 text-center text-gray-500">
+          <div className="py-12 text-center text-gray-500 dark:text-gray-400">
             <p>Keine Spiele gefunden.</p>
             <p className="mt-1 text-sm">Versuche, die Filter anzupassen.</p>
           </div>
@@ -148,7 +145,7 @@ export default function ScorerPage() {
       </div>
 
       {!canEdit && (
-        <p className="mt-6 text-sm text-gray-500">
+        <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
           Nur Trainer und Admins können Einsätze bearbeiten.
         </p>
       )}

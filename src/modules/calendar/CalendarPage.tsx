@@ -3,28 +3,57 @@ import ViewToggle from '../../components/ViewToggle'
 import CalendarFilters from './CalendarFilters'
 import UnifiedCalendarView from './UnifiedCalendarView'
 import UnifiedListView from './UnifiedListView'
+import MobileWeekView from './MobileWeekView'
+import HallenplanView from './HallenplanView'
 import { useCalendarData } from './hooks/useCalendarData'
 import { downloadICal } from '../../utils/icalGenerator'
-import { startOfMonth } from '../../utils/dateUtils'
+import { startOfMonth, startOfWeek } from '../../utils/dateUtils'
+import { useIsMobile } from '../../hooks/useMediaQuery'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import type { CalendarViewMode, CalendarFilterState } from '../../types/calendar'
 
 const viewOptions = [
+  { value: 'hallenplan', label: 'Halle' },
+  { value: 'week', label: 'Woche' },
   { value: 'month', label: 'Monat' },
   { value: 'list', label: 'Liste' },
 ]
 
+const subtitles: Record<CalendarViewMode, string> = {
+  hallenplan: 'Wochenansicht der Hallenbelegung',
+  week: 'Wochenkalender — Termine dieser Woche',
+  month: 'Vereinskalender — alle Termine auf einen Blick',
+  list: 'Vereinskalender — alle Termine auf einen Blick',
+}
+
 export default function CalendarPage() {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
+  const isMobile = useIsMobile()
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => isMobile ? 'week' : 'month')
   const [filters, setFilters] = useState<CalendarFilterState>({
     sources: [],
     selectedTeamIds: [],
   })
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()))
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()))
 
-  const { entries, closedDates, isLoading } = useCalendarData({ filters, month })
+  // Determine which month to fetch data for
+  const dataMonth = viewMode === 'week' ? startOfMonth(weekStart) : month
+  const needsData = viewMode === 'week' || viewMode === 'month' || viewMode === 'list'
+  const { entries, closedDates, isLoading } = useCalendarData({ filters, month: dataMonth, enabled: needsData })
 
   function handleExport() {
     downloadICal(entries, 'kscw-kalender.ics')
+  }
+
+  function handleViewChange(v: string) {
+    const newMode = v as CalendarViewMode
+    // Sync month/week state when switching between views
+    if (newMode === 'month' && viewMode === 'week') {
+      setMonth(startOfMonth(weekStart))
+    } else if (newMode === 'week' && viewMode === 'month') {
+      setWeekStart(startOfWeek(new Date()))
+    }
+    setViewMode(newMode)
   }
 
   return (
@@ -32,43 +61,48 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Kalender</h1>
-          <p className="mt-1 text-sm text-gray-500">Vereinskalender — alle Termine auf einen Blick</p>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Kalender</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitles[viewMode]}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleExport}
-            disabled={entries.length === 0}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            iCal Export
-          </button>
+          {needsData && (
+            <button
+              onClick={handleExport}
+              disabled={entries.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span className="hidden sm:inline">iCal Export</span>
+            </button>
+          )}
           <ViewToggle
             options={viewOptions}
             value={viewMode}
-            onChange={(v) => setViewMode(v as CalendarViewMode)}
+            onChange={handleViewChange}
           />
         </div>
       </div>
 
-      {/* Filters */}
-      <CalendarFilters filters={filters} onChange={setFilters} />
-
-      {/* Loading */}
-      {isLoading && (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100" />
-          ))}
-        </div>
-      )}
+      {/* Calendar filters — for week/month/list views */}
+      {needsData && <CalendarFilters filters={filters} onChange={setFilters} />}
 
       {/* Views */}
-      {!isLoading && (
+      {viewMode === 'hallenplan' && <HallenplanView />}
+
+      {needsData && isLoading && <LoadingSpinner />}
+
+      {needsData && !isLoading && (
         <>
+          {viewMode === 'week' && (
+            <MobileWeekView
+              entries={entries}
+              closedDates={closedDates}
+              weekStart={weekStart}
+              onWeekChange={setWeekStart}
+            />
+          )}
           {viewMode === 'month' && (
             <UnifiedCalendarView
               entries={entries}

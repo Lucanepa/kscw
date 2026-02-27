@@ -23,9 +23,9 @@ function getHallName(game: Game): string {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    scheduled: 'bg-blue-50 text-blue-700',
+    scheduled: 'bg-brand-50 text-brand-700',
     live: 'bg-green-50 text-green-700',
-    completed: 'bg-gray-100 text-gray-600',
+    completed: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
     postponed: 'bg-amber-50 text-amber-700',
   }
   const labels: Record<string, string> = {
@@ -35,7 +35,7 @@ function StatusBadge({ status }: { status: string }) {
     postponed: 'Verschoben',
   }
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
       {labels[status] ?? status}
     </span>
   )
@@ -58,9 +58,9 @@ function GameRow({ game, teams, showTeam }: { game: Game; teams: Team[]; showTea
   const hallName = getHallName(game)
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700">
       {/* Time */}
-      <div className="w-14 shrink-0 text-sm font-medium text-gray-700">
+      <div className="w-14 shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
         {game.time || '–'}
       </div>
 
@@ -73,7 +73,7 @@ function GameRow({ game, teams, showTeam }: { game: Game; teams: Team[]; showTea
 
       {/* Matchup */}
       <div className="min-w-0 flex-1">
-        <span className="text-sm text-gray-900">
+        <span className="text-sm text-gray-900 dark:text-gray-100">
           {game.home_team} – {game.away_team}
         </span>
       </div>
@@ -119,15 +119,15 @@ function ByDateView({ games, teams }: { games: Game[]; teams: Team[] }) {
   }, [games])
 
   if (games.length === 0) {
-    return <div className="py-8 text-center text-gray-500">Keine Spiele gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Spiele gefunden</div>
   }
 
   return (
     <div className="space-y-4">
       {grouped.map((group) => (
-        <div key={group.date} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <div className="border-b border-gray-100 bg-gray-50 px-4 py-2">
-            <h3 className="text-sm font-semibold text-gray-700">{group.label}</h3>
+        <div key={group.date} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="border-b border-gray-100 bg-gray-50 dark:bg-gray-900 px-4 py-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{group.label}</h3>
           </div>
           <div className="divide-y divide-gray-100">
             {group.games.map((game) => (
@@ -168,31 +168,31 @@ function ByTeamView({ games, teams }: { games: Game[]; teams: Team[] }) {
   }, [games, teams])
 
   if (games.length === 0) {
-    return <div className="py-8 text-center text-gray-500">Keine Spiele gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Spiele gefunden</div>
   }
 
   return (
     <div className="space-y-4">
       {grouped.map((group) => (
-        <div key={group.team.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2">
+        <div key={group.team.id} className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 px-4 py-2">
             <TeamChip team={group.team.name} />
-            <span className="text-sm text-gray-500">{group.team.league}</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">{group.team.league}</span>
             <span className="text-xs text-gray-400">({group.games.length} Spiele)</span>
           </div>
           <div className="divide-y divide-gray-100">
             {group.games.map((game) => (
-              <div key={game.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+              <div key={game.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700">
                 {/* Date */}
-                <div className="w-24 shrink-0 text-xs text-gray-500">
+                <div className="w-24 shrink-0 text-xs text-gray-500 dark:text-gray-400">
                   {formatDateDE(parseDate(game.date.split(' ')[0] ?? game.date), 'dd.MM.yyyy')}
                 </div>
                 {/* Time */}
-                <div className="w-14 shrink-0 text-sm font-medium text-gray-700">
+                <div className="w-14 shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
                   {game.time || '–'}
                 </div>
                 {/* Matchup */}
-                <div className="min-w-0 flex-1 text-sm text-gray-900">
+                <div className="min-w-0 flex-1 text-sm text-gray-900 dark:text-gray-100">
                   {game.home_team} – {game.away_team}
                 </div>
                 <TypeBadge type={game.type} />
