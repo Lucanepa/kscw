@@ -14,6 +14,10 @@ import TeamDetail from './modules/teams/TeamDetail'
 import PlayerProfile from './modules/teams/PlayerProfile'
 import RosterEditor from './modules/teams/RosterEditor'
 import EmbedGamesPage from './modules/games/EmbedGamesPage'
+import LoginPage from './modules/auth/LoginPage'
+import ProfilePage from './modules/auth/ProfilePage'
+import EventsPage from './modules/events/EventsPage'
+import AuthRoute from './components/AuthRoute'
 
 export default function App() {
   return (
@@ -21,8 +25,9 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Embed routes — no layout wrapper */}
+          {/* Standalone routes — no layout wrapper */}
           <Route path="embed/games" element={<EmbedGamesPage />} />
+          <Route path="login" element={<LoginPage />} />
 
           <Route element={<Layout />}>
             <Route index element={<CalendarPage />} />
@@ -34,6 +39,8 @@ export default function App() {
             <Route path="teams/:teamId" element={<TeamDetail />} />
             <Route path="teams/:teamId/roster/edit" element={<RosterEditor />} />
             <Route path="teams/player/:memberId" element={<PlayerProfile />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="profile" element={<AuthRoute><ProfilePage /></AuthRoute>} />
             <Route path="admin/spielplanung" element={<AdminRoute><SpielplanungPage /></AdminRoute>} />
             {/* Redirect old calendar route */}
             <Route path="calendar" element={<Navigate to="/" replace />} />

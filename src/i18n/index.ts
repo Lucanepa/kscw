@@ -11,6 +11,8 @@ import scorer from './locales/en/scorer'
 import teams from './locales/en/teams'
 import hallenplan from './locales/en/hallenplan'
 import spielplanung from './locales/en/spielplanung'
+import auth from './locales/en/auth'
+import events from './locales/en/events'
 
 i18n.use(initReactI18next).init({
   lng: 'en',
@@ -26,6 +28,8 @@ i18n.use(initReactI18next).init({
     'teams',
     'hallenplan',
     'spielplanung',
+    'auth',
+    'events',
   ],
   defaultNS: 'common',
   resources: {
@@ -40,6 +44,8 @@ i18n.use(initReactI18next).init({
       teams,
       hallenplan,
       spielplanung,
+      auth,
+      events,
     },
   },
   interpolation: {

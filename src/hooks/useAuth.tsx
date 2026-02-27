@@ -7,6 +7,7 @@ interface AuthContextValue {
   user: (RecordModel & Member) | null
   isAdmin: boolean
   isCoach: boolean
+  isVorstand: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -21,7 +22,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    setIsLoading(false)
+    if (pb.authStore.isValid) {
+      pb.collection('members').authRefresh()
+        .catch(() => pb.authStore.clear())
+        .finally(() => setIsLoading(false))
+    } else {
+      setIsLoading(false)
+    }
 
     const unsubscribe = pb.authStore.onChange((_token, record) => {
       setUser(record as (RecordModel & Member) | null)
@@ -40,9 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = user?.role === 'admin'
   const isCoach = user?.role === 'coach' || isAdmin
+  const isVorstand = user?.role === 'vorstand' || isAdmin
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, isCoach, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAdmin, isCoach, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

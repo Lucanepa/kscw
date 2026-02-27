@@ -23,6 +23,15 @@ const secondaryItems = [
       </svg>
     ),
   },
+  {
+    to: '/events',
+    labelKey: 'events',
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
+      </svg>
+    ),
+  },
 ]
 
 const adminItem = {
@@ -133,9 +142,28 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
           </button>
         </div>
 
-        {/* User info */}
-        {user && (
+        {/* User section */}
+        {user ? (
           <>
+            <div className="mx-4 border-t border-gray-200 dark:border-gray-700" />
+            <nav className="px-4 py-2">
+              <NavLink
+                to="/profile"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `flex min-h-[48px] items-center gap-4 rounded-lg px-4 py-3 text-base font-medium transition-colors ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/50 dark:text-gold-400'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`
+                }
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {t('myProfile')}
+              </NavLink>
+            </nav>
             <div className="mx-4 border-t border-gray-200 dark:border-gray-700" />
             <div className="flex items-center justify-between px-8 py-4">
               <span className="truncate text-sm text-gray-500 dark:text-gray-400">
@@ -151,6 +179,22 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
                 {t('logout')}
               </button>
             </div>
+          </>
+        ) : (
+          <>
+            <div className="mx-4 border-t border-gray-200 dark:border-gray-700" />
+            <nav className="px-4 py-2">
+              <NavLink
+                to="/login"
+                onClick={onClose}
+                className="flex min-h-[48px] items-center gap-4 rounded-lg px-4 py-3 text-base font-medium text-brand-600 transition-colors hover:bg-gray-100 dark:text-gold-400 dark:hover:bg-gray-700"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                {t('signIn')}
+              </NavLink>
+            </nav>
           </>
         )}
       </div>

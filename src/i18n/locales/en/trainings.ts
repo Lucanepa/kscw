@@ -33,4 +33,20 @@ export default {
   // Empty states
   noTrainings: 'No trainings',
   noTrainingsDescription: 'No trainings found for the selected filters.',
+
+  // CRUD
+  newTraining: 'New Training',
+  editTraining: 'Edit Training',
+  deleteTraining: 'Delete Training',
+  deleteConfirm: 'Are you sure you want to delete this training?',
+  cancelTraining: 'Cancel training',
+  cancelReason: 'Cancellation reason',
+
+  // Recurring
+  recurringTitle: 'Generate Recurring Trainings',
+  selectSlot: 'Select hall slot',
+  dateRange: 'Date range',
+  generatePreview: 'Preview dates',
+  generate: 'Generate',
+  trainingsGenerated: '{{count}} trainings generated',
 } as const

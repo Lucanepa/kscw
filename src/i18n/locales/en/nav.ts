@@ -6,6 +6,7 @@ export default {
   absences: 'Absences',
   scorer: 'Scorer Duties',
   teams: 'Teams',
+  events: 'Events',
   gameplan: 'Game Planning',
   admin: 'Admin',
   more: 'More',
@@ -13,4 +14,5 @@ export default {
   darkMode: 'Dark Mode',
   logout: 'Logout',
   signIn: 'Sign in',
+  myProfile: 'My Profile',
 } as const

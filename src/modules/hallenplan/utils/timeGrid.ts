@@ -3,8 +3,9 @@ import type { HallSlot } from '../../../types'
 
 export const START_HOUR = 11
 export const END_HOUR = 23
-export const SLOT_HEIGHT = 24 // px per 30-min row
-export const TOTAL_ROWS = (END_HOUR - START_HOUR) * 2 // 34 rows
+export const SLOT_MINUTES = 15 // minutes per grid row
+export const SLOT_HEIGHT = 16 // px per 15-min row
+export const TOTAL_ROWS = (END_HOUR - START_HOUR) * (60 / SLOT_MINUTES)
 
 export interface PositionedSlot {
   slot: HallSlot
@@ -18,12 +19,12 @@ export interface PositionedSlot {
 /** Converts a time string to pixel offset from grid top */
 export function timeToTop(time: string): number {
   const minutes = timeToMinutes(time)
-  return ((minutes - START_HOUR * 60) / 30) * SLOT_HEIGHT
+  return ((minutes - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT
 }
 
 /** Converts a pixel offset from grid top to minutes since midnight */
 export function topToMinutes(top: number): number {
-  return Math.round(top / SLOT_HEIGHT) * 30 + START_HOUR * 60
+  return Math.round(top / SLOT_HEIGHT) * SLOT_MINUTES + START_HOUR * 60
 }
 
 /**
@@ -80,8 +81,8 @@ export function positionSlots(slots: HallSlot[]): PositionedSlot[] {
 
       result.push({
         slot,
-        top: ((startMin - START_HOUR * 60) / 30) * SLOT_HEIGHT,
-        height: ((endMin - startMin) / 30) * SLOT_HEIGHT,
+        top: ((startMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT,
+        height: ((endMin - startMin) / SLOT_MINUTES) * SLOT_HEIGHT,
         left: (subCol / totalCols) * 100,
         width: (1 / totalCols) * 100,
         dayIndex: day,
@@ -92,12 +93,16 @@ export function positionSlots(slots: HallSlot[]): PositionedSlot[] {
   return result
 }
 
-/** Generates time labels for the grid (every 30 min from START_HOUR to END_HOUR) */
+/** Generates time labels for the grid (every SLOT_MINUTES from START_HOUR to END_HOUR) */
 export function generateTimeLabels(): { time: string; isFullHour: boolean }[] {
   const labels: { time: string; isFullHour: boolean }[] = []
   for (let h = START_HOUR; h < END_HOUR; h++) {
-    labels.push({ time: `${String(h).padStart(2, '0')}:00`, isFullHour: true })
-    labels.push({ time: `${String(h).padStart(2, '0')}:30`, isFullHour: false })
+    for (let m = 0; m < 60; m += SLOT_MINUTES) {
+      labels.push({
+        time: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+        isFullHour: m === 0,
+      })
+    }
   }
   return labels
 }

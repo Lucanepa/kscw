@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { HallSlot, HallClosure, Hall } from '../../../types'
 import { toISODate, minutesToTime } from '../../../utils/dateHelpers'
-import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR } from '../utils/timeGrid'
+import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR, SLOT_MINUTES } from '../utils/timeGrid'
 import { buildConflictSet } from '../utils/conflictDetection'
 import SlotBlock from './SlotBlock'
 import ClosureOverlay from './ClosureOverlay'
@@ -54,7 +54,7 @@ export default function DaySlotView({
     const rect = e.currentTarget.getBoundingClientRect()
     const y = e.clientY - rect.top
     const minutes = topToMinutes(y)
-    const snapped = Math.floor(minutes / 30) * 30
+    const snapped = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES
     if (snapped < START_HOUR * 60) return
     const time = minutesToTime(snapped)
     onEmptyCellClick(dayIndex, time, selectedHallId || (halls[0]?.id ?? ''))

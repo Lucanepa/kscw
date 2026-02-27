@@ -147,3 +147,11 @@ export interface Event extends RecordModel {
   teams: string[]
   created_by: string
 }
+
+export interface Participation extends RecordModel {
+  member: string
+  activity_type: 'training' | 'game' | 'event'
+  activity_id: string
+  status: 'confirmed' | 'declined' | 'tentative'
+  note: string
+}
