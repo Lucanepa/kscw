@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Game, Member } from '../../types'
 import { usePB } from '../../hooks/usePB'
 import { useRealtime } from '../../hooks/useRealtime'
@@ -10,13 +11,6 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 
 type StatusFilter = 'all' | 'open' | 'assigned' | 'confirmed'
 
-const STATUS_OPTIONS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'Alle' },
-  { key: 'open', label: 'Offen' },
-  { key: 'assigned', label: 'Eingeteilt' },
-  { key: 'confirmed', label: 'Bestätigt' },
-]
-
 function buildTeamFilter(teams: string[]): string {
   if (teams.length === 0) return ''
   const clauses = teams.map((t) => `kscw_team.name ~ "${t}"`)
@@ -24,8 +18,16 @@ function buildTeamFilter(teams: string[]): string {
 }
 
 export default function ScorerPage() {
+  const { t } = useTranslation('scorer')
   const { isAdmin, isCoach } = useAuth()
   const canEdit = isAdmin || isCoach
+
+  const STATUS_OPTIONS: { key: StatusFilter; label: string }[] = [
+    { key: 'all', label: t('filterAll') },
+    { key: 'open', label: t('filterOpen') },
+    { key: 'assigned', label: t('filterAssigned') },
+    { key: 'confirmed', label: t('filterConfirmed') },
+  ]
 
   const [selectedTeams, setSelectedTeams] = useState<string[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -95,8 +97,8 @@ export default function ScorerPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Schreibereinsätze</h1>
-      <p className="mt-1 text-gray-600 dark:text-gray-400">Schreiber- und Täfeler-Einteilung pro Heimspiel.</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+      <p className="mt-1 text-gray-600 dark:text-gray-400">{t('subtitle')}</p>
 
       <div className="mt-6 space-y-4">
         <TeamFilterBar selected={selectedTeams} onChange={setSelectedTeams} />
@@ -124,8 +126,8 @@ export default function ScorerPage() {
 
         {!gamesLoading && filteredGames.length === 0 && (
           <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-            <p>Keine Spiele gefunden.</p>
-            <p className="mt-1 text-sm">Versuche, die Filter anzupassen.</p>
+            <p>{t('noGames')}</p>
+            <p className="mt-1 text-sm">{t('noGamesDescription')}</p>
           </div>
         )}
 
@@ -146,7 +148,7 @@ export default function ScorerPage() {
 
       {!canEdit && (
         <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
-          Nur Trainer und Admins können Einsätze bearbeiten.
+          {t('permissionsNotice')}
         </p>
       )}
     </div>

@@ -6,7 +6,7 @@ import { buildConflictSet } from '../utils/conflictDetection'
 import SlotBlock from './SlotBlock'
 import ClosureOverlay from './ClosureOverlay'
 
-const DAY_HEADERS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const
+const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
 interface WeekSlotViewProps {
   slots: HallSlot[]
@@ -89,7 +89,7 @@ export default function WeekSlotView({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+    <div className="rounded-lg bg-white dark:bg-gray-800 shadow-sm">
       <div className="min-w-[700px]">
         {/* Day headers */}
         <div className="grid border-b" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>

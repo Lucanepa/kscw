@@ -88,7 +88,7 @@ export default function EmbedGamesPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-800 p-4">
       {teamParam && (
-        <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-gray-100">{teamParam} — Spiele</h2>
+        <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-gray-100">{teamParam} — Games</h2>
       )}
 
       <GameTabs activeTab={activeTab} onChange={setActiveTab} />
@@ -99,7 +99,7 @@ export default function EmbedGamesPage() {
         {!isLoading && activeTab !== 'rankings' && (
           <>
             {games.length === 0 ? (
-              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Keine Spiele gefunden.</p>
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">No games found.</p>
             ) : (
               <div className="space-y-3">
                 {games.map((g) => (
@@ -113,7 +113,7 @@ export default function EmbedGamesPage() {
         {!isLoading && activeTab === 'rankings' && (
           <>
             {leagueGroups.size === 0 ? (
-              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Keine Ranglisten verfügbar.</p>
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">No rankings available.</p>
             ) : (
               <div className="space-y-6">
                 {[...leagueGroups.entries()].map(([league, rows]) => (

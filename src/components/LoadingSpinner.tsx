@@ -14,7 +14,7 @@ export default function LoadingSpinner({ size = 'md', label }: LoadingSpinnerPro
     <div className="flex flex-col items-center justify-center py-12">
       <img
         src="/kscw_logo_vektoren.svg"
-        alt="Laden..."
+        alt="Loading..."
         className={`${sizeMap[size]} animate-spin`}
         style={{ animationDuration: '2s' }}
       />

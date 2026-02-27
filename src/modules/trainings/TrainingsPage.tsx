@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { usePB } from '../../hooks/usePB'
 import { useRealtime } from '../../hooks/useRealtime'
@@ -15,6 +16,7 @@ type TrainingExpanded = Training & {
 }
 
 export default function TrainingsPage() {
+  const { t } = useTranslation('trainings')
   const { isCoach } = useAuth()
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'trainings' | 'dashboard'>('trainings')
@@ -37,8 +39,8 @@ export default function TrainingsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Trainings</h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Trainingsübersicht mit Anwesenheitskontrolle</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
 
       <div className="mt-6">
         <TeamFilter selected={selectedTeam} onChange={setSelectedTeam} />
@@ -54,7 +56,7 @@ export default function TrainingsPage() {
                 activeTab === 'trainings' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              Trainings
+              {t('tabTrainings')}
             </button>
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -62,7 +64,7 @@ export default function TrainingsPage() {
                 activeTab === 'dashboard' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              Coach Dashboard
+              {t('tabCoachDashboard')}
             </button>
           </div>
         </div>
@@ -77,8 +79,8 @@ export default function TrainingsPage() {
         ) : trainings.length === 0 ? (
           <EmptyState
             icon="🎯"
-            title="Keine Trainings"
-            description={selectedTeam ? 'Keine Trainings für dieses Team.' : 'Wähle ein Team, um Trainings zu sehen.'}
+            title={t('noTrainings')}
+            description={t('noTrainingsDescription')}
           />
         ) : (
           <div className="space-y-3">

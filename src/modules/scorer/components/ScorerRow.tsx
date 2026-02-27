@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { RecordModel } from 'pocketbase'
 import type { Game, Member, Team, Hall } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
@@ -17,38 +18,40 @@ type ExpandedGame = Game & {
   }
 }
 
-const dateFormatter = new Intl.DateTimeFormat('de-CH', {
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
 })
 
 function DutyStatus({ game }: { game: Game }) {
+  const { t } = useTranslation('scorer')
   if (game.duty_confirmed) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
         <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
         </svg>
-        Bestätigt
+        {t('statusConfirmed')}
       </span>
     )
   }
   if (game.scorer_person || game.taefeler_person) {
     return (
       <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-        Eingeteilt
+        {t('statusAssigned')}
       </span>
     )
   }
   return (
     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-      Offen
+      {t('statusOpen')}
     </span>
   )
 }
 
 export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRowProps) {
+  const { t } = useTranslation('scorer')
   const expanded = game as ExpandedGame
   const kscwTeam = expanded.expand?.kscw_team?.name ?? ''
   const dateStr = game.date ? dateFormatter.format(new Date(game.date)) : ''
@@ -71,7 +74,7 @@ export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRo
       {/* Assignment editors */}
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <AssignmentEditor
-          label="Schreiber"
+          label={t('scorer')}
           teamValue={game.scorer_team ?? ''}
           personValue={game.scorer_person ?? ''}
           members={members}
@@ -80,7 +83,7 @@ export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRo
           disabled={!canEdit}
         />
         <AssignmentEditor
-          label="Täfeler"
+          label={t('referee')}
           teamValue={game.taefeler_team ?? ''}
           personValue={game.taefeler_person ?? ''}
           members={members}
@@ -97,7 +100,7 @@ export default function ScorerRow({ game, members, onUpdate, canEdit }: ScorerRo
               disabled={!canEdit}
               className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600"
             />
-            <span className={canEdit ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400'}>Bestätigt</span>
+            <span className={canEdit ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400'}>{t('confirmed')}</span>
           </label>
         </div>
       </div>

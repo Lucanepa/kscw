@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useRealtime } from '../../hooks/useRealtime'
 import { useIsMobile } from '../../hooks/useMediaQuery'
@@ -19,6 +20,7 @@ function getTodayDayIndex(): number {
 }
 
 export default function HallenplanPage() {
+  const { t } = useTranslation('hallenplan')
   const { isAdmin } = useAuth()
   const isMobile = useIsMobile()
   const { weekDays, goNext, goPrev, goToday, weekLabel, mondayStr, sundayStr } = useWeekNavigation()
@@ -71,11 +73,11 @@ export default function HallenplanPage() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Hallenplan</h1>
+        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           {isMobile
-            ? 'Tagesansicht der Hallenbelegung.'
-            : 'Wochenansicht der Hallenbelegung — Trainings, Spiele, Events.'}
+            ? t('subtitleDay')
+            : t('subtitleWeek')}
         </p>
       </div>
 

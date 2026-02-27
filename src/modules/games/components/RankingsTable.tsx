@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { SvRanking } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
 import { svTeamIds } from '../../../utils/teamColors'
@@ -8,6 +9,7 @@ interface RankingsTableProps {
 }
 
 export default function RankingsTable({ league, rankings }: RankingsTableProps) {
+  const { t } = useTranslation('games')
   const sorted = [...rankings].sort((a, b) => a.rank - b.rank)
 
   return (
@@ -17,13 +19,13 @@ export default function RankingsTable({ league, rankings }: RankingsTableProps) 
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              <th className="px-4 py-3 text-center">#</th>
-              <th className="px-4 py-3">Team</th>
-              <th className="px-4 py-3 text-center">Sp.</th>
-              <th className="hidden px-4 py-3 text-center sm:table-cell">S</th>
-              <th className="hidden px-4 py-3 text-center sm:table-cell">N</th>
-              <th className="px-4 py-3 text-center">Sätze</th>
-              <th className="px-4 py-3 text-center">Pkt.</th>
+              <th className="px-4 py-3 text-center">{t('rank')}</th>
+              <th className="px-4 py-3">{t('teamCol')}</th>
+              <th className="px-4 py-3 text-center">{t('played')}</th>
+              <th className="hidden px-4 py-3 text-center sm:table-cell">{t('won')}</th>
+              <th className="hidden px-4 py-3 text-center sm:table-cell">{t('lost')}</th>
+              <th className="px-4 py-3 text-center">{t('sets')}</th>
+              <th className="px-4 py-3 text-center">{t('points')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import FilterChips from '../../components/FilterChips'
 import { useTeams } from '../../hooks/useTeams'
 import type { CalendarFilterState, SourceFilter } from '../../types/calendar'
@@ -7,14 +8,15 @@ interface CalendarFiltersProps {
   onChange: (filters: CalendarFilterState) => void
 }
 
-const sourceOptions = [
-  { value: 'game', label: 'Spiele', colorClasses: 'bg-brand-100 text-brand-800 border-brand-200' },
-  { value: 'training', label: 'Trainings', colorClasses: 'bg-green-100 text-green-800 border-green-200' },
-  { value: 'closure', label: 'Hallensperren', colorClasses: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'event', label: 'Events', colorClasses: 'bg-purple-100 text-purple-800 border-purple-200' },
-]
-
 export default function CalendarFilters({ filters, onChange }: CalendarFiltersProps) {
+  const { t } = useTranslation('calendar')
+
+  const sourceOptions = [
+    { value: 'game', label: t('sourceGames'), colorClasses: 'bg-brand-100 text-brand-800 border-brand-200' },
+    { value: 'training', label: t('sourceTrainings'), colorClasses: 'bg-green-100 text-green-800 border-green-200' },
+    { value: 'closure', label: t('sourceClosures'), colorClasses: 'bg-red-100 text-red-800 border-red-200' },
+    { value: 'event', label: t('sourceEvents'), colorClasses: 'bg-purple-100 text-purple-800 border-purple-200' },
+  ]
   const { data: teams } = useTeams()
 
   const teamChipOptions = teams.map((t) => ({

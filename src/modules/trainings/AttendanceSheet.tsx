@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import Modal from '../../components/Modal'
 import EmptyState from '../../components/EmptyState'
 import { useAuth } from '../../hooks/useAuth'
@@ -15,6 +16,7 @@ interface AttendanceSheetProps {
 }
 
 export default function AttendanceSheet({ trainingId, teamId, onClose }: AttendanceSheetProps) {
+  const { t } = useTranslation('trainings')
   const { user, isCoach } = useAuth()
   const { members } = useTeamMembers(teamId ?? undefined)
   const { create, update } = useMutation<TrainingAttendance>('training_attendance')
@@ -96,13 +98,13 @@ export default function AttendanceSheet({ trainingId, teamId, onClose }: Attenda
     <Modal
       open={trainingId !== null}
       onClose={onClose}
-      title={training ? `Anwesenheit — ${training.date.split(' ')[0]}` : 'Anwesenheit'}
+      title={training ? t('attendanceTitle', { date: training.date.split(' ')[0] }) : t('attendanceTitleShort')}
       size="lg"
     >
       {loading ? (
-        <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+        <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
       ) : memberList.length === 0 ? (
-        <EmptyState icon="👤" title="Keine Spieler" description="Diesem Team sind noch keine Spieler zugewiesen." />
+        <EmptyState icon="👤" title={t('noPlayers')} description={t('noPlayersAssigned')} />
       ) : (
         <div className="max-h-[60vh] overflow-y-auto rounded-lg border dark:border-gray-700">
           {memberList.map((member) => {

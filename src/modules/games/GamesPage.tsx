@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Game, SvRanking } from '../../types'
 import { usePB } from '../../hooks/usePB'
 import { svTeamIds } from '../../utils/teamColors'
@@ -17,6 +18,7 @@ function buildTeamFilter(teams: string[]): string {
 }
 
 export default function GamesPage() {
+  const { t } = useTranslation('games')
   const [activeTab, setActiveTab] = useState<TabKey>('upcoming')
   const [selectedTeams, setSelectedTeams] = useState<string[]>([])
   const [selectedGame, setSelectedGame] = useState<Game | null>(null)
@@ -94,8 +96,8 @@ export default function GamesPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Spiele & Resultate</h1>
-      <p className="mt-1 text-gray-600 dark:text-gray-400">Swiss Volley Daten — nächste Spiele, Resultate, Ranglisten.</p>
+      <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+      <p className="mt-1 text-gray-600 dark:text-gray-400">{t('subtitle')}</p>
 
       <div className="mt-6 space-y-4">
         <TeamFilterBar selected={selectedTeams} onChange={setSelectedTeams} />
@@ -157,17 +159,19 @@ export default function GamesPage() {
 }
 
 function EmptyState({ tab }: { tab: string }) {
+  const { t } = useTranslation('games')
+
   const messages: Record<string, string> = {
-    upcoming: 'Keine kommenden Spiele gefunden.',
-    recent: 'Keine vergangenen Spiele gefunden.',
-    results: 'Keine Resultate vorhanden.',
-    rankings: 'Keine Ranglisten verfügbar.',
+    upcoming: t('noUpcoming'),
+    recent: t('noRecent'),
+    results: t('noResults'),
+    rankings: t('noRankings'),
   }
 
   return (
     <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-      <p>{messages[tab] ?? 'Keine Daten gefunden.'}</p>
-      <p className="mt-1 text-sm">Versuche, den Teamfilter anzupassen.</p>
+      <p>{messages[tab] ?? t('common:noData')}</p>
+      <p className="mt-1 text-sm">{t('common:tryAdjustingFilter')}</p>
     </div>
   )
 }

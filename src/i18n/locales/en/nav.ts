@@ -1,0 +1,16 @@
+export default {
+  calendar: 'Calendar',
+  games: 'Games & Results',
+  gamesShort: 'Games',
+  trainings: 'Trainings',
+  absences: 'Absences',
+  scorer: 'Scorer Duties',
+  teams: 'Teams',
+  gameplan: 'Game Planning',
+  admin: 'Admin',
+  more: 'More',
+  lightMode: 'Light Mode',
+  darkMode: 'Dark Mode',
+  logout: 'Logout',
+  signIn: 'Sign in',
+} as const

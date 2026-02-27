@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import StatusBadge from '../../components/StatusBadge'
 import { formatDate } from '../../utils/dateHelpers'
 import type { Absence, Member } from '../../types'
@@ -10,14 +11,15 @@ interface AbsenceCardProps {
   canEdit: boolean
 }
 
-const affectsLabels: Record<string, string> = {
-  trainings: 'Trainings',
-  games: 'Spiele',
-  all: 'Alles',
-}
-
 export default function AbsenceCard({ absence, onEdit, onDelete, showMemberName, canEdit }: AbsenceCardProps) {
+  const { t } = useTranslation('absences')
   const memberName = absence.expand?.member?.name
+
+  const affectsLabels: Record<string, string> = {
+    trainings: t('affectsTrainings'),
+    games: t('affectsGames'),
+    all: t('affectsAll'),
+  }
 
   return (
     <div className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
@@ -38,13 +40,13 @@ export default function AbsenceCard({ absence, onEdit, onDelete, showMemberName,
               onClick={() => onEdit(absence)}
               className="min-h-[44px] rounded px-3 py-2 text-sm text-brand-600 hover:bg-brand-50 hover:text-brand-700 sm:min-h-0 sm:py-1"
             >
-              Bearbeiten
+              {t('common:edit')}
             </button>
             <button
               onClick={() => onDelete(absence.id)}
               className="min-h-[44px] rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-800 sm:min-h-0 sm:py-1"
             >
-              Löschen
+              {t('common:delete')}
             </button>
           </div>
         )}
@@ -63,7 +65,7 @@ export default function AbsenceCard({ absence, onEdit, onDelete, showMemberName,
       )}
       {absence.approved && (
         <span className="mt-2 inline-block rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
-          Genehmigt
+          {t('approved')}
         </span>
       )}
     </div>

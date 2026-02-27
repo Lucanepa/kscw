@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { RecordModel } from 'pocketbase'
 import type { Game, Team, Hall } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
@@ -23,7 +24,7 @@ function parseSets(json: unknown): Array<{ home: number; away: number }> {
   )
 }
 
-const dateFormatter = new Intl.DateTimeFormat('de-CH', {
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
@@ -31,6 +32,8 @@ const dateFormatter = new Intl.DateTimeFormat('de-CH', {
 })
 
 export default function GameDetailModal({ game, onClose }: GameDetailModalProps) {
+  const { t } = useTranslation('games')
+
   useEffect(() => {
     if (!game) return
     function handleKey(e: KeyboardEvent) {
@@ -64,7 +67,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               {game.league}
             </span>
             {game.round && (
-              <span className="text-xs text-gray-400">Runde {game.round}</span>
+              <span className="text-xs text-gray-400">{t('round')} {game.round}</span>
             )}
           </div>
           <button
@@ -124,14 +127,14 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                     <th className="px-3 py-2"></th>
                     {sets.map((_, i) => (
                       <th key={i} className="px-3 py-2">
-                        Satz {i + 1}
+                        {t('set')} {i + 1}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t dark:border-gray-700">
-                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Heim</td>
+                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{t('home')}</td>
                     {sets.map((s, i) => (
                       <td
                         key={i}
@@ -142,7 +145,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                     ))}
                   </tr>
                   <tr className="border-t dark:border-gray-700">
-                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Gast</td>
+                    <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">{t('away')}</td>
                     {sets.map((s, i) => (
                       <td
                         key={i}
@@ -160,17 +163,17 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
 
         {/* Details */}
         <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
-          <DetailRow label="Datum" value={dateStr} />
-          <DetailRow label="Anpfiff" value={game.time || '–'} />
+          <DetailRow label={t('date')} value={dateStr} />
+          <DetailRow label={t('kickoff')} value={game.time || '–'} />
           {hall && (
             <>
-              <DetailRow label="Halle" value={hall.name} />
+              <DetailRow label={t('hallLabel')} value={hall.name} />
               {hall.address && (
-                <DetailRow label="Adresse" value={`${hall.address}, ${hall.city || ''}`} />
+                <DetailRow label={t('address')} value={`${hall.address}, ${hall.city || ''}`} />
               )}
               {hall.maps_url && (
                 <div className="flex items-start gap-3 text-sm">
-                  <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">Karte</span>
+                  <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
                   <a
                     href={hall.maps_url}
                     target="_blank"
@@ -183,30 +186,30 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               )}
             </>
           )}
-          <DetailRow label="Status" value={statusLabel(game.status)} />
+          <DetailRow label={t('common:status')} value={statusLabel(game.status)} />
         </div>
 
         {/* Scorer / Täfeler */}
         {(game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
           <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Schreibereinsätze
+              {t('scorerDuties')}
             </h4>
             {(game.scorer_team || game.scorer_person) && (
               <DetailRow
-                label="Schreiber"
+                label={t('scorer')}
                 value={[game.scorer_team, game.scorer_person].filter(Boolean).join(' — ')}
               />
             )}
             {(game.taefeler_team || game.taefeler_person) && (
               <DetailRow
-                label="Täfeler"
+                label={t('referee')}
                 value={[game.taefeler_team, game.taefeler_person].filter(Boolean).join(' — ')}
               />
             )}
             <DetailRow
-              label="Bestätigt"
-              value={game.duty_confirmed ? 'Ja' : 'Nein'}
+              label={t('confirmed')}
+              value={game.duty_confirmed ? t('common:yes') : t('common:no')}
             />
           </div>
         )}
@@ -227,13 +230,13 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 function statusLabel(status: Game['status']): string {
   switch (status) {
     case 'scheduled':
-      return 'Geplant'
+      return 'Planned'
     case 'live':
       return 'Live'
     case 'completed':
-      return 'Beendet'
+      return 'Completed'
     case 'postponed':
-      return 'Verschoben'
+      return 'Postponed'
     default:
       return status
   }

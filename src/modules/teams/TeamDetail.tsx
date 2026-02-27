@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
 import pb from '../../pb'
 import { useTeamMembers } from '../../hooks/useTeamMembers'
@@ -9,6 +10,7 @@ import MemberRow from './MemberRow'
 import type { Team } from '../../types'
 
 export default function TeamDetail() {
+  const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
   const { isCoach } = useAuth()
   const [team, setTeam] = useState<Team | null>(null)
@@ -26,17 +28,17 @@ export default function TeamDetail() {
   }, [teamId])
 
   if (loading || membersLoading) {
-    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
   }
 
   if (!team) {
-    return <EmptyState icon="❌" title="Team nicht gefunden" />
+    return <EmptyState icon="❌" title={t('noTeams')} />
   }
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">Teams</Link>
+        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">{t('title')}</Link>
         <span>/</span>
         <span className="text-gray-900 dark:text-gray-100">{team.full_name}</span>
       </div>
@@ -59,26 +61,26 @@ export default function TeamDetail() {
             to={`/teams/${teamId}/roster/edit`}
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
           >
-            Kader bearbeiten
+            {t('editRoster')}
           </Link>
         )}
       </div>
 
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Kader ({members.length})</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('currentRoster', { count: members.length })}</h2>
 
         {members.length === 0 ? (
           <EmptyState
             icon="👤"
-            title="Keine Spieler"
-            description="Diesem Team sind noch keine Spieler zugewiesen."
+            title={t('noMembers')}
+            description={t('noMembersDescription')}
             action={
               isCoach ? (
                 <Link
                   to={`/teams/${teamId}/roster/edit`}
                   className="text-sm text-brand-600 hover:text-brand-700"
                 >
-                  Spieler hinzufügen
+                  {t('addPlayer')}
                 </Link>
               ) : undefined
             }
@@ -88,10 +90,10 @@ export default function TeamDetail() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-4 py-3">Spieler</th>
-                  <th className="px-4 py-3">#Nr</th>
-                  <th className="hidden px-4 py-3 sm:table-cell">Position</th>
-                  <th className="px-4 py-3">Rolle</th>
+                  <th className="px-4 py-3">{t('playerCol')}</th>
+                  <th className="px-4 py-3">{t('numberCol')}</th>
+                  <th className="hidden px-4 py-3 sm:table-cell">{t('positionCol')}</th>
+                  <th className="px-4 py-3">{t('roleCol')}</th>
                 </tr>
               </thead>
               <tbody>

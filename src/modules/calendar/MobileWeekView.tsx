@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { CalendarEntry } from '../../types/calendar'
 import {
   startOfWeek,
@@ -7,7 +8,7 @@ import {
   addWeeks,
   isSameDay,
   toDateKey,
-  formatDateDE,
+  formatDate,
   DAY_HEADERS,
 } from '../../utils/dateUtils'
 
@@ -31,6 +32,7 @@ export default function MobileWeekView({
   weekStart,
   onWeekChange,
 }: MobileWeekViewProps) {
+  const { t } = useTranslation('calendar')
   const weekMonday = startOfWeek(weekStart)
   const weekSunday = endOfWeek(weekStart)
   const weekDays = eachDayOfInterval(weekMonday, weekSunday)
@@ -53,8 +55,7 @@ export default function MobileWeekView({
     return map
   }, [entries, weekMonday, weekSunday])
 
-  // Week label: "KW 9: 24. Feb – 2. Mär"
-  const weekLabel = `KW ${formatDateDE(weekMonday, 'w')}: ${formatDateDE(weekMonday, 'd. MMM')} – ${formatDateDE(weekSunday, 'd. MMM')}`
+  const weekLabel = t('weekLabel', { week: formatDate(weekMonday, 'w'), start: formatDate(weekMonday, 'MMM d'), end: formatDate(weekSunday, 'MMM d') })
 
   return (
     <div>
@@ -75,7 +76,7 @@ export default function MobileWeekView({
             onClick={() => onWeekChange(startOfWeek(new Date()))}
             className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
           >
-            Heute
+            {t('common:today')}
           </button>
         </div>
 

@@ -1,6 +1,6 @@
-const dateFmt = new Intl.DateTimeFormat('de-CH', { day: 'numeric', month: 'short', year: 'numeric' })
-const dateShortFmt = new Intl.DateTimeFormat('de-CH', { day: '2-digit', month: '2-digit' })
-const weekdayFmt = new Intl.DateTimeFormat('de-CH', { weekday: 'short' })
+const dateFmt = new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+const dateShortFmt = new Intl.DateTimeFormat('en-US', { day: '2-digit', month: '2-digit' })
+const weekdayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short' })
 
 export function formatDate(date: string): string {
   return dateFmt.format(new Date(date))
@@ -104,9 +104,9 @@ export function getISOWeekNumber(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + yearStart.getDay() + 6) / 7)
 }
 
-const DAY_NAMES_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const
+const DAY_NAMES_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
-/** Returns short German day name for day_of_week 0=Mon..6=Sun */
+/** Returns short day name for day_of_week 0=Mon..6=Sun */
 export function getDayName(dayOfWeek: number): string {
   return DAY_NAMES_SHORT[dayOfWeek]
 }

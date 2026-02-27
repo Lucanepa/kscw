@@ -23,7 +23,7 @@ export default function TeamCard({ team, memberCount }: TeamCardProps) {
       <div className="mt-4 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
         <span>{team.league}</span>
         <span>{team.season}</span>
-        <span>{memberCount} Spieler</span>
+        <span>{memberCount} players</span>
       </div>
     </Link>
   )

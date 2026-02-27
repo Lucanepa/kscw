@@ -3,7 +3,7 @@ import CalendarGrid from '../../components/CalendarGrid'
 import TeamChip from '../../components/TeamChip'
 import type { CalendarEntry } from '../../types/calendar'
 import type { Game } from '../../types'
-import { toDateKey, getSeasonMonths, getSeasonYear, formatDateDE } from '../../utils/dateUtils'
+import { toDateKey, getSeasonMonths, getSeasonYear, formatDate } from '../../utils/dateUtils'
 
 interface CalendarViewProps {
   entries: CalendarEntry[]
@@ -69,7 +69,7 @@ export default function CalendarView({ entries, closedDates, month, onMonthChang
                   : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:text-gray-300'
               }`}
             >
-              {formatDateDE(m, 'MMM')}
+              {formatDate(m, 'MMM')}
             </button>
           )
         })}
@@ -108,7 +108,7 @@ export default function CalendarView({ entries, closedDates, month, onMonthChang
                 )
               })}
               {overflow > 0 && (
-                <div className="text-[10px] text-gray-400">+{overflow} weitere</div>
+                <div className="text-[10px] text-gray-400">+{overflow} more</div>
               )}
             </>
           )

@@ -61,11 +61,11 @@ export default function PlayerProfile() {
   }, [memberId, start, end])
 
   if (loading) {
-    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Loading...</div>
   }
 
   if (!member) {
-    return <EmptyState icon="❌" title="Spieler nicht gefunden" />
+    return <EmptyState icon="❌" title="Player not found" />
   }
 
   const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
@@ -105,7 +105,7 @@ export default function PlayerProfile() {
             <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
               {member.email && <span>{member.email}</span>}
               {member.phone && <span>{member.phone}</span>}
-              {member.license_nr && <span>Lizenz: {member.license_nr}</span>}
+              {member.license_nr && <span>License: {member.license_nr}</span>}
             </div>
           )}
         </div>
@@ -121,29 +121,29 @@ export default function PlayerProfile() {
             </Link>
           ))}
           {memberTeams.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Keinem Team zugewiesen</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Not assigned to any team</p>
           )}
         </div>
       </div>
 
       {/* Stats */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Statistiken ({season})</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Statistics ({season})</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Trainings besucht</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Trainings attended</p>
             <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {attendanceStats ? `${attendanceStats.present}/${attendanceStats.total}` : '—'}
             </p>
           </div>
           <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Anwesenheitsquote</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Attendance rate</p>
             <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
               {attendancePct !== null ? `${attendancePct}%` : '—'}
             </p>
           </div>
           <div className="rounded-lg border bg-white dark:bg-gray-800 p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Aktive Absenzen</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Active absences</p>
             <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{absences.length}</p>
           </div>
         </div>
@@ -152,7 +152,7 @@ export default function PlayerProfile() {
       {/* Active Absences */}
       {absences.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Aktuelle Absenzen</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Current absences</h2>
           <div className="mt-3 space-y-2">
             {absences.map((a) => (
               <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-white dark:bg-gray-800 px-4 py-3">

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { RecordModel } from 'pocketbase'
 import type { Game, Team, Hall } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
@@ -15,7 +16,7 @@ type ExpandedGame = Game & {
   }
 }
 
-const dateFormatter = new Intl.DateTimeFormat('de-CH', {
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'short',
   day: 'numeric',
   month: 'short',
@@ -23,24 +24,26 @@ const dateFormatter = new Intl.DateTimeFormat('de-CH', {
 })
 
 function StatusBadge({ status }: { status: Game['status'] }) {
+  const { t } = useTranslation('games')
+
   switch (status) {
     case 'live':
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-          Live
+          {t('statusLive')}
         </span>
       )
     case 'postponed':
       return (
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-          Verschoben
+          {t('statusPostponed')}
         </span>
       )
     case 'completed':
       return (
         <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
-          Beendet
+          {t('statusCompleted')}
         </span>
       )
     default:

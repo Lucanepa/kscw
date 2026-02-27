@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
 import SpielplanungFilters from './SpielplanungFilters'
 import CalendarView from './CalendarView'
@@ -10,12 +11,6 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { ViewMode, SpielplanungFilterState } from '../../types/calendar'
 
-const viewOptions = [
-  { value: 'calendar', label: 'Kalender' },
-  { value: 'list-date', label: 'Nach Datum' },
-  { value: 'list-team', label: 'Nach Team' },
-]
-
 function getInitialMonth(): Date {
   const now = new Date()
   const m = now.getMonth()
@@ -24,6 +19,7 @@ function getInitialMonth(): Date {
 }
 
 export default function SpielplanungPage() {
+  const { t } = useTranslation('spielplanung')
   const isMobile = useIsMobile()
   const [viewMode, setViewMode] = useState<ViewMode>(() => isMobile ? 'list-date' : 'calendar')
   const [filters, setFilters] = useState<SpielplanungFilterState>({
@@ -53,13 +49,17 @@ export default function SpielplanungPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Spielplanung</h1>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Saisonübersicht {seasonYear}/{(seasonYear + 1).toString().slice(2)}
+            {t('subtitleSeason', { season: `${seasonYear}/${(seasonYear + 1).toString().slice(2)}` })}
           </p>
         </div>
         <ViewToggle
-          options={viewOptions}
+          options={[
+            { value: 'calendar', label: t('viewCalendar') },
+            { value: 'list-date', label: t('viewByDate') },
+            { value: 'list-team', label: t('viewByTeam') },
+          ]}
           value={viewMode}
           onChange={(v) => setViewMode(v as ViewMode)}
         />
@@ -73,7 +73,7 @@ export default function SpielplanungPage() {
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Fehler beim Laden: {error.message}
+          {t('common:errorLoading')} {error.message}
         </div>
       )}
 

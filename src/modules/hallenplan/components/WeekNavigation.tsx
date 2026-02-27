@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { Hall } from '../../../types'
 
 interface WeekNavigationProps {
@@ -23,13 +24,15 @@ export default function WeekNavigation({
   isAdmin,
   onOpenClosureManager,
 }: WeekNavigationProps) {
+  const { t } = useTranslation('hallenplan')
+
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white dark:bg-gray-800 p-4 shadow-sm">
       <div className="flex items-center gap-2">
         <button
           onClick={onPrev}
           className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
-          title="Vorherige Woche"
+          title={t('prevWeek')}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -41,7 +44,7 @@ export default function WeekNavigation({
         <button
           onClick={onNext}
           className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
-          title="Nächste Woche"
+          title={t('nextWeek')}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -51,7 +54,7 @@ export default function WeekNavigation({
           onClick={onToday}
           className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
-          Heute
+          {t('today')}
         </button>
       </div>
 
@@ -61,7 +64,7 @@ export default function WeekNavigation({
           onChange={(e) => onSelectHall(e.target.value)}
           className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         >
-          <option value="">Alle Hallen</option>
+          <option value="">{t('common:allHalls')}</option>
           {halls.map((hall) => (
             <option key={hall.id} value={hall.id}>
               {hall.name}
@@ -74,7 +77,7 @@ export default function WeekNavigation({
             onClick={onOpenClosureManager}
             className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
-            Hallensperren
+            {t('closures')}
           </button>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
 import pb from '../../pb'
 import { useTeamMembers } from '../../hooks/useTeamMembers'
@@ -12,6 +13,7 @@ import { getCurrentSeason } from '../../utils/dateHelpers'
 import type { Team, Member, MemberTeam } from '../../types'
 
 export default function RosterEditor() {
+  const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
   const season = getCurrentSeason()
   const { members, isLoading, refetch } = useTeamMembers(teamId, season)
@@ -55,40 +57,40 @@ export default function RosterEditor() {
   }
 
   if (isLoading) {
-    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+    return <div className="py-12 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
   }
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">Teams</Link>
+        <Link to="/teams" className="hover:text-gray-700 dark:text-gray-300">{t('title')}</Link>
         <span>/</span>
         <Link to={`/teams/${teamId}`} className="hover:text-gray-700 dark:text-gray-300">
           {team?.full_name ?? 'Team'}
         </Link>
         <span>/</span>
-        <span className="text-gray-900 dark:text-gray-100">Kader bearbeiten</span>
+        <span className="text-gray-900 dark:text-gray-100">{t('editRoster')}</span>
       </div>
 
       <div className="flex items-center gap-3">
         {team && <TeamChip team={team.name} />}
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Kader bearbeiten</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('editRoster')}</h1>
       </div>
 
       {/* Add member */}
       <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Spieler hinzufügen</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('addPlayer')}</label>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Name suchen..."
+          placeholder={t('searchPlaceholder')}
           className="mt-1 w-full max-w-md rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
         />
         {search.length >= 2 && (
           <div className="mt-2 max-h-48 max-w-md overflow-y-auto rounded-lg border bg-white dark:bg-gray-800 shadow-sm">
             {availableMembers.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Keine Ergebnisse</p>
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('noSearchResults')}</p>
             ) : (
               availableMembers.slice(0, 10).map((m) => (
                 <button
@@ -118,11 +120,11 @@ export default function RosterEditor() {
       {/* Current roster */}
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Aktuelles Kader ({members.length})
+          {t('currentRoster', { count: members.length })}
         </h2>
 
         {members.length === 0 ? (
-          <EmptyState icon="👤" title="Kein Spieler im Kader" description="Suche oben nach Spielern, um sie hinzuzufügen." />
+          <EmptyState icon="👤" title={t('noMembers')} description={t('noMembersDescription')} />
         ) : (
           <div className="mt-4 space-y-2">
             {members.map((mt) => {
@@ -149,16 +151,16 @@ export default function RosterEditor() {
                     onChange={(e) => handleRoleChange(mt.id, e.target.value)}
                     className="rounded border px-2 py-1 text-sm text-gray-700 dark:text-gray-300"
                   >
-                    <option value="player">Spieler</option>
-                    <option value="captain">Captain</option>
-                    <option value="coach">Trainer</option>
-                    <option value="assistant">Assistent</option>
+                    <option value="player">{t('rolePlayer')}</option>
+                    <option value="captain">{t('roleCaptain')}</option>
+                    <option value="coach">{t('roleCoach')}</option>
+                    <option value="assistant">{t('roleAssistant')}</option>
                   </select>
                   <button
                     onClick={() => setRemovingId(mt.id)}
                     className="text-sm text-red-600 hover:text-red-800"
                   >
-                    Entfernen
+                    {t('common:remove')}
                   </button>
                 </div>
               )
@@ -171,9 +173,9 @@ export default function RosterEditor() {
         open={removingId !== null}
         onClose={() => setRemovingId(null)}
         onConfirm={handleRemove}
-        title="Spieler entfernen"
-        message="Soll dieser Spieler wirklich aus dem Kader entfernt werden?"
-        confirmLabel="Entfernen"
+        title={t('removeConfirmTitle')}
+        message={t('removeConfirmMessage', { name: members.find((mt) => mt.id === removingId)?.expand?.member?.name ?? '' })}
+        confirmLabel={t('common:remove')}
         danger
       />
     </div>

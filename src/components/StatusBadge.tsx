@@ -11,15 +11,15 @@ const defaultColors: Record<string, { bg: string; text: string }> = {
 }
 
 const labelMap: Record<string, string> = {
-  present: 'Anwesend',
-  absent: 'Abwesend',
-  late: 'Verspätet',
-  excused: 'Entschuldigt',
-  injury: 'Verletzung',
-  vacation: 'Ferien',
-  work: 'Arbeit',
-  personal: 'Persönlich',
-  other: 'Anderes',
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  excused: 'Excused',
+  injury: 'Injury',
+  vacation: 'Vacation',
+  work: 'Work',
+  personal: 'Personal',
+  other: 'Other',
 }
 
 interface StatusBadgeProps {

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import TeamChip from '../../components/TeamChip'
 import { formatDate, formatWeekday, formatTime } from '../../utils/dateHelpers'
 import type { Training, Team, Hall, Member } from '../../types'
@@ -12,6 +13,7 @@ interface TrainingCardProps {
 }
 
 export default function TrainingCard({ training, onOpenAttendance }: TrainingCardProps) {
+  const { t } = useTranslation('trainings')
   const team = training.expand?.team
   const hall = training.expand?.hall
   const coach = training.expand?.coach
@@ -33,7 +35,7 @@ export default function TrainingCard({ training, onOpenAttendance }: TrainingCar
           </p>
           {training.cancelled && (
             <span className="mt-1 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-              Abgesagt{training.cancel_reason ? `: ${training.cancel_reason}` : ''}
+              {t('cancelled')}{training.cancel_reason ? `: ${training.cancel_reason}` : ''}
             </span>
           )}
           {training.notes && !training.cancelled && (
@@ -45,7 +47,7 @@ export default function TrainingCard({ training, onOpenAttendance }: TrainingCar
             onClick={() => onOpenAttendance(training.id, training.team)}
             className="shrink-0 rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:py-1.5 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
           >
-            Anwesenheit
+            {t('attendance')}
           </button>
         )}
       </div>

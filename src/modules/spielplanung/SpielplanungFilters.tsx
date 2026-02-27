@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
 import FilterChips from '../../components/FilterChips'
 import { useTeams } from '../../hooks/useTeams'
@@ -8,19 +9,20 @@ interface SpielplanungFiltersProps {
   onChange: (filters: SpielplanungFilterState) => void
 }
 
-const sportOptions = [
-  { value: 'all', label: 'Alle' },
-  { value: 'volleyball', label: 'Volleyball' },
-  { value: 'basketball', label: 'Basketball' },
-]
-
-const typeOptions = [
-  { value: 'all', label: 'Alle' },
-  { value: 'home', label: 'Heim' },
-  { value: 'away', label: 'Auswärts' },
-]
-
 export default function SpielplanungFilters({ filters, onChange }: SpielplanungFiltersProps) {
+  const { t } = useTranslation('spielplanung')
+
+  const sportOptions = [
+    { value: 'all', label: t('filterAll') },
+    { value: 'volleyball', label: t('filterVolleyball') },
+    { value: 'basketball', label: t('filterBasketball') },
+  ]
+
+  const typeOptions = [
+    { value: 'all', label: t('filterAll') },
+    { value: 'home', label: t('filterHome') },
+    { value: 'away', label: t('filterAway') },
+  ]
   const sportForTeams = filters.sport === 'all' ? undefined : filters.sport
   const { data: teams } = useTeams(sportForTeams ?? 'all')
 
@@ -70,7 +72,7 @@ export default function SpielplanungFilters({ filters, onChange }: SpielplanungF
           onChange={handleAbsencesToggle}
           className="rounded border-gray-300 dark:border-gray-600"
         />
-        Absenzen anzeigen
+        {t('showAbsences')}
       </label>
     </div>
   )

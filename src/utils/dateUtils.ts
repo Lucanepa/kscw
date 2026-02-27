@@ -13,14 +13,14 @@ import {
   parseISO,
   getDay as fnsGetDay,
 } from 'date-fns'
-import { de } from 'date-fns/locale'
+import { enUS } from 'date-fns/locale'
 
 export function parseDate(isoString: string): Date {
   return parseISO(isoString)
 }
 
-export function formatDateDE(date: Date, pattern: string): string {
-  return format(date, pattern, { locale: de })
+export function formatDate(date: Date, pattern: string): string {
+  return format(date, pattern, { locale: enUS })
 }
 
 export function startOfMonth(date: Date): Date {
@@ -93,5 +93,5 @@ export function getSeasonYear(date: Date): number {
   return month >= 8 ? date.getFullYear() : date.getFullYear() - 1
 }
 
-/** Day-of-week headers in German (Monday-start) */
-export const DAY_HEADERS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+/** Day-of-week headers (Monday-start) */
+export const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']

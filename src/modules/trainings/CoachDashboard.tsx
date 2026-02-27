@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAttendanceStats } from './useAttendanceStats'
 import EmptyState from '../../components/EmptyState'
 import { getCurrentSeason } from '../../utils/dateHelpers'
@@ -15,6 +16,7 @@ const trendColors: Record<string, string> = {
 }
 
 export default function CoachDashboard({ teamId }: CoachDashboardProps) {
+  const { t } = useTranslation('trainings')
   const [season, setSeason] = useState(getCurrentSeason())
   const { stats, isLoading } = useAttendanceStats(teamId, season)
 
@@ -27,13 +29,13 @@ export default function CoachDashboard({ teamId }: CoachDashboardProps) {
   })
 
   if (isLoading) {
-    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
   }
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-4">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Saison</label>
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('seasonLabel')}</label>
         <select
           value={season}
           onChange={(e) => setSeason(e.target.value)}
@@ -48,21 +50,21 @@ export default function CoachDashboard({ teamId }: CoachDashboardProps) {
       {stats.length === 0 ? (
         <EmptyState
           icon="📊"
-          title="Keine Daten"
-          description="Noch keine Trainingsdaten für diese Saison vorhanden."
+          title={t('noDataAvailable')}
+          description={t('noDataDescription')}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800">
           <table className="w-full">
             <thead>
               <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                <th className="px-4 py-3">Spieler</th>
-                <th className="hidden px-4 py-3 text-center sm:table-cell">#Nr</th>
-                <th className="px-4 py-3 text-center">Trainings</th>
-                <th className="px-4 py-3 text-center">Anwesend</th>
-                <th className="px-4 py-3 text-center">Abwesend</th>
-                <th className="px-4 py-3 text-center">Quote</th>
-                <th className="hidden px-4 py-3 sm:table-cell">Trend</th>
+                <th className="px-4 py-3">{t('playerCol')}</th>
+                <th className="hidden px-4 py-3 text-center sm:table-cell">{t('numberCol')}</th>
+                <th className="px-4 py-3 text-center">{t('trainingsCol')}</th>
+                <th className="px-4 py-3 text-center">{t('presentCol')}</th>
+                <th className="px-4 py-3 text-center">{t('absentCol')}</th>
+                <th className="px-4 py-3 text-center">{t('rateCol')}</th>
+                <th className="hidden px-4 py-3 sm:table-cell">{t('trendCol')}</th>
               </tr>
             </thead>
             <tbody>

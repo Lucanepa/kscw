@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
 import CalendarFilters from './CalendarFilters'
 import UnifiedCalendarView from './UnifiedCalendarView'
@@ -12,21 +13,8 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { CalendarViewMode, CalendarFilterState } from '../../types/calendar'
 
-const viewOptions = [
-  { value: 'hallenplan', label: 'Halle' },
-  { value: 'week', label: 'Woche' },
-  { value: 'month', label: 'Monat' },
-  { value: 'list', label: 'Liste' },
-]
-
-const subtitles: Record<CalendarViewMode, string> = {
-  hallenplan: 'Wochenansicht der Hallenbelegung',
-  week: 'Wochenkalender — Termine dieser Woche',
-  month: 'Vereinskalender — alle Termine auf einen Blick',
-  list: 'Vereinskalender — alle Termine auf einen Blick',
-}
-
 export default function CalendarPage() {
+  const { t } = useTranslation('calendar')
   const isMobile = useIsMobile()
   const [viewMode, setViewMode] = useState<CalendarViewMode>(() => isMobile ? 'week' : 'month')
   const [filters, setFilters] = useState<CalendarFilterState>({
@@ -61,8 +49,10 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Kalender</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitles[viewMode]}</p>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {({ hallenplan: t('subtitleHall'), week: t('subtitleWeek'), month: t('subtitleMonth'), list: t('subtitleList') } as Record<CalendarViewMode, string>)[viewMode]}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {needsData && (
@@ -74,11 +64,16 @@ export default function CalendarPage() {
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              <span className="hidden sm:inline">iCal Export</span>
+              <span className="hidden sm:inline">{t('exportICal')}</span>
             </button>
           )}
           <ViewToggle
-            options={viewOptions}
+            options={[
+              { value: 'hallenplan', label: t('viewHall') },
+              { value: 'week', label: t('viewWeek') },
+              { value: 'month', label: t('viewMonth') },
+              { value: 'list', label: t('viewList') },
+            ]}
             value={viewMode}
             onChange={handleViewChange}
           />

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useTeamAbsences } from '../../hooks/useTeamAbsences'
 import StatusBadge from '../../components/StatusBadge'
 import EmptyState from '../../components/EmptyState'
@@ -9,6 +10,7 @@ interface TeamAbsenceViewProps {
 }
 
 export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
+  const { t } = useTranslation('absences')
   const today = toISODate(new Date())
   const fourWeeksLater = toISODate(new Date(Date.now() + 28 * 24 * 60 * 60 * 1000))
 
@@ -32,14 +34,14 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
   const availableMembers = memberIds.filter((id) => !membersWithAbsences.has(id))
 
   if (isLoading) {
-    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Laden...</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
   }
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Von</label>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">{t('fromTo')}</label>
           <input
             type="date"
             value={startDate}
@@ -48,7 +50,7 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Bis</label>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">{t('until')}</label>
           <input
             type="date"
             value={endDate}
@@ -61,8 +63,8 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
       {absences.length === 0 && availableMembers.length === 0 ? (
         <EmptyState
           icon="✅"
-          title="Keine Absenzen"
-          description="Keine gemeldeten Absenzen in diesem Zeitraum."
+          title={t('noTeamAbsences')}
+          description={t('noTeamAbsencesDescription')}
         />
       ) : (
         <div className="space-y-4">
@@ -71,7 +73,7 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
             const member = memberMap[memberId]
             return (
               <div key={memberId} className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-                <h3 className="font-medium text-gray-900 dark:text-gray-100">{member?.name ?? 'Unbekannt'}</h3>
+                <h3 className="font-medium text-gray-900 dark:text-gray-100">{member?.name ?? t('common:unknown')}</h3>
                 <div className="mt-2 space-y-2">
                   {memberAbsences.map((a) => (
                     <div key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
@@ -93,7 +95,7 @@ export default function TeamAbsenceView({ teamId }: TeamAbsenceViewProps) {
           {/* Members without absences */}
           {availableMembers.length > 0 && (
             <div className="rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-              <h3 className="text-sm font-medium text-green-700">Verfügbar</h3>
+              <h3 className="text-sm font-medium text-green-700">{t('common:available')}</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {availableMembers.map((id) => memberMap[id]?.name).filter(Boolean).join(', ')}
               </p>

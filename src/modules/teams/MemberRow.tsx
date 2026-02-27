@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import StatusBadge from '../../components/StatusBadge'
 import { getFileUrl } from '../../utils/pbFile'
@@ -8,14 +9,14 @@ interface MemberRowProps {
   teamId: string
 }
 
-const positionLabels: Record<string, string> = {
-  setter: 'Zuspieler',
-  outside: 'Aussen',
-  middle: 'Mitte',
-  opposite: 'Diagonal',
-  libero: 'Libero',
-  coach: 'Trainer',
-  other: 'Andere',
+const positionKeys: Record<string, string> = {
+  setter: 'positionSetter',
+  outside: 'positionOutside',
+  middle: 'positionMiddle',
+  opposite: 'positionOpposite',
+  libero: 'positionLibero',
+  coach: 'positionCoach',
+  other: 'positionOther',
 }
 
 const roleColors: Record<string, { bg: string; text: string }> = {
@@ -26,6 +27,7 @@ const roleColors: Record<string, { bg: string; text: string }> = {
 }
 
 export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
+  const { t } = useTranslation('teams')
   const member = memberTeam.expand?.member
   if (!member) return null
 
@@ -58,7 +60,7 @@ export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
         {member.number || '—'}
       </td>
       <td className="hidden px-4 py-3 text-sm text-gray-500 sm:table-cell dark:text-gray-400">
-        {positionLabels[member.position] ?? member.position}
+        {positionKeys[member.position] ? t(positionKeys[member.position]) : member.position}
       </td>
       <td className="px-4 py-3">
         <StatusBadge status={memberTeam.role} colorMap={roleColors} />

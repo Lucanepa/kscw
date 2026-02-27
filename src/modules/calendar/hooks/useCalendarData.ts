@@ -93,7 +93,7 @@ function closureToEntries(closure: HallClosure): CalendarEntry[] {
   return days.map((day) => ({
     id: `${closure.id}-${toDateKey(day)}`,
     type: 'closure' as const,
-    title: `Hallensperre: ${hallName}`,
+    title: `Hall closure: ${hallName}`,
     date: day,
     startTime: null,
     endTime: null,

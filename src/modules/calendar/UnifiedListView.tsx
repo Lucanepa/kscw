@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import TeamChip from '../../components/TeamChip'
 import type { CalendarEntry } from '../../types/calendar'
-import { toDateKey, formatDateDE } from '../../utils/dateUtils'
+import { toDateKey, formatDate } from '../../utils/dateUtils'
 
 interface UnifiedListViewProps {
   entries: CalendarEntry[]
@@ -14,14 +15,15 @@ const typeDots: Record<CalendarEntry['type'], string> = {
   event: 'bg-purple-500',
 }
 
-const typeLabels: Record<CalendarEntry['type'], string> = {
-  game: 'Spiel',
-  training: 'Training',
-  closure: 'Hallensperre',
-  event: 'Event',
-}
-
 export default function UnifiedListView({ entries }: UnifiedListViewProps) {
+  const { t } = useTranslation('calendar')
+
+  const typeLabels: Record<CalendarEntry['type'], string> = {
+    game: t('typeGame'),
+    training: t('typeTraining'),
+    closure: t('typeClosure'),
+    event: t('typeEvent'),
+  }
   const grouped = useMemo(() => {
     const groups: { dateKey: string; label: string; entries: CalendarEntry[] }[] = []
     let currentKey = ''
@@ -32,7 +34,7 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
         currentKey = key
         groups.push({
           dateKey: key,
-          label: formatDateDE(entry.date, 'EEEE, d. MMMM yyyy'),
+          label: formatDate(entry.date, 'EEEE, MMMM d, yyyy'),
           entries: [],
         })
       }
@@ -43,7 +45,7 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
   }, [entries])
 
   if (entries.length === 0) {
-    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Einträge gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">{t('noEntries')}</div>
   }
 
   return (
@@ -76,7 +78,7 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
                 {/* Time */}
                 <div className="w-24 shrink-0 text-right text-sm text-gray-600 dark:text-gray-400">
                   {entry.allDay
-                    ? 'Ganztags'
+                    ? t('common:allDay')
                     : entry.startTime
                       ? entry.endTime
                         ? `${entry.startTime}–${entry.endTime}`

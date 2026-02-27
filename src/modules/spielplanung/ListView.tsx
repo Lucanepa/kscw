@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import TeamChip from '../../components/TeamChip'
 import type { Game, Team } from '../../types'
-import { parseDate, formatDateDE } from '../../utils/dateUtils'
+import { parseDate, formatDate } from '../../utils/dateUtils'
 
 interface ListViewProps {
   games: Game[]
@@ -29,10 +29,10 @@ function StatusBadge({ status }: { status: string }) {
     postponed: 'bg-amber-50 text-amber-700',
   }
   const labels: Record<string, string> = {
-    scheduled: 'Geplant',
+    scheduled: 'Planned',
     live: 'Live',
-    completed: 'Gespielt',
-    postponed: 'Verschoben',
+    completed: 'Played',
+    postponed: 'Postponed',
   }
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
@@ -109,7 +109,7 @@ function ByDateView({ games, teams }: { games: Game[]; teams: Team[] }) {
         const d = parseDate(dateStr)
         groups.push({
           date: dateStr,
-          label: formatDateDE(d, 'EEEE, d. MMMM yyyy'),
+          label: formatDate(d, 'EEEE, MMMM d, yyyy'),
           games: [],
         })
       }
@@ -119,7 +119,7 @@ function ByDateView({ games, teams }: { games: Game[]; teams: Team[] }) {
   }, [games])
 
   if (games.length === 0) {
-    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Spiele gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">No games found</div>
   }
 
   return (
@@ -168,7 +168,7 @@ function ByTeamView({ games, teams }: { games: Game[]; teams: Team[] }) {
   }, [games, teams])
 
   if (games.length === 0) {
-    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">Keine Spiele gefunden</div>
+    return <div className="py-8 text-center text-gray-500 dark:text-gray-400">No games found</div>
   }
 
   return (
@@ -178,14 +178,14 @@ function ByTeamView({ games, teams }: { games: Game[]; teams: Team[] }) {
           <div className="flex items-center gap-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 px-4 py-2">
             <TeamChip team={group.team.name} />
             <span className="text-sm text-gray-500 dark:text-gray-400">{group.team.league}</span>
-            <span className="text-xs text-gray-400">({group.games.length} Spiele)</span>
+            <span className="text-xs text-gray-400">({group.games.length} games)</span>
           </div>
           <div className="divide-y divide-gray-100">
             {group.games.map((game) => (
               <div key={game.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700">
                 {/* Date */}
                 <div className="w-24 shrink-0 text-xs text-gray-500 dark:text-gray-400">
-                  {formatDateDE(parseDate(game.date.split(' ')[0] ?? game.date), 'dd.MM.yyyy')}
+                  {formatDate(parseDate(game.date.split(' ')[0] ?? game.date), 'MM/dd/yyyy')}
                 </div>
                 {/* Time */}
                 <div className="w-14 shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">

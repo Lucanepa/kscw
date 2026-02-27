@@ -8,7 +8,7 @@ import {
   isSameMonth,
   isSameDay,
   addMonths,
-  formatDateDE,
+  formatDate,
   toDateKey,
   DAY_HEADERS,
 } from '../utils/dateUtils'
@@ -58,7 +58,7 @@ export default function CalendarGrid<T>({
           </svg>
         </button>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {formatDateDE(month, 'MMMM yyyy')}
+          {formatDate(month, 'MMMM yyyy')}
         </h2>
         <button
           onClick={() => onMonthChange(addMonths(month, 1))}

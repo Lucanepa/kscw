@@ -8,7 +8,7 @@ export function generateICal(entries: CalendarEntry[]): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//KSCW Volley//Kalender//DE',
+    'PRODID:-//KSCW Volley//Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:KSCW Volleyball',

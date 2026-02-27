@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { usePB } from '../../hooks/usePB'
 import { useMutation } from '../../hooks/useMutation'
@@ -14,6 +15,7 @@ import type { Absence, Member } from '../../types'
 type AbsenceExpanded = Absence & { expand?: { member?: Member } }
 
 export default function AbsencesPage() {
+  const { t } = useTranslation('absences')
   const { user, isCoach } = useAuth()
   const [activeTab, setActiveTab] = useState<'mine' | 'team'>('mine')
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
@@ -54,8 +56,8 @@ export default function AbsencesPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">Absenzen</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Zentrale Absenzenverwaltung</p>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
         </div>
         <button
           onClick={() => {
@@ -64,7 +66,7 @@ export default function AbsencesPage() {
           }}
           className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
         >
-          Neue Absenz
+          {t('newAbsence')}
         </button>
       </div>
 
@@ -78,7 +80,7 @@ export default function AbsencesPage() {
                 activeTab === 'mine' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              Meine Absenzen
+              {t('tabMyAbsences')}
             </button>
             <button
               onClick={() => setActiveTab('team')}
@@ -86,7 +88,7 @@ export default function AbsencesPage() {
                 activeTab === 'team' ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              Team-Absenzen
+              {t('tabTeamAbsences')}
             </button>
           </div>
         </div>
@@ -98,8 +100,8 @@ export default function AbsencesPage() {
           {myAbsences.length === 0 ? (
             <EmptyState
               icon="📋"
-              title="Keine Absenzen"
-              description="Du hast keine gemeldeten Absenzen."
+              title={t('noAbsences')}
+              description={t('noAbsencesDescription')}
             />
           ) : (
             <div className="space-y-3">
@@ -126,8 +128,8 @@ export default function AbsencesPage() {
             <div className="mt-4">
               <EmptyState
                 icon="👥"
-                title="Team auswählen"
-                description="Wähle ein Team, um die Absenzen zu sehen."
+                title={t('noTeamAbsences')}
+                description={t('noTeamAbsencesDescription')}
               />
             </div>
           )}
@@ -148,9 +150,9 @@ export default function AbsencesPage() {
         open={deletingId !== null}
         onClose={() => setDeletingId(null)}
         onConfirm={handleDelete}
-        title="Absenz löschen"
-        message="Soll diese Absenz wirklich gelöscht werden?"
-        confirmLabel="Löschen"
+        title={t('deleteTitle')}
+        message={t('deleteMessage')}
+        confirmLabel={t('common:delete')}
         danger
       />
     </div>

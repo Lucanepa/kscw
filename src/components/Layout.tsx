@@ -1,30 +1,37 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
 import { useIsDesktop } from '../hooks/useMediaQuery'
 import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
 
-const navItems = [
-  { to: '/', label: 'Kalender', icon: '📅' },
-  { to: '/games', label: 'Spiele & Resultate', icon: '🏆' },
-  { to: '/trainings', label: 'Trainings', icon: '🎯' },
-  { to: '/absences', label: 'Absenzen', icon: '👤' },
-  { to: '/scorer', label: 'Schreibereinsätze', icon: '📝' },
-  { to: '/teams', label: 'Teams', icon: '👥' },
-]
-
-const adminItems = [
-  { to: '/admin/spielplanung', label: 'Spielplanung', icon: '📋' },
-]
+function useNavItems() {
+  const { t } = useTranslation('nav')
+  return {
+    navItems: [
+      { to: '/', label: t('calendar'), icon: '📅' },
+      { to: '/games', label: t('games'), icon: '🏆' },
+      { to: '/trainings', label: t('trainings'), icon: '🎯' },
+      { to: '/absences', label: t('absences'), icon: '👤' },
+      { to: '/scorer', label: t('scorer'), icon: '📝' },
+      { to: '/teams', label: t('teams'), icon: '👥' },
+    ],
+    adminItems: [
+      { to: '/admin/spielplanung', label: t('gameplan'), icon: '📋' },
+    ],
+  }
+}
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { t } = useTranslation('nav')
   const isDesktop = useIsDesktop()
+  const { navItems, adminItems } = useNavItems()
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -136,7 +143,7 @@ export default function Layout() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                 </svg>
               )}
-              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              {theme === 'dark' ? t('lightMode') : t('darkMode')}
             </button>
 
             {user ? (
@@ -154,7 +161,7 @@ export default function Layout() {
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Logout
+                  {t('logout')}
                 </button>
               </div>
             ) : (
@@ -166,7 +173,7 @@ export default function Layout() {
                     : 'text-gold-400 hover:text-gold-300'
                 }`}
               >
-                Anmelden
+                {t('signIn')}
               </NavLink>
             )}
           </div>

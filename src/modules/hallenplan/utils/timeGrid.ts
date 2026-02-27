@@ -1,7 +1,7 @@
 import { timeToMinutes } from '../../../utils/dateHelpers'
 import type { HallSlot } from '../../../types'
 
-export const START_HOUR = 6
+export const START_HOUR = 11
 export const END_HOUR = 23
 export const SLOT_HEIGHT = 24 // px per 30-min row
 export const TOTAL_ROWS = (END_HOUR - START_HOUR) * 2 // 34 rows

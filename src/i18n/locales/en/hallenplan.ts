@@ -1,0 +1,65 @@
+export default {
+  title: 'Hall Plan',
+  subtitleDay: 'Daily view of hall occupancy',
+  subtitleWeek: 'Weekly view of hall occupancy',
+
+  // Slot form
+  hall: 'Hall',
+  team: 'Team',
+  dayOfWeek: 'Day of week',
+  slotType: 'Type',
+  startTime: 'Start time',
+  endTime: 'End time',
+  recurring: 'Recurring',
+  validFrom: 'Valid from',
+  validTo: 'Valid to',
+  label: 'Label',
+  notes: 'Notes',
+
+  // Slot types
+  typeTraining: 'Training',
+  typeGame: 'Game',
+  typeEvent: 'Event',
+  typeOther: 'Other',
+
+  // Day names (full)
+  dayMonday: 'Monday',
+  dayTuesday: 'Tuesday',
+  dayWednesday: 'Wednesday',
+  dayThursday: 'Thursday',
+  dayFriday: 'Friday',
+  daySaturday: 'Saturday',
+  daySunday: 'Sunday',
+
+  // Slot editor
+  editSlotTitle: 'Edit slot',
+  newSlotTitle: 'New slot',
+  deleteSlotConfirm: 'Are you sure you want to delete this slot?',
+  selectPlaceholder: '-- Select --',
+
+  // Validation
+  hallRequired: 'Please select a hall',
+  dayRequired: 'Please select a day',
+  startTimeRequired: 'Start time is required',
+  endTimeRequired: 'End time is required',
+
+  // Closure manager
+  closuresTitle: 'Manage hall closures',
+  currentClosures: 'Current closures',
+  addNewClosure: 'Add new closure',
+  editClosure: 'Edit closure',
+  noClosures: 'No active closures',
+  deleteClosureConfirm: 'Are you sure you want to delete this hall closure?',
+
+  // Closure sources
+  source: 'Source',
+  sourceCaretaker: 'Caretaker',
+  sourceAdmin: 'Admin',
+  sourceAutomatic: 'Automatic',
+
+  // Navigation
+  today: 'Today',
+  closures: 'Closures',
+  prevWeek: 'Previous week',
+  nextWeek: 'Next week',
+} as const

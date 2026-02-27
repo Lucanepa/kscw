@@ -1,26 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import Modal from '../../../components/Modal'
 import pb from '../../../pb'
 import { useConflictChecker } from '../hooks/useConflictChecker'
 import { minutesToTime, timeToMinutes } from '../../../utils/dateHelpers'
 import type { Hall, HallSlot, Team } from '../../../types'
-
-const DAY_OPTIONS = [
-  { value: 0, label: 'Montag' },
-  { value: 1, label: 'Dienstag' },
-  { value: 2, label: 'Mittwoch' },
-  { value: 3, label: 'Donnerstag' },
-  { value: 4, label: 'Freitag' },
-  { value: 5, label: 'Samstag' },
-  { value: 6, label: 'Sonntag' },
-]
-
-const TYPE_OPTIONS = [
-  { value: 'training', label: 'Training' },
-  { value: 'game', label: 'Spiel' },
-  { value: 'event', label: 'Event' },
-  { value: 'other', label: 'Sonstiges' },
-]
 
 interface SlotEditorProps {
   slot: HallSlot | null
@@ -41,6 +25,25 @@ export default function SlotEditor({
   onClose,
   onSaved,
 }: SlotEditorProps) {
+  const { t } = useTranslation('hallenplan')
+
+  const DAY_OPTIONS = [
+    { value: 0, label: t('dayMonday') },
+    { value: 1, label: t('dayTuesday') },
+    { value: 2, label: t('dayWednesday') },
+    { value: 3, label: t('dayThursday') },
+    { value: 4, label: t('dayFriday') },
+    { value: 5, label: t('daySaturday') },
+    { value: 6, label: t('daySunday') },
+  ]
+
+  const TYPE_OPTIONS = [
+    { value: 'training', label: t('typeTraining') },
+    { value: 'game', label: t('typeGame') },
+    { value: 'event', label: t('typeEvent') },
+    { value: 'other', label: t('typeOther') },
+  ]
+
   const defaultEnd = prefill?.time
     ? minutesToTime(timeToMinutes(prefill.time) + 90)
     : '19:30'
@@ -70,11 +73,11 @@ export default function SlotEditor({
 
   async function handleSave() {
     if (!form.hall || !form.team) {
-      setError('Halle und Team sind Pflichtfelder.')
+      setError(t('hallRequired') + ' / ' + t('common:team'))
       return
     }
     if (timeToMinutes(form.start_time) >= timeToMinutes(form.end_time)) {
-      setError('Endzeit muss nach Startzeit liegen.')
+      setError(t('common:endAfterStart'))
       return
     }
 
@@ -89,21 +92,21 @@ export default function SlotEditor({
       onSaved()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+      setError(err instanceof Error ? err.message : t('common:errorSaving'))
     } finally {
       setIsSaving(false)
     }
   }
 
   async function handleDelete() {
-    if (!slot || !window.confirm('Diesen Slot wirklich löschen?')) return
+    if (!slot || !window.confirm(t('deleteSlotConfirm'))) return
     setIsSaving(true)
     try {
       await pb.collection('hall_slots').delete(slot.id)
       onSaved()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
+      setError(err instanceof Error ? err.message : t('common:errorSaving'))
     } finally {
       setIsSaving(false)
     }
@@ -113,35 +116,35 @@ export default function SlotEditor({
     <Modal
       open
       onClose={onClose}
-      title={slot ? 'Slot bearbeiten' : 'Neuer Slot'}
+      title={slot ? t('editSlotTitle') : t('newSlotTitle')}
       size="lg"
     >
       <div className="space-y-4">
         {/* Row 1: Hall + Team */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Halle</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('hall')}</label>
             <select
               value={form.hall}
               onChange={(e) => update('hall', e.target.value)}
               className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
-              <option value="">-- Wählen --</option>
+              <option value="">{t('selectPlaceholder')}</option>
               {halls.map((h) => (
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Team</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('team')}</label>
             <select
               value={form.team}
               onChange={(e) => update('team', e.target.value)}
               className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
-              <option value="">-- Wählen --</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+              <option value="">{t('selectPlaceholder')}</option>
+              {teams.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.name}</option>
               ))}
             </select>
           </div>
@@ -150,7 +153,7 @@ export default function SlotEditor({
         {/* Row 2: Day + Type */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Wochentag</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('dayOfWeek')}</label>
             <select
               value={form.day_of_week}
               onChange={(e) => update('day_of_week', Number(e.target.value))}
@@ -162,14 +165,14 @@ export default function SlotEditor({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Typ</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('slotType')}</label>
             <select
               value={form.slot_type}
               onChange={(e) => update('slot_type', e.target.value as typeof form.slot_type)}
               className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
-              {TYPE_OPTIONS.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {TYPE_OPTIONS.map((tp) => (
+                <option key={tp.value} value={tp.value}>{tp.label}</option>
               ))}
             </select>
           </div>
@@ -178,7 +181,7 @@ export default function SlotEditor({
         {/* Row 3: Times */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Startzeit</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('startTime')}</label>
             <input
               type="time"
               value={form.start_time}
@@ -187,7 +190,7 @@ export default function SlotEditor({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Endzeit</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('endTime')}</label>
             <input
               type="time"
               value={form.end_time}
@@ -205,14 +208,14 @@ export default function SlotEditor({
             onChange={(e) => update('recurring', e.target.checked)}
             className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
           />
-          <span className="text-sm text-gray-700 dark:text-gray-300">Wiederkehrend</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('recurring')}</span>
         </label>
 
         {/* Row 5: Validity dates (only if recurring) */}
         {form.recurring && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Gültig von</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('validFrom')}</label>
               <input
                 type="date"
                 value={form.valid_from}
@@ -221,7 +224,7 @@ export default function SlotEditor({
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Gültig bis</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('validTo')}</label>
               <input
                 type="date"
                 value={form.valid_until}
@@ -234,19 +237,19 @@ export default function SlotEditor({
 
         {/* Row 6: Label */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Bezeichnung</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('label')}</label>
           <input
             type="text"
             value={form.label}
             onChange={(e) => update('label', e.target.value)}
-            placeholder="z.B. Training H3, Heimspiel vs. TVA"
+            placeholder="e.g. Training H3, Home game vs. TVA"
             className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
 
         {/* Row 7: Notes */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Notizen</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('notes')}</label>
           <textarea
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
@@ -258,7 +261,7 @@ export default function SlotEditor({
         {/* Conflict warning */}
         {conflicts.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="font-medium text-amber-800">Überlappung erkannt:</p>
+            <p className="font-medium text-amber-800">{t('common:overlapDetected')}</p>
             <ul className="mt-1 list-inside list-disc text-sm text-amber-700">
               {conflicts.map((c) => (
                 <li key={c.id}>
@@ -286,7 +289,7 @@ export default function SlotEditor({
                 disabled={isSaving}
                 className="rounded-md px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
               >
-                Löschen
+                {t('common:delete')}
               </button>
             )}
           </div>
@@ -295,14 +298,14 @@ export default function SlotEditor({
               onClick={onClose}
               className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              Abbrechen
+              {t('common:cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
             >
-              {isSaving ? 'Speichern...' : 'Speichern'}
+              {isSaving ? t('common:saving') : t('common:save')}
             </button>
           </div>
         </div>
