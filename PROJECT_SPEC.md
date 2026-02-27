@@ -80,7 +80,7 @@ Features:
 
 Google Sheets source (for one-time import):
 - Spreadsheet ID: `16hr2bshVSHoQGZ73xGZiJpnhlBwu6Mn3I5YC4Z-ixXY`
-- API Key: `AIzaSyDKSbLA1xyIDEyvj4-SZmQUE7tZ1_ob4f8`
+- API Key: (stored in .env, not committed)
 - Sheets: `Team_Matches`, `Gym Closed`, `Team_Preferences`, `Übersicht VB + BB`
 - Columns: team, championship, opponent team, weekday, date, time, type, status, gym/halle, sport
 
