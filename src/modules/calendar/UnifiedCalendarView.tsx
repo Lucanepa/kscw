@@ -10,6 +10,7 @@ interface UnifiedCalendarViewProps {
   month: Date
   onMonthChange: (month: Date) => void
   onEntryClick?: (entry: CalendarEntry) => void
+  onOverflowClick?: (entries: CalendarEntry[], date: Date) => void
 }
 
 const typeStyles: Record<string, string> = {
@@ -34,6 +35,7 @@ export default function UnifiedCalendarView({
   month,
   onMonthChange,
   onEntryClick,
+  onOverflowClick,
 }: UnifiedCalendarViewProps) {
   const isMobile = useIsMobile()
   const maxItems = isMobile ? 2 : 3
@@ -55,7 +57,7 @@ export default function UnifiedCalendarView({
       onMonthChange={onMonthChange}
       itemsByDate={itemsByDate}
       closedDates={closedDates}
-      renderDayContent={(_date, items) => {
+      renderDayContent={(date, items) => {
         const visible = items.slice(0, maxItems)
         const overflow = items.length - maxItems
 
@@ -78,7 +80,16 @@ export default function UnifiedCalendarView({
               </button>
             ))}
             {overflow > 0 && (
-              <div className="text-[8px] text-gray-400 sm:text-[10px]">+{overflow}</div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOverflowClick?.(items, date)
+                }}
+                className="rounded bg-gray-100 px-1 text-[8px] font-medium text-gray-500 hover:bg-gray-200 sm:text-[10px] dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
+              >
+                +{overflow}
+              </button>
             )}
           </>
         )

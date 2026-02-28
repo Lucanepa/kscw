@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
+import Modal from '../../components/Modal'
 import CalendarFilters from './CalendarFilters'
 import UnifiedCalendarView from './UnifiedCalendarView'
 import UnifiedListView from './UnifiedListView'
@@ -10,12 +11,26 @@ import GameDetailModal from '../games/components/GameDetailModal'
 import { useCalendarData } from './hooks/useCalendarData'
 import { useAuth } from '../../hooks/useAuth'
 import { downloadICal } from '../../utils/icalGenerator'
-import { startOfMonth } from '../../utils/dateUtils'
+import { startOfMonth, formatDate } from '../../utils/dateUtils'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { CalendarViewMode, CalendarFilterState, SourceFilter, CalendarEntry } from '../../types/calendar'
 import type { Game } from '../../types'
 
 const PB_URL = import.meta.env.VITE_PB_URL as string
+
+const dotColors: Record<string, string> = {
+  game: 'bg-brand-500',
+  'game-home': 'bg-brand-500',
+  'game-away': 'bg-amber-500',
+  training: 'bg-green-500',
+  closure: 'bg-red-500',
+  event: 'bg-purple-500',
+}
+
+function entryDotColor(entry: CalendarEntry): string {
+  if (entry.type === 'game' && entry.gameType) return dotColors[`game-${entry.gameType}`]
+  return dotColors[entry.type]
+}
 
 export default function CalendarPage() {
   const { t } = useTranslation('calendar')
@@ -27,6 +42,7 @@ export default function CalendarPage() {
   })
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()))
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null)
+  const [dayOverflow, setDayOverflow] = useState<{ entries: CalendarEntry[]; date: Date } | null>(null)
 
   // Logged out: only games. Logged in: games + trainings + events + closures
   const allowedSources: SourceFilter[] = user
@@ -128,6 +144,7 @@ export default function CalendarPage() {
               month={month}
               onMonthChange={setMonth}
               onEntryClick={setSelectedEntry}
+              onOverflowClick={(items, date) => setDayOverflow({ entries: items, date })}
             />
           )}
           {viewMode === 'list' && (
@@ -135,6 +152,40 @@ export default function CalendarPage() {
           )}
         </div>
       )}
+
+      {/* Day overflow modal */}
+      <Modal
+        open={!!dayOverflow}
+        onClose={() => setDayOverflow(null)}
+        title={dayOverflow ? formatDate(dayOverflow.date, 'EEEE, d MMMM') : ''}
+        size="sm"
+      >
+        {dayOverflow && (
+          <div className="space-y-2">
+            {dayOverflow.entries.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => {
+                  setDayOverflow(null)
+                  setSelectedEntry(entry)
+                }}
+                className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-gray-700 dark:active:bg-gray-600"
+              >
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${entryDotColor(entry)}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {entry.title}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {entry.startTime ?? ''}{entry.location ? ` · ${entry.location}` : ''}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Detail modals */}
       {selectedEntry?.type === 'game' && (

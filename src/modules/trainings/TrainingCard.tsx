@@ -59,7 +59,7 @@ export default function TrainingCard({ training, onOpenAttendance, onEdit, onDel
           {!training.cancelled && (
             <button
               onClick={() => onOpenAttendance(training.id, training.team)}
-              className="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:py-1.5 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              className="min-h-[44px] rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:min-h-0 sm:py-1.5 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
             >
               {t('attendance')}
             </button>
@@ -67,7 +67,7 @@ export default function TrainingCard({ training, onOpenAttendance, onEdit, onDel
           {onEdit && (
             <button
               onClick={() => onEdit(training)}
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              className="rounded-lg p-2.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 sm:p-1.5 dark:hover:bg-gray-700 dark:hover:text-gray-300"
               title={t('editTraining')}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -78,7 +78,7 @@ export default function TrainingCard({ training, onOpenAttendance, onEdit, onDel
           {onDelete && (
             <button
               onClick={() => onDelete(training.id)}
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              className="rounded-lg p-2.5 text-gray-400 hover:bg-red-50 hover:text-red-600 sm:p-1.5 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               title={t('deleteTraining')}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

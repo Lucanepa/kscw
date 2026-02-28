@@ -35,9 +35,9 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
       onClick={(e) => {
         if (e.target === ref.current) onClose()
       }}
-      className="fixed inset-x-0 bottom-0 top-auto m-0 w-full rounded-t-xl bg-white p-0 shadow-xl backdrop:bg-black/50 sm:inset-0 sm:m-auto sm:rounded-lg dark:bg-gray-800"
+      className={`fixed inset-x-0 bottom-0 top-auto m-0 w-full rounded-t-xl bg-white p-0 shadow-xl backdrop:bg-black/50 sm:inset-0 sm:m-auto sm:rounded-lg dark:bg-gray-800 ${sizeClasses[size]}`}
     >
-      <div className={`w-full ${sizeClasses[size]}`}>
+      <div className="w-full">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
           <button
