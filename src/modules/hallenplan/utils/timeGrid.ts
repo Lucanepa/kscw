@@ -108,6 +108,73 @@ export function positionSlots(slots: HallSlot[]): PositionedSlot[] {
   return result
 }
 
+/**
+ * Positions slots grouped by (day, hall). Within each hall column, uses greedy overlap.
+ * `left`/`width` are percentages within the hall sub-column.
+ */
+export function positionSlotsMultiHall(slots: HallSlot[]): PositionedSlot[] {
+  // Group by (day_of_week, hall)
+  const byDayHall = new Map<string, HallSlot[]>()
+  for (const slot of slots) {
+    const key = `${slot.day_of_week}:${slot.hall}`
+    const group = byDayHall.get(key) ?? []
+    group.push(slot)
+    byDayHall.set(key, group)
+  }
+
+  const result: PositionedSlot[] = []
+
+  for (const [key, groupSlots] of byDayHall) {
+    const day = Number(key.split(':')[0])
+
+    const sorted = [...groupSlots].sort((a, b) => {
+      const diff = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+      if (diff !== 0) return diff
+      return (timeToMinutes(b.end_time) - timeToMinutes(b.start_time)) -
+             (timeToMinutes(a.end_time) - timeToMinutes(a.start_time))
+    })
+
+    const columns: number[] = []
+    const assignments = new Map<string, number>()
+
+    for (const slot of sorted) {
+      const startMin = timeToMinutes(slot.start_time)
+      let placed = false
+      for (let c = 0; c < columns.length; c++) {
+        if (columns[c] <= startMin) {
+          columns[c] = timeToMinutes(slot.end_time)
+          assignments.set(slot.id, c)
+          placed = true
+          break
+        }
+      }
+      if (!placed) {
+        assignments.set(slot.id, columns.length)
+        columns.push(timeToMinutes(slot.end_time))
+      }
+    }
+
+    const totalCols = Math.max(columns.length, 1)
+
+    for (const slot of sorted) {
+      const subCol = assignments.get(slot.id)!
+      const startMin = timeToMinutes(slot.start_time)
+      const endMin = timeToMinutes(slot.end_time)
+
+      result.push({
+        slot,
+        top: ((startMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT,
+        height: ((endMin - startMin) / SLOT_MINUTES) * SLOT_HEIGHT,
+        left: (subCol / totalCols) * 100,
+        width: (1 / totalCols) * 100,
+        dayIndex: day,
+      })
+    }
+  }
+
+  return result
+}
+
 /** Generates time labels for the grid (every SLOT_MINUTES from START_HOUR to END_HOUR) */
 export function generateTimeLabels(): { time: string; isFullHour: boolean }[] {
   const labels: { time: string; isFullHour: boolean }[] = []

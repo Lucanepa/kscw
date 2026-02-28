@@ -11,6 +11,7 @@ import DaySlotView from '../hallenplan/components/DaySlotView'
 import SlotEditor from '../hallenplan/components/SlotEditor'
 import ClosureManager from '../hallenplan/components/ClosureManager'
 import VirtualSlotDetailModal from '../hallenplan/components/VirtualSlotDetailModal'
+import SummaryView from '../hallenplan/components/SummaryView'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { HallSlot, HallClosure, Game, Training, HallEvent } from '../../types'
 
@@ -24,16 +25,17 @@ export default function HallenplanView() {
   const isMobile = useIsMobile()
   const { weekDays, goNext, goPrev, goToday, weekLabel, mondayStr, sundayStr } = useWeekNavigation()
 
-  const [selectedHallId, setSelectedHallId] = useState('')
+  const [selectedHallIds, setSelectedHallIds] = useState<string[]>([])
   const [selectedDayIndex, setSelectedDayIndex] = useState(getTodayDayIndex)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingSlot, setEditingSlot] = useState<HallSlot | null>(null)
   const [prefill, setPrefill] = useState<{ day: number; time: string; hall: string } | null>(null)
   const [closureManagerOpen, setClosureManagerOpen] = useState(false)
   const [virtualDetailSlot, setVirtualDetailSlot] = useState<HallSlot | null>(null)
+  const [showSummary, setShowSummary] = useState(false)
 
   const { halls, teams, slots, rawSlots, closures, isLoading, refetch } = useHallenplanData(
-    selectedHallId,
+    selectedHallIds,
     mondayStr,
     sundayStr,
     weekDays,
@@ -90,14 +92,18 @@ export default function HallenplanView() {
             onNextWeek={goNext}
             onToday={handleToday}
             halls={halls}
-            selectedHallId={selectedHallId}
-            onSelectHall={setSelectedHallId}
+            selectedHallIds={selectedHallIds}
+            onSelectHalls={setSelectedHallIds}
             isAdmin={isAdmin}
             onOpenClosureManager={() => setClosureManagerOpen(true)}
+            showSummary={showSummary}
+            onToggleSummary={() => setShowSummary((v) => !v)}
           />
 
           {isLoading ? (
             <LoadingSpinner />
+          ) : showSummary ? (
+            <SummaryView slots={slots} closures={closures} weekDays={weekDays} halls={halls} />
           ) : (
             <DaySlotView
               slots={slots}
@@ -105,7 +111,7 @@ export default function HallenplanView() {
               day={weekDays[selectedDayIndex]}
               dayIndex={selectedDayIndex}
               halls={halls}
-              selectedHallId={selectedHallId}
+              selectedHallIds={selectedHallIds}
               isAdmin={isAdmin}
               onSlotClick={handleSlotClick}
               onEmptyCellClick={handleEmptyCellClick}
@@ -120,21 +126,25 @@ export default function HallenplanView() {
             onNext={goNext}
             onToday={goToday}
             halls={halls}
-            selectedHallId={selectedHallId}
-            onSelectHall={setSelectedHallId}
+            selectedHallIds={selectedHallIds}
+            onSelectHalls={setSelectedHallIds}
             isAdmin={isAdmin}
             onOpenClosureManager={() => setClosureManagerOpen(true)}
+            showSummary={showSummary}
+            onToggleSummary={() => setShowSummary((v) => !v)}
           />
 
           {isLoading ? (
             <LoadingSpinner />
+          ) : showSummary ? (
+            <SummaryView slots={slots} closures={closures} weekDays={weekDays} halls={halls} />
           ) : (
             <WeekSlotView
               slots={slots}
               closures={closures}
               weekDays={weekDays}
               halls={halls}
-              selectedHallId={selectedHallId}
+              selectedHallIds={selectedHallIds}
               isAdmin={isAdmin}
               onSlotClick={handleSlotClick}
               onEmptyCellClick={handleEmptyCellClick}

@@ -11,6 +11,7 @@ import DayNavigation from './components/DayNavigation'
 import DaySlotView from './components/DaySlotView'
 import SlotEditor from './components/SlotEditor'
 import ClosureManager from './components/ClosureManager'
+import SummaryView from './components/SummaryView'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { HallSlot, HallClosure } from '../../types'
 
@@ -25,17 +26,19 @@ export default function HallenplanPage() {
   const isMobile = useIsMobile()
   const { weekDays, goNext, goPrev, goToday, weekLabel, mondayStr, sundayStr } = useWeekNavigation()
 
-  const [selectedHallId, setSelectedHallId] = useState('')
+  const [selectedHallIds, setSelectedHallIds] = useState<string[]>([])
   const [selectedDayIndex, setSelectedDayIndex] = useState(getTodayDayIndex)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingSlot, setEditingSlot] = useState<HallSlot | null>(null)
   const [prefill, setPrefill] = useState<{ day: number; time: string; hall: string } | null>(null)
   const [closureManagerOpen, setClosureManagerOpen] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
 
   const { halls, teams, slots, closures, isLoading, refetch } = useHallenplanData(
-    selectedHallId,
+    selectedHallIds,
     mondayStr,
     sundayStr,
+    weekDays,
   )
 
   const handleRealtimeUpdate = useCallback(() => {
@@ -73,7 +76,7 @@ export default function HallenplanPage() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">{t('title')}</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           {isMobile
             ? t('subtitleDay')
@@ -91,14 +94,18 @@ export default function HallenplanPage() {
             onNextWeek={goNext}
             onToday={handleToday}
             halls={halls}
-            selectedHallId={selectedHallId}
-            onSelectHall={setSelectedHallId}
+            selectedHallIds={selectedHallIds}
+            onSelectHalls={setSelectedHallIds}
             isAdmin={isAdmin}
             onOpenClosureManager={() => setClosureManagerOpen(true)}
+            showSummary={showSummary}
+            onToggleSummary={() => setShowSummary((v) => !v)}
           />
 
           {isLoading ? (
             <LoadingSpinner />
+          ) : showSummary ? (
+            <SummaryView slots={slots} closures={closures} weekDays={weekDays} halls={halls} />
           ) : (
             <DaySlotView
               slots={slots}
@@ -106,7 +113,7 @@ export default function HallenplanPage() {
               day={weekDays[selectedDayIndex]}
               dayIndex={selectedDayIndex}
               halls={halls}
-              selectedHallId={selectedHallId}
+              selectedHallIds={selectedHallIds}
               isAdmin={isAdmin}
               onSlotClick={handleSlotClick}
               onEmptyCellClick={handleEmptyCellClick}
@@ -121,21 +128,25 @@ export default function HallenplanPage() {
             onNext={goNext}
             onToday={goToday}
             halls={halls}
-            selectedHallId={selectedHallId}
-            onSelectHall={setSelectedHallId}
+            selectedHallIds={selectedHallIds}
+            onSelectHalls={setSelectedHallIds}
             isAdmin={isAdmin}
             onOpenClosureManager={() => setClosureManagerOpen(true)}
+            showSummary={showSummary}
+            onToggleSummary={() => setShowSummary((v) => !v)}
           />
 
           {isLoading ? (
             <LoadingSpinner />
+          ) : showSummary ? (
+            <SummaryView slots={slots} closures={closures} weekDays={weekDays} halls={halls} />
           ) : (
             <WeekSlotView
               slots={slots}
               closures={closures}
               weekDays={weekDays}
               halls={halls}
-              selectedHallId={selectedHallId}
+              selectedHallIds={selectedHallIds}
               isAdmin={isAdmin}
               onSlotClick={handleSlotClick}
               onEmptyCellClick={handleEmptyCellClick}

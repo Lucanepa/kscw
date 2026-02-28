@@ -16,10 +16,11 @@ interface SlotBlockProps {
   teamName: string
   hasConflict: boolean
   isAdmin: boolean
+  compact?: boolean
   onClick: () => void
 }
 
-export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, onClick }: SlotBlockProps) {
+export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, compact = false, onClick }: SlotBlockProps) {
   const { slot, top, height, left, width } = positioned
   const isVirtual = !!slot._virtual
   const isAway = !!slot._virtual?.isAway
@@ -30,8 +31,6 @@ export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, 
     ? { bg: '#e0f2fe', text: '#0c4a6e', border: '#7dd3fc' } // cyan for hall events
     : getTeamColor(teamName)
 
-  const showDetails = height >= 48
-  const showTime = height >= 36
   const clickable = isVirtual || isAdmin
 
   // Virtual slots get dashed border; away games get striped bg
@@ -44,6 +43,38 @@ export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, 
         backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 4px, ${color.border}33 4px, ${color.border}33 8px)`,
       }
     : undefined
+
+  // Compact mode: just colored box with team abbreviation
+  if (compact) {
+    return (
+      <div
+        className={`absolute z-20 overflow-hidden rounded-sm border-l-2 ${borderStyle} px-0.5 py-px text-[9px] leading-tight shadow-sm ${
+          clickable ? 'cursor-pointer hover:brightness-95' : ''
+        }`}
+        style={{
+          top,
+          height: Math.max(height - 1, 4),
+          left: `${left}%`,
+          width: `calc(${width}% - 1px)`,
+          backgroundColor: color.bg + bgOpacity,
+          color: color.text,
+          borderColor: color.border,
+          ...awayStripes,
+        }}
+        onClick={clickable ? onClick : undefined}
+        title={`${teamName || slot.label} — ${slot.start_time}–${slot.end_time}${slot.label ? ` — ${slot.label}` : ''}`}
+      >
+        {hasConflict && <ConflictBadge />}
+        <span className={`truncate font-semibold ${isCancelled ? 'line-through' : ''}`}>
+          {teamName || slot.label || typeLabels[slot.slot_type]}
+        </span>
+      </div>
+    )
+  }
+
+  // Full mode
+  const showDetails = height >= 48
+  const showTime = height >= 36
 
   return (
     <div

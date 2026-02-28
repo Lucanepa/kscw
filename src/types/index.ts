@@ -41,6 +41,7 @@ export interface Hall extends RecordModel {
   notes: string
   maps_url: string
   homologation: boolean
+  sv_hall_id: string
 }
 
 export interface VirtualSlotMeta {
@@ -102,6 +103,7 @@ export interface Game extends RecordModel {
 
 export interface SvRanking extends RecordModel {
   sv_team_id: string
+  team: string
   team_name: string
   league: string
   rank: number
@@ -156,6 +158,7 @@ export interface Event extends RecordModel {
   end_date: string
   all_day: boolean
   location: string
+  hall: string
   teams: string[]
   created_by: string
 }
@@ -167,6 +170,7 @@ export interface HallEvent extends RecordModel {
   start_time: string
   end_time: string
   location: string
+  hall: string[]
   all_day: boolean
   source: string
 }

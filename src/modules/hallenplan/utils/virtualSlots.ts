@@ -1,4 +1,4 @@
-import type { Game, Training, HallEvent, HallSlot, Hall, VirtualSlotMeta } from '../../../types'
+import type { Game, Training, HallEvent, HallSlot, Hall } from '../../../types'
 import { toISODate, timeToMinutes, minutesToTime } from '../../../utils/dateHelpers'
 
 /** Games occupy the hall from 1h before start, game itself lasts ~2h → 3h total */
@@ -104,15 +104,21 @@ export function trainingToVirtualSlot(
   } as HallSlot
 }
 
-/** Patterns to match hall names in GCal event titles/locations */
-const HALLE_PATTERNS: [RegExp, string][] = [
-  [/Halle\s*(KWI\s*)?A/i, 'KWI A'],
-  [/Halle\s*(KWI\s*)?B/i, 'KWI B'],
-  [/Halle\s*(KWI\s*)?C/i, 'KWI C'],
-]
-
-/** Resolves which hall IDs a GCal event belongs to based on title/location */
+/** Resolves which hall IDs a GCal event belongs to.
+ *  Uses the hall relation array if populated (set by GCal sync hook),
+ *  otherwise falls back to regex on title/location for legacy data. */
 function resolveHallEventHalls(event: HallEvent, halls: Hall[]): string[] {
+  // Prefer the relation field if populated
+  if (event.hall && event.hall.length > 0) {
+    return event.hall
+  }
+
+  // Fallback: regex on title/location for events synced before hook update
+  const HALLE_PATTERNS: [RegExp, string][] = [
+    [/Halle\s*(KWI\s*)?A/i, 'KWI A'],
+    [/Halle\s*(KWI\s*)?B/i, 'KWI B'],
+    [/Halle\s*(KWI\s*)?C/i, 'KWI C'],
+  ]
   const text = `${event.title} ${event.location || ''}`
   const matched: string[] = []
   for (const [pattern, hallName] of HALLE_PATTERNS) {
@@ -121,7 +127,6 @@ function resolveHallEventHalls(event: HallEvent, halls: Hall[]): string[] {
       if (hall) matched.push(hall.id)
     }
   }
-  // Default: if no specific hall matched, use all KWI halls
   if (matched.length === 0) {
     return halls.filter((h) => h.name.startsWith('KWI')).map((h) => h.id)
   }

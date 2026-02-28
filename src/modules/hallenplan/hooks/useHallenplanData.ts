@@ -9,7 +9,7 @@ import {
 } from '../utils/virtualSlots'
 
 export function useHallenplanData(
-  selectedHallId: string,
+  selectedHallIds: string[],
   mondayStr: string,
   sundayStr: string,
   weekDays: Date[],
@@ -25,7 +25,9 @@ export function useHallenplanData(
     perPage: 50,
   })
 
-  const hallFilter = selectedHallId ? `hall = "${selectedHallId}" && ` : ''
+  const hallFilter = selectedHallIds.length > 0
+    ? `(${selectedHallIds.map((id) => `hall = "${id}"`).join(' || ')}) && `
+    : ''
   const dateFilter = `(valid_from <= "${sundayStr}" || valid_from = "") && (valid_until >= "${mondayStr}" || valid_until = "")`
 
   const {
@@ -106,12 +108,13 @@ export function useHallenplanData(
     }
 
     // Apply hall filter to virtual slots
-    const filteredVirtual = selectedHallId
-      ? virtualSlots.filter((vs) => vs.hall === selectedHallId)
+    const hallSet = new Set(selectedHallIds)
+    const filteredVirtual = hallSet.size > 0
+      ? virtualSlots.filter((vs) => hallSet.has(vs.hall))
       : virtualSlots
 
     return mergeVirtualSlots(rawSlots, filteredVirtual)
-  }, [rawSlots, games, trainings, hallEvents, weekDays, halls, teamTrainingHalls, selectedHallId])
+  }, [rawSlots, games, trainings, hallEvents, weekDays, halls, teamTrainingHalls, selectedHallIds])
 
   const refetch = () => {
     refetchSlots()
