@@ -15,6 +15,7 @@ import PlayerProfile from './modules/teams/PlayerProfile'
 import RosterEditor from './modules/teams/RosterEditor'
 import EmbedGamesPage from './modules/games/EmbedGamesPage'
 import LoginPage from './modules/auth/LoginPage'
+import SignUpPage from './modules/auth/SignUpPage'
 import ProfilePage from './modules/auth/ProfilePage'
 import EventsPage from './modules/events/EventsPage'
 import AuthRoute from './components/AuthRoute'
@@ -28,6 +29,7 @@ export default function App() {
           {/* Standalone routes — no layout wrapper */}
           <Route path="embed/games" element={<EmbedGamesPage />} />
           <Route path="login" element={<LoginPage />} />
+          <Route path="signup" element={<SignUpPage />} />
 
           <Route element={<Layout />}>
             <Route index element={<CalendarPage />} />

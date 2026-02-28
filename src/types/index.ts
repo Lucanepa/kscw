@@ -91,6 +91,7 @@ export interface Game extends RecordModel {
 
 export interface SvRanking extends RecordModel {
   sv_team_id: string
+  team_name: string
   league: string
   rank: number
   played: number

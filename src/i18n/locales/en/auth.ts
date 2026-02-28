@@ -30,4 +30,12 @@ export default {
 
   // Training label
   training: 'Training',
+
+  // Sign Up
+  signUp: 'Sign up',
+  createAccount: 'Create Account',
+  confirmPassword: 'Confirm Password',
+  passwordMismatch: 'Passwords do not match',
+  registrationFailed: 'Registration failed. Please try again.',
+  creatingAccount: 'Creating account...',
 } as const

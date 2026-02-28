@@ -43,7 +43,7 @@ export default function RankingsTable({ league, rankings }: RankingsTableProps) 
                     <div className="flex items-center gap-2">
                       {isKscw && <TeamChip team={kscwTeam} size="sm" />}
                       <span className={isKscw ? 'text-brand-900 dark:text-brand-200' : 'text-gray-700 dark:text-gray-300'}>
-                        {isKscw ? `KSC Wiedikon ${kscwTeam}` : `Team ${row.sv_team_id}`}
+                        {isKscw ? `KSC Wiedikon ${kscwTeam}` : (row.team_name || `Team ${row.sv_team_id}`)}
                       </span>
                     </div>
                   </td>
