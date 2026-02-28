@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
 import Modal from '../../components/Modal'
@@ -8,15 +8,13 @@ import UnifiedListView from './UnifiedListView'
 import HallenplanView from './HallenplanView'
 import CalendarEntryModal from './CalendarEntryModal'
 import GameDetailModal from '../games/components/GameDetailModal'
+import ICalModal from './ICalModal'
 import { useCalendarData } from './hooks/useCalendarData'
 import { useAuth } from '../../hooks/useAuth'
-import { downloadICal } from '../../utils/icalGenerator'
 import { startOfMonth, formatDate } from '../../utils/dateUtils'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import type { CalendarViewMode, CalendarFilterState, SourceFilter, CalendarEntry } from '../../types/calendar'
 import type { Game } from '../../types'
-
-const PB_URL = import.meta.env.VITE_PB_URL as string
 
 const dotColors: Record<string, string> = {
   game: 'bg-brand-500',
@@ -44,6 +42,7 @@ export default function CalendarPage() {
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()))
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null)
   const [dayOverflow, setDayOverflow] = useState<{ entries: CalendarEntry[]; date: Date } | null>(null)
+  const [icalMode, setIcalMode] = useState<'subscribe' | 'download' | null>(null)
 
   // Logged out: only games. Logged in: games + trainings + events + closures
   const allowedSources: SourceFilter[] = user
@@ -60,16 +59,6 @@ export default function CalendarPage() {
 
   const needsData = viewMode === 'month' || viewMode === 'list'
   const { entries, closedDates, isLoading } = useCalendarData({ filters: effectiveFilters, month, enabled: needsData })
-
-  function handleExport() {
-    downloadICal(entries, 'kscw-kalender.ics')
-  }
-
-  const handleSubscribe = useCallback(() => {
-    const icalUrl = `${PB_URL}/api/ical`
-    const webcalUrl = icalUrl.replace(/^https?:/, 'webcal:')
-    window.open(webcalUrl, '_self')
-  }, [])
 
   function handleViewChange(v: string) {
     setViewMode(v as CalendarViewMode)
@@ -89,7 +78,7 @@ export default function CalendarPage() {
           {needsData && (
             <>
               <button
-                onClick={handleSubscribe}
+                onClick={() => setIcalMode('subscribe')}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                 title={t('subscribeICal')}
               >
@@ -99,7 +88,7 @@ export default function CalendarPage() {
                 <span className="hidden sm:inline">{t('subscribeICal')}</span>
               </button>
               <button
-                onClick={handleExport}
+                onClick={() => setIcalMode('download')}
                 disabled={entries.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
               >
@@ -201,6 +190,14 @@ export default function CalendarPage() {
           onClose={() => setSelectedEntry(null)}
         />
       )}
+
+      {/* iCal subscribe/download modal */}
+      <ICalModal
+        open={!!icalMode}
+        mode={icalMode ?? 'subscribe'}
+        onClose={() => setIcalMode(null)}
+        entries={entries}
+      />
     </div>
   )
 }
