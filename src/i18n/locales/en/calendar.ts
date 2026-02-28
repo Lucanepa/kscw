@@ -29,4 +29,5 @@ export default {
   noEntries: 'No entries found',
   weekLabel: 'CW {{week}}: {{start}} – {{end}}',
   exportICal: 'Export iCal',
+  subscribeICal: 'Subscribe',
 } as const

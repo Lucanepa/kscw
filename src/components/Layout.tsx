@@ -7,6 +7,7 @@ import { useIsDesktop } from '../hooks/useMediaQuery'
 import { getFileUrl } from '../utils/pbFile'
 import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
+import LanguageToggle from './LanguageToggle'
 
 function useNavItems(isLoggedIn: boolean) {
   const { t } = useTranslation('nav')
@@ -177,6 +178,7 @@ export default function Layout() {
                 )}
                 {theme === 'dark' ? t('lightMode') : t('darkMode')}
               </button>
+              <LanguageToggle theme={theme} />
 
               {user ? (
                 <div className="space-y-2">

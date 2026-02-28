@@ -14,8 +14,25 @@ import spielplanung from './locales/en/spielplanung'
 import auth from './locales/en/auth'
 import events from './locales/en/events'
 
+import deCommon from './locales/de/common'
+import deNav from './locales/de/nav'
+import deCalendar from './locales/de/calendar'
+import deGames from './locales/de/games'
+import deTrainings from './locales/de/trainings'
+import deAbsences from './locales/de/absences'
+import deScorer from './locales/de/scorer'
+import deTeams from './locales/de/teams'
+import deHallenplan from './locales/de/hallenplan'
+import deSpielplanung from './locales/de/spielplanung'
+import deAuth from './locales/de/auth'
+import deEvents from './locales/de/events'
+
+const savedLng = typeof window !== 'undefined'
+  ? localStorage.getItem('kscw-lang') ?? 'de'
+  : 'de'
+
 i18n.use(initReactI18next).init({
-  lng: 'en',
+  lng: savedLng,
   fallbackLng: 'en',
   ns: [
     'common',
@@ -46,6 +63,20 @@ i18n.use(initReactI18next).init({
       spielplanung,
       auth,
       events,
+    },
+    de: {
+      common: deCommon,
+      nav: deNav,
+      calendar: deCalendar,
+      games: deGames,
+      trainings: deTrainings,
+      absences: deAbsences,
+      scorer: deScorer,
+      teams: deTeams,
+      hallenplan: deHallenplan,
+      spielplanung: deSpielplanung,
+      auth: deAuth,
+      events: deEvents,
     },
   },
   interpolation: {

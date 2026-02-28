@@ -27,4 +27,5 @@ export default {
   noEntries: 'Keine Einträge gefunden',
   weekLabel: 'KW {{week}}: {{start}} – {{end}}',
   exportICal: 'iCal exportieren',
+  subscribeICal: 'Abonnieren',
 } as const

@@ -45,7 +45,7 @@ export default function CalendarGrid<T>({
   const canGoNext = !maxMonth || addMonths(month, 1) <= startOfMonth(maxMonth)
 
   return (
-    <div>
+    <div className="flex flex-1 flex-col">
       {/* Month header */}
       <div className="mb-4 flex items-center justify-between">
         <button
@@ -84,7 +84,7 @@ export default function CalendarGrid<T>({
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7 border-l border-gray-200 dark:border-gray-700">
+      <div className="grid flex-1 grid-cols-7 border-l border-gray-200 dark:border-gray-700" style={{ gridAutoRows: '1fr' }}>
         {days.map((date) => {
           const key = toDateKey(date)
           const inMonth = isSameMonth(date, month)

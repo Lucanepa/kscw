@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
+import LanguageToggle from './LanguageToggle'
 
 const secondaryItems = [
   {
@@ -140,6 +141,7 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
             )}
             {theme === 'dark' ? t('lightMode') : t('darkMode')}
           </button>
+          <LanguageToggle variant="sheet" />
         </div>
 
         {/* User section */}
