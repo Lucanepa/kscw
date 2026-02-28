@@ -10,7 +10,7 @@ import MoreSheet from './MoreSheet'
 import PrivacyNotice from './PrivacyNotice'
 import SwitchToggle from './SwitchToggle'
 
-function useNavItems(isLoggedIn: boolean) {
+function useNavItems(isLoggedIn: boolean, isApproved: boolean) {
   const { t } = useTranslation('nav')
   const publicItems = [
     { to: '/', label: t('home'), icon: '🏠' },
@@ -25,7 +25,7 @@ function useNavItems(isLoggedIn: boolean) {
     { to: '/teams', label: t('teams'), icon: '👥' },
   ]
   return {
-    navItems: isLoggedIn ? [...publicItems, ...authItems] : publicItems,
+    navItems: isLoggedIn && isApproved ? [...publicItems, ...authItems] : publicItems,
     adminItems: [
       { to: '/admin/spielplanung', label: t('gameplan'), icon: '📋' },
     ],
@@ -39,11 +39,11 @@ function useNavItems(isLoggedIn: boolean) {
 export default function Layout() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const { user, isAdmin, isSuperAdmin, logout } = useAuth()
+  const { user, isAdmin, isApproved, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
   const isDesktop = useIsDesktop()
-  const { navItems, adminItems, superadminItems } = useNavItems(!!user)
+  const { navItems, adminItems, superadminItems } = useNavItems(!!user, isApproved)
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">

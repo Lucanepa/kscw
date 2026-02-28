@@ -161,6 +161,7 @@ export default function RosterEditor() {
                     <option value="captain">{t('roleCaptain')}</option>
                     <option value="coach">{t('roleCoach')}</option>
                     <option value="assistant">{t('roleAssistant')}</option>
+                    <option value="team_responsible">{t('roleTeamResponsible')}</option>
                   </select>
                   <button
                     onClick={() => setRemovingId(mt.id)}

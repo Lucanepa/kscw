@@ -24,7 +24,7 @@ export default function TrainingForm({ open, training, onSave, onCancel }: Train
   const { data: allTeams } = usePB<Team>('teams', { filter: 'active=true', sort: 'name', perPage: 50 })
   const { data: halls } = usePB<Hall>('halls', { sort: 'name', perPage: 50 })
   const { data: coachMTs } = usePB<MemberTeamExpanded>('member_teams', {
-    filter: 'role="coach" || role="assistant"',
+    filter: 'role="coach" || role="assistant" || role="team_responsible"',
     expand: 'member',
     all: true,
   })

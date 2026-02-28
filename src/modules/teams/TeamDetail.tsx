@@ -4,19 +4,47 @@ import { useParams, Link } from 'react-router-dom'
 import pb from '../../pb'
 import { useTeamMembers } from '../../hooks/useTeamMembers'
 import { useAuth } from '../../hooks/useAuth'
+import { usePendingMembers } from '../../hooks/usePendingMembers'
 import TeamChip from '../../components/TeamChip'
 import EmptyState from '../../components/EmptyState'
 import MemberRow from './MemberRow'
 import { getFileUrl } from '../../utils/pbFile'
-import type { Team } from '../../types'
+import { getCurrentSeason } from '../../utils/dateHelpers'
+import type { Team, Member } from '../../types'
 
 export default function TeamDetail() {
   const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
-  const { isCoachOf } = useAuth()
+  const { isCoachOf, isAdmin } = useAuth()
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
   const { members, isLoading: membersLoading } = useTeamMembers(teamId)
+  const canManage = isCoachOf(teamId ?? '') || isAdmin
+  const { data: pendingMembers, refetch: refetchPending } = usePendingMembers(canManage ? teamId : undefined)
+
+  async function handleApprove(member: Member) {
+    try {
+      await pb.collection('members').update(member.id, { approved: true })
+      await pb.collection('member_teams').create({
+        member: member.id,
+        team: teamId,
+        season: getCurrentSeason(),
+        role: 'player',
+      })
+      refetchPending()
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleReject(memberId: string) {
+    try {
+      await pb.collection('members').delete(memberId)
+      refetchPending()
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     if (!teamId) return
@@ -89,6 +117,41 @@ export default function TeamDetail() {
           </Link>
         )}
       </div>
+
+      {/* Pending member requests */}
+      {canManage && pendingMembers.length > 0 && (
+        <div className="mt-6 rounded-lg border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-900/20">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+            {t('pendingRequests', { count: pendingMembers.length })}
+          </h3>
+          <div className="mt-3 space-y-3">
+            {pendingMembers.map((member) => (
+              <div key={member.id} className="flex items-center justify-between rounded-lg bg-white p-3 dark:bg-gray-800">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    {member.first_name} {member.last_name}
+                  </p>
+                  <p className="truncate text-sm text-gray-500 dark:text-gray-400">{member.email}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => handleApprove(member)}
+                    className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    {t('approve')}
+                  </button>
+                  <button
+                    onClick={() => handleReject(member.id)}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                  >
+                    {t('reject')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('currentRoster', { count: members.length })}</h2>

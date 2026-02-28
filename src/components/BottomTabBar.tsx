@@ -66,8 +66,8 @@ interface BottomTabBarProps {
 
 export default function BottomTabBar({ onMoreTap, moreActive }: BottomTabBarProps) {
   const { t } = useTranslation('nav')
-  const { user } = useAuth()
-  const visibleTabs = primaryTabs.filter((tab) => !tab.requiresAuth || user)
+  const { user, isApproved } = useAuth()
+  const visibleTabs = primaryTabs.filter((tab) => !tab.requiresAuth || (user && isApproved))
   return (
     <nav className="pb-safe fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
       <div className="flex h-16 items-stretch">

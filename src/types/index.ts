@@ -31,13 +31,15 @@ export interface Member extends RecordModel {
   birthdate: string
   yob: number
   scorer_licence: boolean
+  approved: boolean
+  requested_team: string
 }
 
 export interface MemberTeam extends RecordModel {
   member: string
   team: string
   season: string
-  role: 'player' | 'coach' | 'captain' | 'assistant'
+  role: 'player' | 'coach' | 'captain' | 'assistant' | 'team_responsible'
 }
 
 export interface Hall extends RecordModel {

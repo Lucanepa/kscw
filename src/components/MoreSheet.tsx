@@ -50,7 +50,7 @@ interface MoreSheetProps {
 }
 
 export default function MoreSheet({ onClose }: MoreSheetProps) {
-  const { user, isAdmin, isSuperAdmin, logout } = useAuth()
+  const { user, isAdmin, isApproved, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
 
@@ -79,7 +79,7 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
 
         {/* Nav items */}
         <nav className="px-4 pb-2">
-          {!user ? null : secondaryItems.map((item) => (
+          {(!user || !isApproved) ? null : secondaryItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

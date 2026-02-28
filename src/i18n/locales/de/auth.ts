@@ -38,4 +38,27 @@ export default {
   passwordMismatch: 'Passwörter stimmen nicht überein',
   registrationFailed: 'Registrierung fehlgeschlagen. Bitte versuche es erneut.',
   creatingAccount: 'Konto wird erstellt...',
+  continue: 'Weiter',
+  checkingEmail: 'E-Mail wird geprüft...',
+  alreadyHaveAccount: 'Bereits ein Konto?',
+  change: 'Ändern',
+
+  // Account claim
+  accountExists: 'Konto gefunden',
+  accountExistsDescription: 'Ein Konto mit dieser E-Mail existiert bereits. Wir haben dir einen Link zum Zurücksetzen des Passworts gesendet.',
+  resetLinkSent: 'Link gesendet! Prüfe dein E-Mail-Postfach.',
+  tryDifferentEmail: 'Andere E-Mail verwenden',
+
+  // Team selection
+  selectTeam: 'Team wählen',
+  selectTeamPlaceholder: 'Team auswählen...',
+  teamRequired: 'Bitte wähle ein Team.',
+
+  // Pending page
+  pendingApproval: 'Freigabe ausstehend',
+  pendingDescription: 'Dein Konto wartet auf Freigabe durch den Trainer oder Admin deines Teams.',
+  requestedTeam: 'Angefragtes Team',
+  refreshStatus: 'Status aktualisieren',
+  checking: 'Prüfe...',
+  logout: 'Abmelden',
 } as const

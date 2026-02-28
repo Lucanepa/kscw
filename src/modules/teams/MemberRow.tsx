@@ -23,6 +23,7 @@ const roleColors: Record<string, { bg: string; text: string }> = {
   captain: { bg: '#fef3c7', text: '#92400e' },
   coach: { bg: '#dbeafe', text: '#1e40af' },
   assistant: { bg: '#e0f2fe', text: '#075985' },
+  team_responsible: { bg: '#ede9fe', text: '#5b21b6' },
   player: { bg: '#f3f4f6', text: '#374151' },
 }
 

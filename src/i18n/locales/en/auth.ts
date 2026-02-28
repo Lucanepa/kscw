@@ -38,4 +38,27 @@ export default {
   passwordMismatch: 'Passwords do not match',
   registrationFailed: 'Registration failed. Please try again.',
   creatingAccount: 'Creating account...',
+  continue: 'Continue',
+  checkingEmail: 'Checking email...',
+  alreadyHaveAccount: 'Already have an account?',
+  change: 'Change',
+
+  // Account claim
+  accountExists: 'Account found',
+  accountExistsDescription: 'An account with this email already exists. We\'ve sent you a password reset link.',
+  resetLinkSent: 'Link sent! Check your inbox.',
+  tryDifferentEmail: 'Try a different email',
+
+  // Team selection
+  selectTeam: 'Select team',
+  selectTeamPlaceholder: 'Choose a team...',
+  teamRequired: 'Please select a team.',
+
+  // Pending page
+  pendingApproval: 'Pending Approval',
+  pendingDescription: 'Your account is waiting for approval from your team\'s coach or an admin.',
+  requestedTeam: 'Requested Team',
+  refreshStatus: 'Refresh Status',
+  checking: 'Checking...',
+  logout: 'Log out',
 } as const

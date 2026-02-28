@@ -12,6 +12,7 @@ interface AuthContextValue {
   user: (RecordModel & Member) | null
   isSuperAdmin: boolean
   isAdmin: boolean
+  isApproved: boolean
   isCoach: boolean
   isCoachOf: (teamId: string) => boolean
   coachTeamIds: string[]
@@ -74,12 +75,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roles = user?.role ?? []
   const isSuperAdmin = roles.includes('superadmin')
   const isAdmin = roles.includes('admin') || isSuperAdmin
+  const isApproved = user?.approved !== false
   const isVorstand = roles.includes('vorstand') || isAdmin
 
   // Team-scoped coach: derived from member_teams, not members.role
   const coachTeamIds = useMemo(
     () => myTeamRoles
-      .filter((r) => r.role === 'coach' || r.role === 'assistant')
+      .filter((r) => r.role === 'coach' || r.role === 'assistant' || r.role === 'team_responsible')
       .map((r) => r.teamId),
     [myTeamRoles],
   )
@@ -92,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isCoach, isCoachOf, coachTeamIds, myTeamRoles, isVorstand, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isApproved, isCoach, isCoachOf, coachTeamIds, myTeamRoles, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

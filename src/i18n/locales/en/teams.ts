@@ -16,6 +16,7 @@ export default {
   roleCaptain: 'Captain',
   roleCoach: 'Coach',
   roleAssistant: 'Assistant',
+  roleTeamResponsible: 'Team Responsible',
 
   // Table headers
   playerCol: 'Player',
@@ -41,4 +42,9 @@ export default {
   noTeamsDescription: 'No teams found.',
   noMembers: 'No members',
   noMembersDescription: 'This team has no members yet.',
+
+  // Pending requests
+  pendingRequests: '{{count}} pending request(s)',
+  approve: 'Approve',
+  reject: 'Reject',
 } as const

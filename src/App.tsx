@@ -20,6 +20,7 @@ import ClubDeskSyncPage from './modules/admin/ClubDeskSyncPage'
 import EmbedGamesPage from './modules/games/EmbedGamesPage'
 import LoginPage from './modules/auth/LoginPage'
 import SignUpPage from './modules/auth/SignUpPage'
+import PendingPage from './modules/auth/PendingPage'
 import ProfilePage from './modules/auth/ProfilePage'
 import EventsPage from './modules/events/EventsPage'
 import DatenschutzPage from './modules/legal/DatenschutzPage'
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="embed/games" element={<EmbedGamesPage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="signup" element={<SignUpPage />} />
+          <Route path="pending" element={<PendingPage />} />
 
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
