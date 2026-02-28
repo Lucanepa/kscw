@@ -5,6 +5,7 @@ import type { Member } from '../types'
 
 interface AuthContextValue {
   user: (RecordModel & Member) | null
+  isSuperAdmin: boolean
   isAdmin: boolean
   isCoach: boolean
   isVorstand: boolean
