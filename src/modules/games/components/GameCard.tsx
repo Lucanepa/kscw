@@ -90,23 +90,23 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
       onClick={() => onClick?.(game)}
       className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm transition-shadow ${onClick ? 'cursor-pointer hover:shadow-md' : ''}`}
     >
-      {/* Top: date + league */}
+      {/* Top: date+time left, team chip right */}
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span>
           {dateStr} {game.time && `· ${game.time}`}
         </span>
-        <span className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 font-medium">{game.league}</span>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={game.status} />
+          {kscwTeamName && <TeamChip team={kscwTeamName} size="sm" />}
+        </div>
       </div>
 
       {/* Teams */}
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1 text-right">
-          <div className="flex items-center justify-end gap-2">
-            {kscwTeamName && game.type === 'home' && <TeamChip team={kscwTeamName} size="sm" />}
-            <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
-              {game.home_team}
-            </span>
-          </div>
+          <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
+            {game.home_team}
+          </span>
         </div>
 
         {game.status === 'completed' || game.status === 'live' ? (
@@ -122,19 +122,16 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
-              {game.away_team}
-            </span>
-            {kscwTeamName && game.type === 'away' && <TeamChip team={kscwTeamName} size="sm" />}
-          </div>
+          <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
+            {game.away_team}
+          </span>
         </div>
       </div>
 
-      {/* Bottom: venue + status */}
+      {/* Bottom: league left, hall right */}
       <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <span className="truncate">{hallName || game.round}</span>
-        <StatusBadge status={game.status} />
+        <span className="truncate">{game.league}</span>
+        {hallName && <span className="truncate text-right">{hallName}</span>}
       </div>
     </div>
   )

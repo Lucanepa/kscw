@@ -5,12 +5,15 @@ import CalendarFilters from './CalendarFilters'
 import UnifiedCalendarView from './UnifiedCalendarView'
 import UnifiedListView from './UnifiedListView'
 import HallenplanView from './HallenplanView'
+import CalendarEntryModal from './CalendarEntryModal'
+import GameDetailModal from '../games/components/GameDetailModal'
 import { useCalendarData } from './hooks/useCalendarData'
 import { useAuth } from '../../hooks/useAuth'
 import { downloadICal } from '../../utils/icalGenerator'
 import { startOfMonth } from '../../utils/dateUtils'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import type { CalendarViewMode, CalendarFilterState, SourceFilter } from '../../types/calendar'
+import type { CalendarViewMode, CalendarFilterState, SourceFilter, CalendarEntry } from '../../types/calendar'
+import type { Game } from '../../types'
 
 const PB_URL = import.meta.env.VITE_PB_URL as string
 
@@ -23,6 +26,7 @@ export default function CalendarPage() {
     selectedTeamIds: [],
   })
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()))
+  const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null)
 
   // Logged out: only games. Logged in: games + trainings + events + closures
   const allowedSources: SourceFilter[] = user
@@ -123,10 +127,27 @@ export default function CalendarPage() {
               closedDates={closedDates}
               month={month}
               onMonthChange={setMonth}
+              onEntryClick={setSelectedEntry}
             />
           )}
-          {viewMode === 'list' && <UnifiedListView entries={entries} />}
+          {viewMode === 'list' && (
+            <UnifiedListView entries={entries} onEntryClick={setSelectedEntry} />
+          )}
         </div>
+      )}
+
+      {/* Detail modals */}
+      {selectedEntry?.type === 'game' && (
+        <GameDetailModal
+          game={selectedEntry.source as Game}
+          onClose={() => setSelectedEntry(null)}
+        />
+      )}
+      {selectedEntry && selectedEntry.type !== 'game' && (
+        <CalendarEntryModal
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+        />
       )}
     </div>
   )

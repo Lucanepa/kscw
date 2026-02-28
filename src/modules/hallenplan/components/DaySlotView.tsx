@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { HallSlot, HallClosure, Hall } from '../../../types'
 import { toISODate, minutesToTime } from '../../../utils/dateHelpers'
-import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR, SLOT_MINUTES } from '../utils/timeGrid'
+import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR, SLOT_MINUTES, getDayRange } from '../utils/timeGrid'
 import { buildConflictSet } from '../utils/conflictDetection'
 import SlotBlock from './SlotBlock'
 import ClosureOverlay from './ClosureOverlay'
@@ -101,6 +101,24 @@ export default function DaySlotView({
           style={{ height: gridHeight }}
           onClick={handleDayClick}
         >
+          {/* Inactive overlays */}
+          {(() => {
+            const { startMin, endMin } = getDayRange(dayIndex)
+            const inactiveTopH = ((startMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT
+            const inactiveBottomTop = ((endMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT
+            const inactiveBottomH = gridHeight - inactiveBottomTop
+            return (
+              <>
+                {inactiveTopH > 0 && (
+                  <div className="absolute inset-x-0 top-0 z-10 bg-gray-100/60 dark:bg-gray-900/40" style={{ height: inactiveTopH }} />
+                )}
+                {inactiveBottomH > 0 && (
+                  <div className="absolute inset-x-0 bottom-0 z-10 bg-gray-100/60 dark:bg-gray-900/40" style={{ height: inactiveBottomH }} />
+                )}
+              </>
+            )
+          })()}
+
           {/* Grid lines */}
           {timeLabels.map(({ time, isFullHour }, idx) => (
             <div

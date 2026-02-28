@@ -31,19 +31,19 @@ export default function WeekNavigation({
       <div className="flex items-center gap-2">
         <button
           onClick={onPrev}
-          className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
+          className="rounded-md p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
           title={t('prevWeek')}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <span className="min-w-[220px] text-center text-sm font-semibold text-gray-900 lg:text-base">
+        <span className="min-w-[220px] text-center text-sm font-semibold text-gray-900 dark:text-gray-100 lg:text-base">
           {weekLabel}
         </span>
         <button
           onClick={onNext}
-          className="rounded-md p-2 text-gray-600 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
+          className="rounded-md p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 sm:p-1.5 dark:hover:bg-gray-700"
           title={t('nextWeek')}
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -52,7 +52,7 @@ export default function WeekNavigation({
         </button>
         <button
           onClick={onToday}
-          className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+          className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           {t('today')}
         </button>
@@ -62,7 +62,7 @@ export default function WeekNavigation({
         <select
           value={selectedHallId}
           onChange={(e) => onSelectHall(e.target.value)}
-          className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         >
           <option value="">{t('common:allHalls')}</option>
           {halls.map((hall) => (
@@ -75,7 +75,7 @@ export default function WeekNavigation({
         {isAdmin && (
           <button
             onClick={onOpenClosureManager}
-            className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+            className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             {t('closures')}
           </button>

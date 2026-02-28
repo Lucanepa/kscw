@@ -1,11 +1,26 @@
 import { timeToMinutes } from '../../../utils/dateHelpers'
 import type { HallSlot } from '../../../types'
 
-export const START_HOUR = 11
-export const END_HOUR = 23
+export const START_HOUR = 10
+export const END_HOUR = 22
 export const SLOT_MINUTES = 15 // minutes per grid row
 export const SLOT_HEIGHT = 16 // px per 15-min row
 export const TOTAL_ROWS = (END_HOUR - START_HOUR) * (60 / SLOT_MINUTES)
+
+/** Per-day active time ranges (in minutes from midnight) */
+const WEEKDAY_START = 16 * 60       // 16:00
+const WEEKDAY_END = 22 * 60         // 22:00
+const WEEKEND_START = 10 * 60 + 30  // 10:30
+const WEEKEND_END = 20 * 60         // 20:00
+
+/** Returns active time range [startMin, endMin] for a day index (0=Mon..6=Sun) */
+export function getDayRange(dayIndex: number): { startMin: number; endMin: number } {
+  const isWeekend = dayIndex === 5 || dayIndex === 6
+  return {
+    startMin: isWeekend ? WEEKEND_START : WEEKDAY_START,
+    endMin: isWeekend ? WEEKEND_END : WEEKDAY_END,
+  }
+}
 
 export interface PositionedSlot {
   slot: HallSlot

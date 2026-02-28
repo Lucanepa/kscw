@@ -148,7 +148,7 @@ export default function GamesPage() {
             {leagueGroups.size === 0 ? (
               <EmptyState tab="rankings" />
             ) : (
-              <div className="space-y-8">
+              <div className="grid gap-6 lg:grid-cols-2">
                 {[...leagueGroups.entries()].map(([league, rows]) => (
                   <RankingsTable key={league} league={league} rankings={rows} />
                 ))}

@@ -7,7 +7,7 @@ import { useIsDesktop } from '../hooks/useMediaQuery'
 import { getFileUrl } from '../utils/pbFile'
 import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
-import LanguageToggle from './LanguageToggle'
+import SwitchToggle from './SwitchToggle'
 
 function useNavItems(isLoggedIn: boolean) {
   const { t } = useTranslation('nav')
@@ -35,7 +35,7 @@ export default function Layout() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { t } = useTranslation('nav')
+  const { t, i18n } = useTranslation('nav')
   const isDesktop = useIsDesktop()
   const { navItems, adminItems } = useNavItems(!!user)
 
@@ -156,29 +156,29 @@ export default function Layout() {
               )}
             </nav>
 
-            <div className={`border-t p-4 ${
+            <div className={`space-y-3 border-t p-4 ${
               theme === 'light' ? 'border-gray-200' : 'border-brand-800'
             }`}>
-              <button
-                onClick={toggleTheme}
-                className={`mb-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  theme === 'light'
-                    ? 'text-gray-600 hover:bg-gray-100'
-                    : 'text-gray-400 hover:bg-brand-800 hover:text-white'
-                }`}
-              >
-                {theme === 'dark' ? (
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                )}
-                {theme === 'dark' ? t('lightMode') : t('darkMode')}
-              </button>
-              <LanguageToggle theme={theme} />
+              <div className="rounded-lg px-3 py-2">
+                <SwitchToggle
+                  enabled={theme === 'dark'}
+                  onChange={toggleTheme}
+                  labelLeft={t('darkMode')}
+                  labelRight={t('lightMode')}
+                />
+              </div>
+              <div className="rounded-lg px-3 py-2">
+                <SwitchToggle
+                  enabled={i18n.language === 'de'}
+                  onChange={() => {
+                    const next = i18n.language === 'de' ? 'en' : 'de'
+                    i18n.changeLanguage(next)
+                    localStorage.setItem('kscw-lang', next)
+                  }}
+                  labelLeft="Deutsch"
+                  labelRight="English"
+                />
+              </div>
 
               {user ? (
                 <div className="space-y-2">
@@ -229,10 +229,10 @@ export default function Layout() {
                 <NavLink
                   to="/login"
                   onClick={() => setSidebarExpanded(false)}
-                  className={`block text-center text-sm ${
+                  className={`block rounded-lg px-3 py-2 text-center text-sm font-medium ${
                     theme === 'light'
-                      ? 'text-brand-600 hover:text-brand-800'
-                      : 'text-gold-400 hover:text-gold-300'
+                      ? 'text-brand-600 hover:bg-gray-100 hover:text-brand-800'
+                      : 'text-gold-400 hover:bg-brand-800 hover:text-gold-300'
                   }`}
                 >
                   {t('signIn')}

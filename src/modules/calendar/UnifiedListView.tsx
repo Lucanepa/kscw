@@ -6,6 +6,7 @@ import { toDateKey, formatDate } from '../../utils/dateUtils'
 
 interface UnifiedListViewProps {
   entries: CalendarEntry[]
+  onEntryClick?: (entry: CalendarEntry) => void
 }
 
 const typeDots: Record<CalendarEntry['type'], string> = {
@@ -15,7 +16,7 @@ const typeDots: Record<CalendarEntry['type'], string> = {
   event: 'bg-purple-500',
 }
 
-export default function UnifiedListView({ entries }: UnifiedListViewProps) {
+export default function UnifiedListView({ entries, onEntryClick }: UnifiedListViewProps) {
   const { t } = useTranslation('calendar')
 
   const typeLabels: Record<CalendarEntry['type'], string> = {
@@ -55,11 +56,13 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
           <div className="border-b border-gray-100 bg-gray-50 dark:bg-gray-900 px-4 py-2">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{group.label}</h3>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {group.entries.map((entry) => (
-              <div
+              <button
+                type="button"
                 key={entry.id}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => onEntryClick?.(entry)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 {/* Type indicator */}
                 <div className="flex w-20 shrink-0 items-center gap-2">
@@ -97,7 +100,7 @@ export default function UnifiedListView({ entries }: UnifiedListViewProps) {
                     <TeamChip key={name} team={name} size="sm" />
                   ))}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

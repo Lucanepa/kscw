@@ -66,14 +66,13 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
             <span className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400">
               {game.league}
             </span>
-            {game.round && (
-              <span className="text-xs text-gray-400">{t('round')} {game.round}</span>
-            )}
           </div>
-          <button
-            onClick={onClose}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 sm:min-h-0 sm:min-w-0 sm:p-1 dark:hover:bg-gray-700"
-          >
+          <div className="flex items-center gap-2">
+            {kscwTeam && <TeamChip team={kscwTeam} size="sm" />}
+            <button
+              onClick={onClose}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 sm:min-h-0 sm:min-w-0 sm:p-1 dark:hover:bg-gray-700"
+            >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path
                 fillRule="evenodd"
@@ -81,17 +80,15 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                 clipRule="evenodd"
               />
             </svg>
-          </button>
+            </button>
+          </div>
         </div>
 
         {/* Teams & Score */}
         <div className="px-6 py-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 text-right">
-              <div className="flex items-center justify-end gap-2">
-                {kscwTeam && game.type === 'home' && <TeamChip team={kscwTeam} size="sm" />}
-              </div>
-              <p className={`mt-1 text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
+              <p className={`text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
                 {game.home_team}
               </p>
             </div>
@@ -109,10 +106,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
             </div>
 
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                {kscwTeam && game.type === 'away' && <TeamChip team={kscwTeam} size="sm" />}
-              </div>
-              <p className={`mt-1 text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
+              <p className={`text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
                 {game.away_team}
               </p>
             </div>
@@ -168,9 +162,8 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
           </h4>
           <DetailRow label={t('date')} value={dateStr} />
           <DetailRow label={t('kickoff')} value={game.time || '–'} />
-          <DetailRow label={t('common:status')} value={statusLabel(game.status)} />
           <DetailRow label={t('gameType')} value={game.type === 'home' ? t('typeHome') : t('typeAway')} />
-          {game.round && <DetailRow label={t('round')} value={game.round} />}
+          {game.sv_game_id && <DetailRow label={t('gameNumber')} value={game.sv_game_id} />}
           {game.season && <DetailRow label={t('season')} value={game.season} />}
         </div>
 
@@ -207,7 +200,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               {t('referees')}
             </h4>
             {game.referees_json.map((ref, i) => (
-              <DetailRow key={i} label={`${t('referee')} ${i + 1}`} value={ref.name} />
+              <DetailRow key={i} label={t(i === 0 ? 'referee1st' : 'referee2nd')} value={ref.name} />
             ))}
           </div>
         )}
@@ -248,19 +241,4 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="text-gray-900 dark:text-gray-100">{value}</span>
     </div>
   )
-}
-
-function statusLabel(status: Game['status']): string {
-  switch (status) {
-    case 'scheduled':
-      return 'Planned'
-    case 'live':
-      return 'Live'
-    case 'completed':
-      return 'Completed'
-    case 'postponed':
-      return 'Postponed'
-    default:
-      return status
-  }
 }

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { HallSlot, HallClosure, Hall } from '../../../types'
 import { toISODate, minutesToTime } from '../../../utils/dateHelpers'
-import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR, SLOT_MINUTES } from '../utils/timeGrid'
+import { positionSlots, generateTimeLabels, SLOT_HEIGHT, TOTAL_ROWS, topToMinutes, START_HOUR, SLOT_MINUTES, getDayRange } from '../utils/timeGrid'
 import { buildConflictSet } from '../utils/conflictDetection'
 import SlotBlock from './SlotBlock'
 import ClosureOverlay from './ClosureOverlay'
@@ -92,15 +92,15 @@ export default function WeekSlotView({
     <div className="rounded-lg bg-white dark:bg-gray-800 shadow-sm">
       <div className="min-w-[700px]">
         {/* Day headers */}
-        <div className="grid border-b" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
-          <div className="border-r bg-gray-50 dark:bg-gray-900 p-2" />
+        <div className="grid border-b border-gray-200 dark:border-gray-700" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
+          <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2" />
           {weekDays.map((day, i) => {
             const dateStr = `${String(day.getDate()).padStart(2, '0')}.${String(day.getMonth() + 1).padStart(2, '0')}.`
             return (
               <div
                 key={i}
-                className={`border-r p-2 text-center text-sm last:border-r-0 ${
-                  i === todayIndex ? 'bg-brand-50 font-bold text-brand-700' : 'text-gray-700 dark:text-gray-300'
+                className={`border-r border-gray-200 dark:border-gray-700 p-2 text-center text-sm last:border-r-0 ${
+                  i === todayIndex ? 'bg-brand-50 dark:bg-brand-900/30 font-bold text-brand-700 dark:text-brand-300' : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="font-medium">{DAY_HEADERS[i]}</div>
@@ -113,7 +113,7 @@ export default function WeekSlotView({
         {/* Time grid body */}
         <div className="grid" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
           {/* Time labels column */}
-          <div className="sticky left-0 z-30 border-r bg-gray-50 dark:bg-gray-900">
+          <div className="sticky left-0 z-30 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             {timeLabels.map(({ time, isFullHour }) => (
               <div
                 key={time}
@@ -128,24 +128,45 @@ export default function WeekSlotView({
           </div>
 
           {/* Day columns */}
-          {weekDays.map((_, dayIndex) => (
+          {weekDays.map((_, dayIndex) => {
+            const { startMin, endMin } = getDayRange(dayIndex)
+            const inactiveTopH = ((startMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT
+            const inactiveBottomTop = ((endMin - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT
+            const inactiveBottomH = gridHeight - inactiveBottomTop
+
+            return (
             <div
               key={dayIndex}
-              className={`relative border-r last:border-r-0 ${isAdmin ? 'cursor-cell' : ''}`}
+              className={`relative border-r border-gray-200 dark:border-gray-700 last:border-r-0 ${isAdmin ? 'cursor-cell' : ''}`}
               style={{ height: gridHeight }}
               onClick={(e) => handleDayClick(dayIndex, e)}
             >
+              {/* Inactive overlays */}
+              {inactiveTopH > 0 && (
+                <div
+                  className="absolute inset-x-0 top-0 z-10 bg-gray-100/60 dark:bg-gray-900/40"
+                  style={{ height: inactiveTopH }}
+                />
+              )}
+              {inactiveBottomH > 0 && (
+                <div
+                  className="absolute inset-x-0 bottom-0 z-10 bg-gray-100/60 dark:bg-gray-900/40"
+                  style={{ height: inactiveBottomH }}
+                />
+              )}
+
               {/* Grid lines */}
-              {timeLabels.map(({ time, isFullHour }) => {
-                const rowIndex = timeLabels.indexOf(timeLabels.find((l) => l.time === time)!)
-                return (
-                  <div
-                    key={time}
-                    className={`absolute inset-x-0 ${isFullHour ? 'border-b border-gray-200 dark:border-gray-700' : 'border-b border-dashed border-gray-100'}`}
-                    style={{ top: rowIndex * SLOT_HEIGHT, height: SLOT_HEIGHT }}
-                  />
-                )
-              })}
+              {timeLabels.map(({ time, isFullHour }, rowIndex) => (
+                <div
+                  key={time}
+                  className={`absolute inset-x-0 ${
+                    isFullHour
+                      ? 'border-b border-gray-200 dark:border-gray-700'
+                      : 'border-b border-dashed border-gray-100 dark:border-gray-800'
+                  }`}
+                  style={{ top: rowIndex * SLOT_HEIGHT }}
+                />
+              ))}
 
               {/* Closure overlays */}
               {closuresByDay.get(dayIndex)?.map((closure, idx) => (
@@ -168,7 +189,8 @@ export default function WeekSlotView({
                 />
               ))}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ interface UnifiedCalendarViewProps {
   closedDates: Set<string>
   month: Date
   onMonthChange: (month: Date) => void
+  onEntryClick?: (entry: CalendarEntry) => void
 }
 
 const typeStyles: Record<CalendarEntry['type'], string> = {
@@ -23,6 +24,7 @@ export default function UnifiedCalendarView({
   closedDates,
   month,
   onMonthChange,
+  onEntryClick,
 }: UnifiedCalendarViewProps) {
   const isMobile = useIsMobile()
   const maxItems = isMobile ? 2 : 3
@@ -51,15 +53,20 @@ export default function UnifiedCalendarView({
         return (
           <>
             {visible.map((entry) => (
-              <div
+              <button
                 key={entry.id}
-                className={`truncate rounded px-0.5 text-[9px] leading-[1.1] sm:px-1 sm:text-[10px] sm:leading-tight ${typeStyles[entry.type]}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEntryClick?.(entry)
+                }}
+                className={`w-full truncate rounded px-0.5 text-left text-[9px] leading-[1.1] transition-opacity hover:opacity-80 sm:px-1 sm:text-[10px] sm:leading-tight ${typeStyles[entry.type]}`}
               >
                 {entry.startTime && (
                   <span className="font-medium">{entry.startTime} </span>
                 )}
                 <span className="hidden sm:inline">{entry.title}</span>
-              </div>
+              </button>
             ))}
             {overflow > 0 && (
               <div className="text-[8px] text-gray-400 sm:text-[10px]">+{overflow}</div>
