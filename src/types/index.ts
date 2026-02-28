@@ -86,6 +86,7 @@ export interface Game extends RecordModel {
   taefeler_team: string
   taefeler_person: string
   duty_confirmed: boolean
+  referees_json: Array<{ name: string; id?: number }>
   source: 'swiss_volley' | 'manual'
 }
 

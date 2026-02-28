@@ -18,6 +18,9 @@ dist-ssr
 # PocketBase hooks (deployed separately via rsync, may contain secrets)
 pb_hooks/
 
+# Infrastructure docs (contains credentials)
+INFRA.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -4,44 +4,46 @@ import ViewToggle from '../../components/ViewToggle'
 import CalendarFilters from './CalendarFilters'
 import UnifiedCalendarView from './UnifiedCalendarView'
 import UnifiedListView from './UnifiedListView'
-import MobileWeekView from './MobileWeekView'
 import HallenplanView from './HallenplanView'
 import { useCalendarData } from './hooks/useCalendarData'
+import { useAuth } from '../../hooks/useAuth'
 import { downloadICal } from '../../utils/icalGenerator'
-import { startOfMonth, startOfWeek } from '../../utils/dateUtils'
-import { useIsMobile } from '../../hooks/useMediaQuery'
+import { startOfMonth } from '../../utils/dateUtils'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import type { CalendarViewMode, CalendarFilterState } from '../../types/calendar'
+import type { CalendarViewMode, CalendarFilterState, SourceFilter } from '../../types/calendar'
 
 export default function CalendarPage() {
   const { t } = useTranslation('calendar')
-  const isMobile = useIsMobile()
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() => isMobile ? 'week' : 'month')
+  const { user } = useAuth()
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
   const [filters, setFilters] = useState<CalendarFilterState>({
     sources: [],
     selectedTeamIds: [],
   })
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()))
-  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()))
 
-  // Determine which month to fetch data for
-  const dataMonth = viewMode === 'week' ? startOfMonth(weekStart) : month
-  const needsData = viewMode === 'week' || viewMode === 'month' || viewMode === 'list'
-  const { entries, closedDates, isLoading } = useCalendarData({ filters, month: dataMonth, enabled: needsData })
+  // Logged out: only games. Logged in: games + trainings + events + closures
+  const allowedSources: SourceFilter[] = user
+    ? ['game', 'training', 'event', 'closure']
+    : ['game']
+
+  // When logged out, force 'game' source only; when logged in, empty = all allowed
+  const effectiveFilters: CalendarFilterState = {
+    ...filters,
+    sources: user
+      ? filters.sources
+      : ['game'],
+  }
+
+  const needsData = viewMode === 'month' || viewMode === 'list'
+  const { entries, closedDates, isLoading } = useCalendarData({ filters: effectiveFilters, month, enabled: needsData })
 
   function handleExport() {
     downloadICal(entries, 'kscw-kalender.ics')
   }
 
   function handleViewChange(v: string) {
-    const newMode = v as CalendarViewMode
-    // Sync month/week state when switching between views
-    if (newMode === 'month' && viewMode === 'week') {
-      setMonth(startOfMonth(weekStart))
-    } else if (newMode === 'week' && viewMode === 'month') {
-      setWeekStart(startOfWeek(new Date()))
-    }
-    setViewMode(newMode)
+    setViewMode(v as CalendarViewMode)
   }
 
   return (
@@ -51,7 +53,7 @@ export default function CalendarPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{t('title')}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {({ hallenplan: t('subtitleHall'), week: t('subtitleWeek'), month: t('subtitleMonth'), list: t('subtitleList') } as Record<CalendarViewMode, string>)[viewMode]}
+            {({ hallenplan: t('subtitleHall'), month: t('subtitleMonth'), list: t('subtitleList') } as Record<CalendarViewMode, string>)[viewMode]}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -70,7 +72,6 @@ export default function CalendarPage() {
           <ViewToggle
             options={[
               { value: 'hallenplan', label: t('viewHall') },
-              { value: 'week', label: t('viewWeek') },
               { value: 'month', label: t('viewMonth') },
               { value: 'list', label: t('viewList') },
             ]}
@@ -80,8 +81,14 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Calendar filters — for week/month/list views */}
-      {needsData && <CalendarFilters filters={filters} onChange={setFilters} />}
+      {/* Calendar filters — for month/list views */}
+      {needsData && (
+        <CalendarFilters
+          filters={filters}
+          onChange={setFilters}
+          allowedSources={allowedSources}
+        />
+      )}
 
       {/* Views */}
       {viewMode === 'hallenplan' && <HallenplanView />}
@@ -90,14 +97,6 @@ export default function CalendarPage() {
 
       {needsData && !isLoading && (
         <>
-          {viewMode === 'week' && (
-            <MobileWeekView
-              entries={entries}
-              closedDates={closedDates}
-              weekStart={weekStart}
-              onWeekChange={setWeekStart}
-            />
-          )}
           {viewMode === 'month' && (
             <UnifiedCalendarView
               entries={entries}

@@ -91,20 +91,20 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               <div className="flex items-center justify-end gap-2">
                 {kscwTeam && game.type === 'home' && <TeamChip team={kscwTeam} size="sm" />}
               </div>
-              <p className={`mt-1 text-sm ${game.type === 'home' ? 'font-semibold' : ''}`}>
+              <p className={`mt-1 text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
                 {game.home_team}
               </p>
             </div>
 
             <div className="shrink-0 text-center">
               {game.status === 'completed' || game.status === 'live' ? (
-                <div className="font-mono text-3xl font-bold">
+                <div className="font-mono text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {game.home_score}
-                  <span className="mx-1 text-gray-300">:</span>
+                  <span className="mx-1 text-gray-400 dark:text-gray-500">:</span>
                   {game.away_score}
                 </div>
               ) : (
-                <div className="text-2xl font-light text-gray-300">vs</div>
+                <div className="text-2xl font-light text-gray-400 dark:text-gray-500">vs</div>
               )}
             </div>
 
@@ -112,7 +112,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
               <div className="flex items-center gap-2">
                 {kscwTeam && game.type === 'away' && <TeamChip team={kscwTeam} size="sm" />}
               </div>
-              <p className={`mt-1 text-sm ${game.type === 'away' ? 'font-semibold' : ''}`}>
+              <p className={`mt-1 text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
                 {game.away_team}
               </p>
             </div>
@@ -138,7 +138,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                     {sets.map((s, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 ${s.home > s.away ? 'font-bold text-green-600' : ''}`}
+                        className={`px-3 py-2 ${s.home > s.away ? 'font-bold text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}
                       >
                         {s.home}
                       </td>
@@ -149,7 +149,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                     {sets.map((s, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 ${s.away > s.home ? 'font-bold text-green-600' : ''}`}
+                        className={`px-3 py-2 ${s.away > s.home ? 'font-bold text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}
                       >
                         {s.away}
                       </td>
@@ -172,7 +172,6 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
           <DetailRow label={t('gameType')} value={game.type === 'home' ? t('typeHome') : t('typeAway')} />
           {game.round && <DetailRow label={t('round')} value={game.round} />}
           {game.season && <DetailRow label={t('season')} value={game.season} />}
-          <DetailRow label={t('source')} value={game.source === 'swiss_volley' ? t('sourceSwissVolley') : t('sourceManual')} />
         </div>
 
         {/* Venue */}
@@ -201,6 +200,18 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
           </div>
         )}
 
+        {/* Referees */}
+        {game.referees_json && game.referees_json.length > 0 && (
+          <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              {t('referees')}
+            </h4>
+            {game.referees_json.map((ref, i) => (
+              <DetailRow key={i} label={`${t('referee')} ${i + 1}`} value={ref.name} />
+            ))}
+          </div>
+        )}
+
         {/* Scorer / Täfeler */}
         {(game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
           <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
@@ -215,7 +226,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
             )}
             {(game.taefeler_team || game.taefeler_person) && (
               <DetailRow
-                label={t('referee')}
+                label={t('taefeler')}
                 value={[game.taefeler_team, game.taefeler_person].filter(Boolean).join(' — ')}
               />
             )}

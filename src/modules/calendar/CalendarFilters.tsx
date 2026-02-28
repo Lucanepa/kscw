@@ -6,17 +6,21 @@ import type { CalendarFilterState, SourceFilter } from '../../types/calendar'
 interface CalendarFiltersProps {
   filters: CalendarFilterState
   onChange: (filters: CalendarFilterState) => void
+  allowedSources?: SourceFilter[]
 }
 
-export default function CalendarFilters({ filters, onChange }: CalendarFiltersProps) {
+export default function CalendarFilters({ filters, onChange, allowedSources }: CalendarFiltersProps) {
   const { t } = useTranslation('calendar')
 
-  const sourceOptions = [
+  const allSourceOptions = [
     { value: 'game', label: t('sourceGames'), colorClasses: 'bg-brand-100 text-brand-800 border-brand-200' },
     { value: 'training', label: t('sourceTrainings'), colorClasses: 'bg-green-100 text-green-800 border-green-200' },
     { value: 'closure', label: t('sourceClosures'), colorClasses: 'bg-red-100 text-red-800 border-red-200' },
     { value: 'event', label: t('sourceEvents'), colorClasses: 'bg-purple-100 text-purple-800 border-purple-200' },
   ]
+  const sourceOptions = allowedSources
+    ? allSourceOptions.filter((o) => allowedSources.includes(o.value as SourceFilter))
+    : allSourceOptions
   const { data: teams } = useTeams()
 
   const teamChipOptions = teams.map((t) => ({
