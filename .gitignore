@@ -20,6 +20,7 @@ pb_hooks/
 
 # Infrastructure docs (contains credentials)
 INFRA.md
+CONTINGENCY.md
 
 # Editor directories and files
 .vscode/*
