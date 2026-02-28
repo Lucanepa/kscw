@@ -17,3 +17,12 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 ## Branches
 - `main` → production (`kscw.lucanepa.com`)
 - `dev` → preview (`dev-kscw.lucanepa.com`)
+
+## Session Workflow
+
+1. **Start of every chat**: Read `CLAUDE.md` and `INFRA.md` to get full project context before doing anything.
+2. **End of every chat**: After finishing changes, append a few context lines to the **Changelog** section below summarizing what was done (date, short description). If entries get stale or redundant, overwrite with newer comments — keep it concise.
+
+## Changelog
+<!-- Newest entries on top. Overwrite old entries when they become redundant. -->
+- **2026-02-28** — Replaced theme/language text toggles with icon-based SwitchToggle (sun/moon for theme, UK/CH flags for language). Toggles side-by-side, same neutral track color for both states. Vite dev port changed to 1234. Added session workflow rules.

@@ -159,15 +159,21 @@ export default function Layout() {
             <div className={`space-y-3 border-t p-4 ${
               theme === 'light' ? 'border-gray-200' : 'border-brand-800'
             }`}>
-              <div className="rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between rounded-lg px-3 py-2">
                 <SwitchToggle
                   enabled={theme === 'dark'}
                   onChange={toggleTheme}
-                  labelLeft={t('darkMode')}
-                  labelRight={t('lightMode')}
+                  iconOff={
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" />
+                    </svg>
+                  }
+                  iconOn={
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" />
+                    </svg>
+                  }
                 />
-              </div>
-              <div className="rounded-lg px-3 py-2">
                 <SwitchToggle
                   enabled={i18n.language === 'de'}
                   onChange={() => {
@@ -175,8 +181,24 @@ export default function Layout() {
                     i18n.changeLanguage(next)
                     localStorage.setItem('kscw-lang', next)
                   }}
-                  labelLeft="Deutsch"
-                  labelRight="English"
+                  iconOff={
+                    <svg viewBox="0 0 60 60">
+                      <g transform="translate(0,12)">
+                        <rect width="60" height="36" fill="#012169"/>
+                        <path d="M0,0 L60,36 M60,0 L0,36" stroke="#fff" strokeWidth="7"/>
+                        <path d="M0,0 L60,36 M60,0 L0,36" stroke="#C8102E" strokeWidth="4.5"/>
+                        <path d="M30,0 V36 M0,18 H60" stroke="#fff" strokeWidth="12"/>
+                        <path d="M30,0 V36 M0,18 H60" stroke="#C8102E" strokeWidth="7"/>
+                      </g>
+                    </svg>
+                  }
+                  iconOn={
+                    <svg viewBox="0 0 32 32" className="rounded-sm">
+                      <rect width="32" height="32" fill="#D52B1E" rx="2"/>
+                      <rect x="13" y="6" width="6" height="20" fill="#fff"/>
+                      <rect x="6" y="13" width="20" height="6" fill="#fff"/>
+                    </svg>
+                  }
                 />
               </div>
 

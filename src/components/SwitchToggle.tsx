@@ -1,36 +1,54 @@
+import { type ReactNode } from 'react'
+
 interface SwitchToggleProps {
   enabled: boolean
   onChange: () => void
-  labelLeft: string
-  labelRight: string
+  labelLeft?: string
+  labelRight?: string
+  iconOff: ReactNode
+  iconOn: ReactNode
   size?: 'sm' | 'md'
 }
 
-export default function SwitchToggle({ enabled, onChange, labelLeft, labelRight, size = 'sm' }: SwitchToggleProps) {
+export default function SwitchToggle({
+  enabled,
+  onChange,
+  labelLeft,
+  labelRight,
+  iconOff,
+  iconOn,
+  size = 'sm',
+}: SwitchToggleProps) {
   const isMd = size === 'md'
 
   return (
     <button
       type="button"
       onClick={onChange}
-      className="flex w-full items-center justify-between gap-2"
+      className="flex items-center gap-2"
     >
-      <span className={`${isMd ? 'text-base' : 'text-sm'} text-gray-600 dark:text-gray-400`}>
-        {enabled ? labelRight : labelLeft}
-      </span>
+      {(labelLeft || labelRight) && (
+        <span className={`${isMd ? 'text-base' : 'text-sm'} text-gray-600 dark:text-gray-400`}>
+          {enabled ? labelRight : labelLeft}
+        </span>
+      )}
       <div
         className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-          isMd ? 'h-7 w-12' : 'h-5 w-9'
-        } ${enabled ? 'bg-brand-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+          isMd ? 'h-12 w-[5.25rem]' : 'h-9 w-16'
+        } bg-gray-300 dark:bg-gray-600`}
       >
         <span
-          className={`inline-block rounded-full bg-white shadow-sm transition-transform ${
-            isMd ? 'h-5 w-5' : 'h-3.5 w-3.5'
+          className={`inline-flex items-center justify-center overflow-hidden rounded-full bg-white shadow-sm transition-transform ${
+            isMd ? 'h-9 w-9' : 'h-7 w-7'
           }`}
           style={{
-            transform: `translateX(${enabled ? (isMd ? '22px' : '16px') : '2px'})`,
+            transform: `translateX(${enabled ? (isMd ? '2.75rem' : '2rem') : '0.25rem'})`,
           }}
-        />
+        >
+          <span className={`${isMd ? 'h-7 w-7' : 'h-5 w-5'} text-gray-600`}>
+            {enabled ? iconOn : iconOff}
+          </span>
+        </span>
       </div>
     </button>
   )
