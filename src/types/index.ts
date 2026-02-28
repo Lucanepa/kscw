@@ -71,6 +71,7 @@ export interface Game extends RecordModel {
   away_team: string
   kscw_team: string
   hall: string
+  away_hall_json: { name: string; address: string; city: string; plus_code?: string } | null
   date: string
   time: string
   league: string

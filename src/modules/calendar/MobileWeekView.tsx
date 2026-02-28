@@ -19,11 +19,20 @@ interface MobileWeekViewProps {
   onWeekChange: (weekStart: Date) => void
 }
 
-const typeStyles: Record<CalendarEntry['type'], string> = {
+const typeStyles: Record<string, string> = {
   game: 'bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200',
+  'game-home': 'bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200',
+  'game-away': 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   training: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   closure: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   event: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+}
+
+function entryStyle(entry: CalendarEntry): string {
+  if (entry.type === 'game' && entry.gameType) {
+    return typeStyles[`game-${entry.gameType}`]
+  }
+  return typeStyles[entry.type]
 }
 
 export default function MobileWeekView({
@@ -142,7 +151,7 @@ export default function MobileWeekView({
                 {visible.map((entry) => (
                   <div
                     key={entry.id}
-                    className={`mb-0.5 truncate rounded px-0.5 py-px text-[9px] leading-tight ${typeStyles[entry.type]}`}
+                    className={`mb-0.5 truncate rounded px-0.5 py-px text-[9px] leading-tight ${entryStyle(entry)}`}
                     title={`${entry.startTime ?? ''} ${entry.title}`}
                   >
                     {entry.startTime && (

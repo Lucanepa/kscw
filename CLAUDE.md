@@ -14,6 +14,11 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 - `pb_hooks/` is gitignored (contains API keys) — deployed separately via SSH/rsync
 - `.env` is gitignored — Cloudflare Pages env vars handle production config
 
+## PocketBase Admin API
+
+- **Adding columns/fields and creating records**: Can be done automatically via the API (no confirmation needed)
+- **Deleting columns, collections, or records**: Must be confirmed with the user first, but can be executed by the agent
+
 ## Branches
 - `main` → production (`kscw.lucanepa.com`)
 - `dev` → preview (`dev-kscw.lucanepa.com`)
@@ -25,4 +30,4 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 
 ## Changelog
 <!-- Newest entries on top. Overwrite old entries when they become redundant. -->
-- **2026-02-28** — Replaced theme/language text toggles with icon-based SwitchToggle (sun/moon for theme, UK/CH flags for language). Toggles side-by-side, same neutral track color for both states. Vite dev port changed to 1234. Added session workflow rules.
+- **2026-02-28** — Added `away_hall_json` (JSON field) to games collection for away venue data without DB records. Updated GameCard + GameDetailModal to show venue for both home/away games. Widened detail modal labels (`w-28`), increased team name font. Added PocketBase Admin API rules to CLAUDE.md. Replaced theme/language toggles with icon-based SwitchToggle (flags). Vite dev port → 1234.

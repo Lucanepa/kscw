@@ -9,11 +9,20 @@ interface UnifiedListViewProps {
   onEntryClick?: (entry: CalendarEntry) => void
 }
 
-const typeDots: Record<CalendarEntry['type'], string> = {
+const typeDots: Record<string, string> = {
   game: 'bg-brand-500',
+  'game-home': 'bg-brand-500',
+  'game-away': 'bg-amber-500',
   training: 'bg-green-500',
   closure: 'bg-red-500',
   event: 'bg-purple-500',
+}
+
+function entryDot(entry: CalendarEntry): string {
+  if (entry.type === 'game' && entry.gameType) {
+    return typeDots[`game-${entry.gameType}`]
+  }
+  return typeDots[entry.type]
 }
 
 export default function UnifiedListView({ entries, onEntryClick }: UnifiedListViewProps) {
@@ -66,7 +75,7 @@ export default function UnifiedListView({ entries, onEntryClick }: UnifiedListVi
               >
                 {/* Type indicator */}
                 <div className="flex w-20 shrink-0 items-center gap-2">
-                  <div className={`h-2 w-2 shrink-0 rounded-full ${typeDots[entry.type]}`} />
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${entryDot(entry)}`} />
                   <span className="text-xs text-gray-500 dark:text-gray-400">{typeLabels[entry.type]}</span>
                 </div>
 

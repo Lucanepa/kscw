@@ -13,6 +13,8 @@ export interface CalendarEntry {
   teamNames: string[]
   description: string
   source: Game | Training | Event | HallClosure
+  /** Only set for game entries */
+  gameType?: 'home' | 'away'
 }
 
 export type ViewMode = 'calendar' | 'list-date' | 'list-team'

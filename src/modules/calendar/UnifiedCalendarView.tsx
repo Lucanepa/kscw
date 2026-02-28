@@ -12,11 +12,20 @@ interface UnifiedCalendarViewProps {
   onEntryClick?: (entry: CalendarEntry) => void
 }
 
-const typeStyles: Record<CalendarEntry['type'], string> = {
+const typeStyles: Record<string, string> = {
   game: 'bg-brand-100 text-brand-800',
+  'game-home': 'bg-brand-100 text-brand-800',
+  'game-away': 'bg-amber-100 text-amber-800',
   training: 'bg-green-100 text-green-800',
   closure: 'bg-red-100 text-red-800',
   event: 'bg-purple-100 text-purple-800',
+}
+
+function entryStyle(entry: CalendarEntry): string {
+  if (entry.type === 'game' && entry.gameType) {
+    return typeStyles[`game-${entry.gameType}`]
+  }
+  return typeStyles[entry.type]
 }
 
 export default function UnifiedCalendarView({
@@ -60,7 +69,7 @@ export default function UnifiedCalendarView({
                   e.stopPropagation()
                   onEntryClick?.(entry)
                 }}
-                className={`w-full truncate rounded px-0.5 text-left text-[9px] leading-[1.1] transition-opacity hover:opacity-80 sm:px-1 sm:text-[10px] sm:leading-tight ${typeStyles[entry.type]}`}
+                className={`w-full truncate rounded px-0.5 text-left text-[9px] leading-[1.1] transition-opacity hover:opacity-80 sm:px-1 sm:text-[10px] sm:leading-tight ${entryStyle(entry)}`}
               >
                 {entry.startTime && (
                   <span className="font-medium">{entry.startTime} </span>

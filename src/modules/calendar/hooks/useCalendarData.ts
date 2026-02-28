@@ -39,10 +39,11 @@ function gameToEntry(game: Game): CalendarEntry {
     startTime: game.time || null,
     endTime: null,
     allDay: false,
-    location: expandedHall?.name ?? '',
+    location: expandedHall?.name ?? game.away_hall_json?.name ?? '',
     teamNames: expandedTeam ? [expandedTeam.name] : [],
     description: [game.league, game.round].filter(Boolean).join(' | '),
     source: game,
+    gameType: game.type,
   }
 }
 

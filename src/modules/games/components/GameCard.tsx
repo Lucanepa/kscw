@@ -53,7 +53,12 @@ function StatusBadge({ status }: { status: Game['status'] }) {
 
 export default function GameCard({ game, onClick, variant = 'card' }: GameCardProps) {
   const expanded = game as ExpandedGame
-  const hallName = expanded.expand?.hall?.name ?? ''
+  const expandedHall = expanded.expand?.hall
+  const hallInfo = expandedHall
+    ? [expandedHall.name, expandedHall.city].filter(Boolean).join(', ')
+    : game.away_hall_json
+      ? [game.away_hall_json.name, game.away_hall_json.city].filter(Boolean).join(', ')
+      : ''
   const kscwTeamName = expanded.expand?.kscw_team?.name ?? ''
   const dateStr = game.date ? dateFormatter.format(new Date(game.date)) : ''
 
@@ -131,7 +136,7 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
       {/* Bottom: league left, hall right */}
       <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span className="truncate">{game.league}</span>
-        {hallName && <span className="truncate text-right">{hallName}</span>}
+        {hallInfo && <span className="truncate text-right">{hallInfo}</span>}
       </div>
     </div>
   )

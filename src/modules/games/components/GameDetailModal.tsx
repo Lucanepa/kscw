@@ -46,7 +46,16 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
   if (!game) return null
 
   const expanded = game as ExpandedGame
-  const hall = expanded.expand?.hall
+  const expandedHall = expanded.expand?.hall
+  const awayHall = game.away_hall_json
+  const awayMapsUrl = awayHall
+    ? awayHall.plus_code
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(awayHall.plus_code)}`
+      : awayHall.address && awayHall.city
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${awayHall.address}, ${awayHall.city}`)}`
+        : ''
+    : ''
+  const hall = expandedHall ?? (awayHall ? { name: awayHall.name, address: awayHall.address, city: awayHall.city, maps_url: awayMapsUrl } : null)
   const kscwTeam = expanded.expand?.kscw_team?.name ?? ''
   const sets = parseSets(game.sets_json)
   const dateStr = game.date ? dateFormatter.format(new Date(game.date)) : ''
@@ -88,7 +97,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
         <div className="px-6 py-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 text-right">
-              <p className={`text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
+              <p className={`text-base text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
                 {game.home_team}
               </p>
             </div>
@@ -101,12 +110,12 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
                   {game.away_score}
                 </div>
               ) : (
-                <div className="text-2xl font-light text-gray-400 dark:text-gray-500">vs</div>
+                <div className="text-base font-light text-gray-400 dark:text-gray-500">vs</div>
               )}
             </div>
 
             <div className="flex-1">
-              <p className={`text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
+              <p className={`text-base text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
                 {game.away_team}
               </p>
             </div>
@@ -179,7 +188,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
             )}
             {hall.maps_url && (
               <div className="flex items-start gap-3 text-sm">
-                <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
+                <span className="w-28 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
                 <a
                   href={hall.maps_url}
                   target="_blank"
@@ -237,7 +246,7 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start gap-3 text-sm">
-      <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="w-28 shrink-0 text-gray-500 dark:text-gray-400">{label}</span>
       <span className="text-gray-900 dark:text-gray-100">{value}</span>
     </div>
   )
