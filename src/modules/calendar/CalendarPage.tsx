@@ -25,6 +25,7 @@ const dotColors: Record<string, string> = {
   training: 'bg-green-500',
   closure: 'bg-red-500',
   event: 'bg-purple-500',
+  hall: 'bg-cyan-500',
 }
 
 function entryDotColor(entry: CalendarEntry): string {
@@ -46,15 +47,15 @@ export default function CalendarPage() {
 
   // Logged out: only games. Logged in: games + trainings + events + closures
   const allowedSources: SourceFilter[] = user
-    ? ['game', 'training', 'event', 'closure']
-    : ['game']
+    ? ['game-home', 'game-away', 'training', 'event', 'closure', 'hall']
+    : ['game-home', 'game-away', 'hall']
 
-  // When logged out, force 'game' source only; when logged in, empty = all allowed
+  // When logged out, force games only; when logged in, empty = all allowed
   const effectiveFilters: CalendarFilterState = {
     ...filters,
     sources: user
       ? filters.sources
-      : ['game'],
+      : ['game-home', 'game-away', 'hall'],
   }
 
   const needsData = viewMode === 'month' || viewMode === 'list'

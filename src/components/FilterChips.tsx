@@ -42,7 +42,7 @@ export default function FilterChips({
             <button
               key={option.value}
               onClick={() => handleClick(option.value)}
-              className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors sm:py-1 sm:text-xs ${
+              className={`min-h-[44px] rounded-full border px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs ${
                 isSelected
                   ? option.colorClasses
                   : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
@@ -58,7 +58,7 @@ export default function FilterChips({
           <button
             key={option.value}
             onClick={() => handleClick(option.value)}
-            className={`rounded-full px-3 py-2 text-sm font-medium transition-colors sm:py-1 sm:text-xs ${
+            className={`min-h-[44px] rounded-full px-3 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs ${
               !isSelected ? 'border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600' : ''
             }`}
             style={

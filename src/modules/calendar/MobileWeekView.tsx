@@ -26,6 +26,7 @@ const typeStyles: Record<string, string> = {
   training: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   closure: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   event: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  hall: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
 }
 
 function entryStyle(entry: CalendarEntry): string {

@@ -34,15 +34,15 @@ export default function SwitchToggle({
       )}
       <div
         className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-          isMd ? 'h-12 w-[5.25rem]' : 'h-9 w-16'
+          isMd ? 'h-12 w-[5.25rem]' : 'h-11 w-[4.5rem]'
         } bg-gray-300 dark:bg-gray-600`}
       >
         <span
           className={`inline-flex items-center justify-center overflow-hidden rounded-full bg-white shadow-sm transition-transform ${
-            isMd ? 'h-9 w-9' : 'h-7 w-7'
+            isMd ? 'h-9 w-9' : 'h-8 w-8'
           }`}
           style={{
-            transform: `translateX(${enabled ? (isMd ? '2.75rem' : '2rem') : '0.25rem'})`,
+            transform: `translateX(${enabled ? (isMd ? '2.75rem' : '2.125rem') : '0.375rem'})`,
           }}
         >
           <span className={`${isMd ? 'h-7 w-7' : 'h-5 w-5'} text-gray-600`}>

@@ -13,10 +13,12 @@ export default function CalendarFilters({ filters, onChange, allowedSources }: C
   const { t } = useTranslation('calendar')
 
   const allSourceOptions = [
-    { value: 'game', label: t('sourceGames'), colorClasses: 'bg-brand-100 text-brand-800 border-brand-200' },
+    { value: 'game-home', label: t('gameTypeHome'), colorClasses: 'bg-brand-100 text-brand-800 border-brand-200' },
+    { value: 'game-away', label: t('gameTypeAway'), colorClasses: 'bg-amber-100 text-amber-800 border-amber-200' },
     { value: 'training', label: t('sourceTrainings'), colorClasses: 'bg-green-100 text-green-800 border-green-200' },
     { value: 'closure', label: t('sourceClosures'), colorClasses: 'bg-red-100 text-red-800 border-red-200' },
     { value: 'event', label: t('sourceEvents'), colorClasses: 'bg-purple-100 text-purple-800 border-purple-200' },
+    { value: 'hall', label: t('sourceHallHW'), colorClasses: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
   ]
   const sourceOptions = allowedSources
     ? allSourceOptions.filter((o) => allowedSources.includes(o.value as SourceFilter))

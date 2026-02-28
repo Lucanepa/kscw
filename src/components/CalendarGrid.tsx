@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   startOfMonth,
   endOfMonth,
@@ -34,6 +35,7 @@ export default function CalendarGrid<T>({
   minMonth,
   maxMonth,
 }: CalendarGridProps<T>) {
+  const { t } = useTranslation()
   const monthStart = startOfMonth(month)
   const monthEnd = endOfMonth(month)
   const gridStart = startOfWeek(monthStart)
@@ -51,19 +53,27 @@ export default function CalendarGrid<T>({
         <button
           onClick={() => onMonthChange(addMonths(month, -1))}
           disabled={!canGoPrev}
-          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-700"
+          className="rounded-lg p-2.5 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent sm:p-2 dark:text-gray-400 dark:hover:bg-gray-700"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {formatDate(month, 'MMMM yyyy')}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {formatDate(month, 'MMMM yyyy')}
+          </h2>
+          <button
+            onClick={() => onMonthChange(startOfMonth(new Date()))}
+            className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+          >
+            {t('today')}
+          </button>
+        </div>
         <button
           onClick={() => onMonthChange(addMonths(month, 1))}
           disabled={!canGoNext}
-          className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-700"
+          className="rounded-lg p-2.5 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 disabled:hover:bg-transparent sm:p-2 dark:text-gray-400 dark:hover:bg-gray-700"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -76,7 +86,7 @@ export default function CalendarGrid<T>({
         {DAY_HEADERS.map((d) => (
           <div
             key={d}
-            className="py-2 text-center text-[10px] font-medium text-gray-500 sm:text-xs dark:text-gray-400"
+            className="py-2 text-center text-xs font-medium text-gray-500 sm:text-sm dark:text-gray-400"
           >
             {d}
           </div>
@@ -97,6 +107,8 @@ export default function CalendarGrid<T>({
             <div
               key={key}
               className={`relative min-h-[3rem] border-b border-r border-gray-200 p-0.5 sm:min-h-[5rem] sm:p-1 lg:min-h-[6.5rem] lg:p-2 dark:border-gray-700 ${
+                isToday ? 'ring-2 ring-inset ring-gold-400 dark:ring-gold-500' : ''
+              } ${
                 !inMonth ? 'bg-gray-50 dark:bg-gray-900' : isHighlighted ? 'bg-amber-50 dark:bg-amber-950' : 'bg-white dark:bg-gray-800'
               }`}
             >
@@ -107,9 +119,9 @@ export default function CalendarGrid<T>({
 
               {/* Day number */}
               <div
-                className={`mb-0.5 text-[10px] font-medium sm:mb-1 sm:text-xs ${
+                className={`mb-0.5 text-xs font-medium sm:mb-1 sm:text-sm ${
                   isToday
-                    ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-gold-400 text-brand-900 sm:h-5 sm:w-5'
+                    ? 'font-bold text-gold-600 dark:text-gold-400'
                     : !inMonth
                       ? 'text-gray-300 dark:text-gray-600'
                       : 'text-gray-700 dark:text-gray-300'

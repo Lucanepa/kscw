@@ -20,6 +20,7 @@ const typeStyles: Record<string, string> = {
   training: 'bg-green-100 text-green-800',
   closure: 'bg-red-100 text-red-800',
   event: 'bg-purple-100 text-purple-800',
+  hall: 'bg-cyan-100 text-cyan-800',
 }
 
 function entryStyle(entry: CalendarEntry): string {
@@ -71,7 +72,7 @@ export default function UnifiedCalendarView({
                   e.stopPropagation()
                   onEntryClick?.(entry)
                 }}
-                className={`w-full truncate rounded px-0.5 text-left text-[9px] leading-[1.1] transition-opacity hover:opacity-80 sm:px-1 sm:text-[10px] sm:leading-tight ${entryStyle(entry)}`}
+                className={`w-full truncate rounded px-0.5 text-left text-xs leading-snug transition-opacity hover:opacity-80 sm:px-1 sm:text-sm ${entryStyle(entry)}`}
               >
                 {entry.startTime && (
                   <span className="font-medium">{entry.startTime} </span>
@@ -86,7 +87,7 @@ export default function UnifiedCalendarView({
                   e.stopPropagation()
                   onOverflowClick?.(items, date)
                 }}
-                className="rounded bg-gray-100 px-1 text-[8px] font-medium text-gray-500 hover:bg-gray-200 sm:text-[10px] dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
+                className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:bg-gray-200 sm:text-xs dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
               >
                 +{overflow}
               </button>

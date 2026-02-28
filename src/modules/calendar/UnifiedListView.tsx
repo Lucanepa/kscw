@@ -16,6 +16,7 @@ const typeDots: Record<string, string> = {
   training: 'bg-green-500',
   closure: 'bg-red-500',
   event: 'bg-purple-500',
+  hall: 'bg-cyan-500',
 }
 
 function entryDot(entry: CalendarEntry): string {
@@ -33,6 +34,7 @@ export default function UnifiedListView({ entries, onEntryClick }: UnifiedListVi
     training: t('typeTraining'),
     closure: t('typeClosure'),
     event: t('typeEvent'),
+    hall: t('typeHall'),
   }
   const grouped = useMemo(() => {
     const groups: { dateKey: string; label: string; entries: CalendarEntry[] }[] = []

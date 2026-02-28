@@ -62,7 +62,7 @@ export default function AttendanceRow({
             key={opt.value}
             onClick={() => canEdit && onStatusChange(member.id, opt.value)}
             disabled={!canEdit}
-            className={`rounded-lg px-3 py-2 text-base transition-colors sm:px-2 sm:py-1 sm:text-sm ${
+            className={`min-h-[44px] rounded-lg px-3 py-2 text-base transition-colors sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm ${
               currentStatus === opt.value
                 ? `${opt.color} ring-2 ring-offset-1 ring-gray-400`
                 : canEdit

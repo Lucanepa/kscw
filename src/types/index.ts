@@ -151,6 +151,17 @@ export interface Event extends RecordModel {
   created_by: string
 }
 
+export interface HallEvent extends RecordModel {
+  uid: string
+  title: string
+  date: string
+  start_time: string
+  end_time: string
+  location: string
+  all_day: boolean
+  source: string
+}
+
 export interface Participation extends RecordModel {
   member: string
   activity_type: 'training' | 'game' | 'event'

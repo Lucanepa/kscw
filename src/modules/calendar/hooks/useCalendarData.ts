@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { usePB } from '../../../hooks/usePB'
-import type { Game, Training, Event, HallClosure, Team } from '../../../types'
+import type { Game, Training, Event, HallClosure, HallEvent, Team } from '../../../types'
 import type { CalendarEntry, CalendarFilterState } from '../../../types/calendar'
 import {
   parseDate,
@@ -106,14 +106,34 @@ function closureToEntries(closure: HallClosure): CalendarEntry[] {
   }))
 }
 
+function hallEventToEntry(he: HallEvent): CalendarEntry {
+  return {
+    id: he.id,
+    type: 'hall',
+    title: he.title,
+    date: parseDate(he.date),
+    startTime: he.start_time || null,
+    endTime: he.end_time || null,
+    allDay: he.all_day,
+    location: he.location ?? '',
+    teamNames: [],
+    description: '',
+    source: he,
+  }
+}
+
 export function useCalendarData({ filters, month, enabled = true }: UseCalendarDataOptions) {
   const monthStart = format(startOfMonth(month), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(month), 'yyyy-MM-dd')
 
-  const fetchGames = enabled && (filters.sources.length === 0 || filters.sources.includes('game'))
-  const fetchTrainings = enabled && (filters.sources.length === 0 || filters.sources.includes('training'))
-  const fetchClosures = enabled && (filters.sources.length === 0 || filters.sources.includes('closure'))
-  const fetchEvents = enabled && (filters.sources.length === 0 || filters.sources.includes('event'))
+  const noSourceFilter = filters.sources.length === 0
+  const wantHome = noSourceFilter || filters.sources.includes('game-home')
+  const wantAway = noSourceFilter || filters.sources.includes('game-away')
+  const fetchGames = enabled && (wantHome || wantAway)
+  const fetchTrainings = enabled && (noSourceFilter || filters.sources.includes('training'))
+  const fetchClosures = enabled && (noSourceFilter || filters.sources.includes('closure'))
+  const fetchEvents = enabled && (noSourceFilter || filters.sources.includes('event'))
+  const fetchHallEvents = enabled && (noSourceFilter || filters.sources.includes('hall'))
 
   const { data: games, isLoading: gamesLoading } = usePB<Game>('games', {
     enabled: fetchGames,
@@ -153,10 +173,28 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
     all: true,
   })
 
+  const { data: hallEvents, isLoading: hallEventsLoading } = usePB<HallEvent>('hall_events', {
+    enabled: fetchHallEvents,
+    filter: buildDateFilter('date', monthStart, monthEnd),
+    sort: 'date,start_time',
+    all: true,
+  })
+
   const entries = useMemo(() => {
     const all: CalendarEntry[] = []
 
-    if (fetchGames) all.push(...games.map(gameToEntry))
+    if (fetchGames) {
+      for (const g of games) {
+        const entry = gameToEntry(g)
+        if (wantHome && wantAway) {
+          all.push(entry)
+        } else if (wantHome && entry.gameType === 'home') {
+          all.push(entry)
+        } else if (wantAway && entry.gameType === 'away') {
+          all.push(entry)
+        }
+      }
+    }
     if (fetchTrainings) all.push(...trainings.map(trainingToEntry))
     if (fetchEvents) all.push(...events.map(eventToEntry))
     if (fetchClosures) {
@@ -164,6 +202,7 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
         all.push(...closureToEntries(c))
       }
     }
+    if (fetchHallEvents) all.push(...hallEvents.map(hallEventToEntry))
 
     all.sort((a, b) => {
       const dateCmp = toDateKey(a.date).localeCompare(toDateKey(b.date))
@@ -174,7 +213,7 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
     })
 
     return all
-  }, [games, trainings, events, closuresRaw, fetchGames, fetchTrainings, fetchEvents, fetchClosures])
+  }, [games, trainings, events, closuresRaw, hallEvents, fetchGames, fetchTrainings, fetchEvents, fetchClosures, fetchHallEvents, wantHome, wantAway])
 
   const closedDates = useMemo(() => {
     const dates = new Set<string>()
@@ -191,7 +230,7 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
   return {
     entries,
     closedDates,
-    isLoading: gamesLoading || trainingsLoading || closuresLoading || eventsLoading,
+    isLoading: gamesLoading || trainingsLoading || closuresLoading || eventsLoading || hallEventsLoading,
     error: null,
   }
 }

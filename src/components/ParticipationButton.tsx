@@ -32,7 +32,7 @@ export default function ParticipationButton({
   if (hasAbsence) {
     const cfg = statusConfig.absent
     return (
-      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+      <span className={`inline-flex min-h-[44px] items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium sm:min-h-0 ${cfg.bg} ${cfg.text}`}>
         {cfg.icon} {!compact && cfg.label}
       </span>
     )
@@ -49,7 +49,7 @@ export default function ParticipationButton({
     <div className="relative">
       <button
         onClick={() => setMenuOpen(!menuOpen)}
-        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`inline-flex min-h-[44px] items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors sm:min-h-0 ${
           currentConfig
             ? `${currentConfig.bg} ${currentConfig.text}`
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
@@ -74,7 +74,7 @@ export default function ParticipationButton({
                 <button
                   key={status}
                   onClick={() => handleSelect(status)}
-                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                  className={`flex w-full items-center gap-2 px-3 py-3 text-left text-sm transition-colors hover:bg-gray-100 sm:py-2 dark:hover:bg-gray-700 ${
                     effectiveStatus === status ? 'font-medium' : ''
                   } ${cfg.text}`}
                 >

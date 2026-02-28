@@ -29,6 +29,7 @@ export default function CalendarEntryModal({ entry, onClose }: CalendarEntryModa
     training: t('typeTraining'),
     closure: t('typeClosure'),
     event: t('typeEvent'),
+    hall: t('typeHall'),
   }
 
   const typeBadgeStyles: Record<CalendarEntry['type'], string> = {
@@ -36,6 +37,7 @@ export default function CalendarEntryModal({ entry, onClose }: CalendarEntryModa
     training: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
     closure: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
     event: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+    hall: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
   }
 
   const dateStr = formatDate(entry.date, 'EEEE, MMMM d, yyyy')
