@@ -11,6 +11,7 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 
 ## Key Patterns
 - **Mobile-first**: All UI must be designed mobile-first — responsive layout, touch-friendly targets (min 44px), and tested on small screens before desktop
+- **Hallenplan virtual slots**: Games, trainings, and GCal hall events are converted to `HallSlot`-shaped objects at display time (via `_virtual` metadata field) and merged with real `hall_slots`. They're never stored in the DB. See `INFRA.md → Hallenplan Virtual Slots` for the full mapping table.
 - PocketBase hooks use isolated scopes — shared code must use `require(__hooks + "/file.js")` with `module.exports`
 - `pb_hooks/` is gitignored (contains API keys) — deployed separately via SSH/rsync
 - `.env` is gitignored — Cloudflare Pages env vars handle production config
@@ -31,5 +32,5 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 
 ## Changelog
 <!-- Newest entries on top. Overwrite old entries when they become redundant. -->
-- **2026-02-28** — Calendar: home/away color differentiation (brand/amber). Away hall sync now includes street number + plus_code for Google Maps links. "+N" overflow in month view opens day popup modal. Added mobile-first rule to CLAUDE.md.
-- **2026-02-28** — Added `away_hall_json` (JSON field) to games collection for away venue data without DB records. Updated GameCard + GameDetailModal to show venue for both home/away games. Widened detail modal labels (`w-28`), increased team name font. Added PocketBase Admin API rules to CLAUDE.md. Replaced theme/language toggles with icon-based SwitchToggle (flags). Vite dev port → 1234.
+- **2026-02-28** — Hallenplan virtual slots: games (home+away), trainings, and GCal hall events now appear as virtual slots in the Hallenplan grid. Dashed border + auto icon for visual differentiation. Away games show striped pattern. VirtualSlotDetailModal for read-only details. GCal "Halle HW" integration (hall_events collection, gcal_sync hooks, cyan filter chip). iCal subscribe/export modal with preset + team filters.
+- **2026-02-28** — Calendar: home/away color differentiation (brand/amber). Away hall sync, "+N" overflow modal. `away_hall_json` for away venues. Icon-based toggles. Vite dev port → 1234.

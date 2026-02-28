@@ -10,8 +10,9 @@ import DayNavigation from '../hallenplan/components/DayNavigation'
 import DaySlotView from '../hallenplan/components/DaySlotView'
 import SlotEditor from '../hallenplan/components/SlotEditor'
 import ClosureManager from '../hallenplan/components/ClosureManager'
+import VirtualSlotDetailModal from '../hallenplan/components/VirtualSlotDetailModal'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import type { HallSlot, HallClosure } from '../../types'
+import type { HallSlot, HallClosure, Game, Training, HallEvent } from '../../types'
 
 function getTodayDayIndex(): number {
   const dow = new Date().getDay()
@@ -29,11 +30,13 @@ export default function HallenplanView() {
   const [editingSlot, setEditingSlot] = useState<HallSlot | null>(null)
   const [prefill, setPrefill] = useState<{ day: number; time: string; hall: string } | null>(null)
   const [closureManagerOpen, setClosureManagerOpen] = useState(false)
+  const [virtualDetailSlot, setVirtualDetailSlot] = useState<HallSlot | null>(null)
 
-  const { halls, teams, slots, closures, isLoading, refetch } = useHallenplanData(
+  const { halls, teams, slots, rawSlots, closures, isLoading, refetch } = useHallenplanData(
     selectedHallId,
     mondayStr,
     sundayStr,
+    weekDays,
   )
 
   const handleRealtimeUpdate = useCallback(() => {
@@ -42,8 +45,15 @@ export default function HallenplanView() {
 
   useRealtime<HallSlot>('hall_slots', handleRealtimeUpdate)
   useRealtime<HallClosure>('hall_closures', handleRealtimeUpdate)
+  useRealtime<Game>('games', handleRealtimeUpdate)
+  useRealtime<Training>('trainings', handleRealtimeUpdate)
+  useRealtime<HallEvent>('hall_events', handleRealtimeUpdate)
 
   function handleSlotClick(slot: HallSlot) {
+    if (slot._virtual) {
+      setVirtualDetailSlot(slot)
+      return
+    }
     if (!isAdmin) return
     setEditingSlot(slot)
     setPrefill(null)
@@ -139,7 +149,7 @@ export default function HallenplanView() {
           prefill={prefill}
           halls={halls}
           teams={teams}
-          allSlots={slots}
+          allSlots={rawSlots}
           onClose={handleEditorClose}
           onSaved={refetch}
         />
@@ -151,6 +161,15 @@ export default function HallenplanView() {
           closures={closures}
           onClose={() => setClosureManagerOpen(false)}
           onChanged={refetch}
+        />
+      )}
+
+      {virtualDetailSlot && (
+        <VirtualSlotDetailModal
+          slot={virtualDetailSlot}
+          halls={halls}
+          teams={teams}
+          onClose={() => setVirtualDetailSlot(null)}
         />
       )}
     </>

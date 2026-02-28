@@ -43,18 +43,27 @@ export interface Hall extends RecordModel {
   homologation: boolean
 }
 
+export interface VirtualSlotMeta {
+  source: 'game' | 'training' | 'hall_event'
+  sourceId: string
+  sourceRecord: Game | Training | HallEvent
+  isAway?: boolean
+  isCancelled?: boolean
+}
+
 export interface HallSlot extends RecordModel {
   hall: string
   team: string
   day_of_week: number
   start_time: string
   end_time: string
-  slot_type: 'training' | 'game' | 'event' | 'other'
+  slot_type: 'training' | 'game' | 'event' | 'away' | 'other'
   recurring: boolean
   valid_from: string
   valid_until: string
   label: string
   notes: string
+  _virtual?: VirtualSlotMeta
 }
 
 export interface HallClosure extends RecordModel {

@@ -1,12 +1,15 @@
 import { timeToMinutes } from '../../../utils/dateHelpers'
+import type { VirtualSlotMeta } from '../../../types'
 
 export interface SlotCandidate {
   hall: string
+  team?: string
   day_of_week: number
   start_time: string
   end_time: string
   valid_from: string
   valid_until: string
+  _virtual?: VirtualSlotMeta
 }
 
 /**
@@ -72,6 +75,9 @@ export function buildConflictSet<T extends SlotCandidate & { id: string }>(slots
       if (a.hall !== b.hall) continue
       if (a.day_of_week !== b.day_of_week) continue
       if (!timesOverlap(a.start_time, a.end_time, b.start_time, b.end_time)) continue
+      // Skip: don't flag conflicts between two virtual slots of the same team
+      // (a game naturally replaces training for that team)
+      if (a._virtual && b._virtual && a.team && a.team === b.team) continue
       conflicting.add(a.id)
       conflicting.add(b.id)
     }
