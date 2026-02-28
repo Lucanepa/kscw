@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
@@ -7,6 +7,7 @@ import { useIsDesktop } from '../hooks/useMediaQuery'
 import { getFileUrl } from '../utils/pbFile'
 import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
+import PrivacyNotice from './PrivacyNotice'
 import SwitchToggle from './SwitchToggle'
 
 function useNavItems(isLoggedIn: boolean) {
@@ -28,17 +29,20 @@ function useNavItems(isLoggedIn: boolean) {
     adminItems: [
       { to: '/admin/spielplanung', label: t('gameplan'), icon: '📋' },
     ],
+    superadminItems: [
+      { to: '/admin/database', label: t('manageDb'), icon: '🗄️' },
+    ],
   }
 }
 
 export default function Layout() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const { user, isAdmin, logout } = useAuth()
+  const { user, isAdmin, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
   const isDesktop = useIsDesktop()
-  const { navItems, adminItems } = useNavItems(!!user)
+  const { navItems, adminItems, superadminItems } = useNavItems(!!user)
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -131,6 +135,43 @@ export default function Layout() {
                   </p>
                   <ul className="space-y-1">
                     {adminItems.map((item) => (
+                      <li key={item.to}>
+                        <NavLink
+                          to={item.to}
+                          onClick={() => setSidebarExpanded(false)}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                              theme === 'light'
+                                ? isActive
+                                  ? 'bg-brand-50 text-brand-700'
+                                  : 'text-gray-700 hover:bg-gray-100'
+                                : isActive
+                                  ? 'border-l-2 border-gold-400 bg-brand-800 text-gold-400'
+                                  : 'text-gray-300 hover:bg-brand-800 hover:text-white'
+                            }`
+                          }
+                        >
+                          <span>{item.icon}</span>
+                          {item.label}
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {isSuperAdmin && (
+                <>
+                  <div className={`my-3 border-t ${
+                    theme === 'light' ? 'border-gray-200' : 'border-brand-800'
+                  }`} />
+                  <p className={`mb-1 px-3 text-xs font-semibold uppercase tracking-wider ${
+                    theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    {t('superadmin')}
+                  </p>
+                  <ul className="space-y-1">
+                    {superadminItems.map((item) => (
                       <li key={item.to}>
                         <NavLink
                           to={item.to}
@@ -272,6 +313,15 @@ export default function Layout() {
           !isDesktop ? 'pb-24' : ''
         }`}>
           <Outlet />
+          <footer className="mt-8 border-t border-gray-200 pt-4 pb-2 text-center text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
+            <Link to="/datenschutz" className="hover:text-gray-600 dark:hover:text-gray-300">
+              {t('privacy')}
+            </Link>
+            <span className="mx-2">·</span>
+            <Link to="/impressum" className="hover:text-gray-600 dark:hover:text-gray-300">
+              {t('impressum')}
+            </Link>
+          </footer>
         </main>
       </div>
 
@@ -285,6 +335,8 @@ export default function Layout() {
 
       {/* More sheet */}
       {moreOpen && <MoreSheet onClose={() => setMoreOpen(false)} />}
+
+      <PrivacyNotice />
     </div>
   )
 }

@@ -50,7 +50,7 @@ interface MoreSheetProps {
 }
 
 export default function MoreSheet({ onClose }: MoreSheetProps) {
-  const { user, isAdmin, logout } = useAuth()
+  const { user, isAdmin, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
 
@@ -116,6 +116,31 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
               >
                 {adminItem.icon}
                 {t(adminItem.labelKey)}
+              </NavLink>
+            </>
+          )}
+
+          {isSuperAdmin && (
+            <>
+              <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
+              <p className="mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {t('superadmin')}
+              </p>
+              <NavLink
+                to="/admin/database"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `flex min-h-[48px] items-center gap-4 rounded-lg px-4 py-3 text-base font-medium transition-colors ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/50 dark:text-gold-400'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`
+                }
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                </svg>
+                {t('manageDb')}
               </NavLink>
             </>
           )}

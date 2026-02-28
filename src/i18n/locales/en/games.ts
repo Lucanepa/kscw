@@ -41,7 +41,7 @@ export default {
   home: 'Home',
   away: 'Away',
   referees: 'Referees',
-  scorerDuties: 'Scorer duties',
+  scorerDuties: 'Scorer(s)',
   scorer: 'Scorer',
   referee: 'Referee',
   referee1st: '1st Referee',

@@ -10,7 +10,7 @@ export default {
   dataCollectedTitle: '2. Welche Daten wir erheben',
   dataAccountTitle: 'Kontodaten (bei Registrierung)',
   dataAccountText:
-    'Bei der Registrierung als Vereinsmitglied erfassen wir: Name, E-Mail-Adresse, Telefonnummer, Geburtsdatum, Foto, Lizenznummer, Trikotnummer und Position.',
+    'Bei der Registrierung als Vereinsmitglied erfassen wir: Name, E-Mail-Adresse, Telefonnummer und Geburtsdatum. Profilfotos werden von den Mitgliedern selbst hochgeladen und verwaltet. Lizenznummer, Position und Teamzugehörigkeit werden durch Trainer oder den Vorstand zugewiesen.',
   dataRosterTitle: 'Kaderdaten (öffentlich)',
   dataRosterText:
     'Auf den öffentlich zugänglichen Teamseiten werden Name, Trikotnummer, Position und Foto der Spielerinnen und Spieler angezeigt. Diese Angaben entsprechen den Daten, die auch von Swiss Volley öffentlich publiziert werden.',
@@ -29,7 +29,7 @@ export default {
   legalBasisInterest:
     'Berechtigtes Interesse — für die öffentliche Darstellung von Teamkadern, wie es im Vereinssport üblich und von den Mitgliedern erwartet wird.',
   legalBasisConsent:
-    'Einwilligung — für die Veröffentlichung von Fotos auf der Website.',
+    'Einwilligung — Mitglieder laden ihr Profilfoto selbst hoch und können es jederzeit ändern oder entfernen.',
 
   thirdPartyTitle: '4. Drittanbieter',
   thirdPartyCloudflare:
@@ -59,7 +59,7 @@ export default {
 
   photosTitle: '7. Fotos',
   photosText:
-    'Team- und Spielerfotos werden von Trainern oder dem Vorstand hochgeladen. Wenn Sie die Entfernung Ihres Fotos wünschen, wenden Sie sich an den Vorstand.',
+    'Spielerfotos werden von den Mitgliedern selbst über ihr Profil hochgeladen und können jederzeit geändert oder entfernt werden. Hochgeladene Fotos sind auf den öffentlichen Teamseiten sichtbar.',
 
   changesTitle: '8. Änderungen',
   changesText:
@@ -78,4 +78,8 @@ export default {
   impressumDisclaimer: 'Haftungsausschluss',
   impressumDisclaimerText:
     'Der KSC Wiedikon übernimmt keine Gewähr für die Richtigkeit, Vollständigkeit und Aktualität der bereitgestellten Informationen. Haftungsansprüche gegen den KSC Wiedikon, die sich auf Schäden materieller oder ideeller Art beziehen, sind grundsätzlich ausgeschlossen.',
+
+  // Privacy notice bar
+  noticeCookies: 'Diese Website verwendet keine Tracking-Cookies.',
+  noticeLink: 'Mehr erfahren',
 } as const

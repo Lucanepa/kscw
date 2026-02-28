@@ -178,31 +178,6 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Next games */}
-          <div>
-            <SectionHeader
-              title={t('nextGames')}
-              linkTo="/games"
-              linkLabel={t('allGames')}
-              filterToggle={hasTeams ? {
-                active: !showAllGames,
-                label: t('myTeams'),
-                onToggle: () => setShowAllGames((v) => !v),
-              } : undefined}
-            />
-            {gamesLoading ? (
-              <LoadingSpinner />
-            ) : nextGames.length === 0 ? (
-              <EmptyCard message={t('noUpcoming')} />
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-                {nextGames.map((g) => (
-                  <CompactGameRow key={g.id} game={g} showScore={false} onClick={() => setSelectedGame(g)} />
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Latest results */}
           <div>
             <SectionHeader
@@ -223,6 +198,31 @@ export default function HomePage() {
               <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
                 {latestResults.map((g) => (
                   <CompactGameRow key={g.id} game={g} showScore onClick={() => setSelectedGame(g)} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Next games */}
+          <div>
+            <SectionHeader
+              title={t('nextGames')}
+              linkTo="/games"
+              linkLabel={t('allGames')}
+              filterToggle={hasTeams ? {
+                active: !showAllGames,
+                label: t('myTeams'),
+                onToggle: () => setShowAllGames((v) => !v),
+              } : undefined}
+            />
+            {gamesLoading ? (
+              <LoadingSpinner />
+            ) : nextGames.length === 0 ? (
+              <EmptyCard message={t('noUpcoming')} />
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                {nextGames.map((g) => (
+                  <CompactGameRow key={g.id} game={g} showScore={false} onClick={() => setSelectedGame(g)} />
                 ))}
               </div>
             )}

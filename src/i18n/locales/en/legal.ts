@@ -10,7 +10,7 @@ export default {
   dataCollectedTitle: '2. Data We Collect',
   dataAccountTitle: 'Account data (upon registration)',
   dataAccountText:
-    'When registering as a club member, we collect: name, email address, phone number, date of birth, photo, license number, jersey number, and position.',
+    'When registering as a club member, we collect: name, email address, phone number, and date of birth. Profile photos are uploaded and managed by members themselves. License number, position, and team assignment are set by coaches or the board.',
   dataRosterTitle: 'Roster data (public)',
   dataRosterText:
     'On the publicly accessible team pages, player names, jersey numbers, positions, and photos are displayed. This information corresponds to data also published publicly by Swiss Volley.',
@@ -29,7 +29,7 @@ export default {
   legalBasisInterest:
     'Legitimate interest — for the public display of team rosters, as is customary in club sports and expected by members.',
   legalBasisConsent:
-    'Consent — for the publication of photos on the website.',
+    'Consent — Members upload their own profile photo and can change or remove it at any time.',
 
   thirdPartyTitle: '4. Third-Party Services',
   thirdPartyCloudflare:
@@ -59,7 +59,7 @@ export default {
 
   photosTitle: '7. Photos',
   photosText:
-    'Team and player photos are uploaded by coaches or the board. If you wish to have your photo removed, please contact the board.',
+    'Player photos are uploaded by members themselves via their profile and can be changed or removed at any time. Uploaded photos are visible on the public team pages.',
 
   changesTitle: '8. Changes',
   changesText:
@@ -78,4 +78,8 @@ export default {
   impressumDisclaimer: 'Disclaimer',
   impressumDisclaimerText:
     'KSC Wiedikon assumes no liability for the accuracy, completeness, or timeliness of the information provided. Liability claims against KSC Wiedikon relating to material or immaterial damages are generally excluded.',
+
+  // Privacy notice bar
+  noticeCookies: 'This website does not use tracking cookies.',
+  noticeLink: 'Learn more',
 } as const

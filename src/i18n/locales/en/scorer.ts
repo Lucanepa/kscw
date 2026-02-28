@@ -1,5 +1,5 @@
 export default {
-  title: 'Scorer Duties',
+  title: 'Scorer duty',
   subtitle: 'Manage scorer and referee assignments for home games.',
 
   // Tabs
