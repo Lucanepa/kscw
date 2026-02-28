@@ -13,7 +13,10 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 
 function buildTeamFilter(teams: string[]): string {
   if (teams.length === 0) return ''
-  const clauses = teams.map((t) => `kscw_team.name ~ "${t}"`)
+  // Match team code in home_team or away_team (e.g. "KSC Wiedikon H1", "KSC Wiedikon DU23-1")
+  const clauses = teams.map(
+    (t) => `(home_team ~ "Wiedikon ${t}" || away_team ~ "Wiedikon ${t}")`,
+  )
   return `(${clauses.join(' || ')})`
 }
 
@@ -66,6 +69,8 @@ export default function GamesPage() {
   const leagueGroups = useMemo(() => {
     const grouped = new Map<string, SvRanking[]>()
     for (const r of allRankings) {
+      // Skip individual match groups (e.g. "Group 28007") — not real league standings
+      if (/^Group \d+$/.test(r.league)) continue
       const existing = grouped.get(r.league) ?? []
       existing.push(r)
       grouped.set(r.league, existing)

@@ -30,6 +30,13 @@ export default {
   address: 'Address',
   map: 'Map',
   round: 'Round',
+  season: 'Season',
+  gameType: 'Type',
+  typeHome: 'Home game',
+  typeAway: 'Away game',
+  source: 'Source',
+  sourceSwissVolley: 'Swiss Volley',
+  sourceManual: 'Manual',
   set: 'Set',
   home: 'Home',
   away: 'Away',
@@ -37,6 +44,8 @@ export default {
   scorer: 'Scorer',
   referee: 'Referee',
   confirmed: 'Confirmed',
+  gameInfo: 'Game info',
+  venue: 'Venue',
 
   // Empty states
   noUpcoming: 'No upcoming games',

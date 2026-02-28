@@ -161,33 +161,45 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
           )}
         </div>
 
-        {/* Details */}
+        {/* Game info */}
         <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            {t('gameInfo')}
+          </h4>
           <DetailRow label={t('date')} value={dateStr} />
           <DetailRow label={t('kickoff')} value={game.time || '–'} />
-          {hall && (
-            <>
-              <DetailRow label={t('hallLabel')} value={hall.name} />
-              {hall.address && (
-                <DetailRow label={t('address')} value={`${hall.address}, ${hall.city || ''}`} />
-              )}
-              {hall.maps_url && (
-                <div className="flex items-start gap-3 text-sm">
-                  <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
-                  <a
-                    href={hall.maps_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-brand-600 hover:underline"
-                  >
-                    Google Maps
-                  </a>
-                </div>
-              )}
-            </>
-          )}
           <DetailRow label={t('common:status')} value={statusLabel(game.status)} />
+          <DetailRow label={t('gameType')} value={game.type === 'home' ? t('typeHome') : t('typeAway')} />
+          {game.round && <DetailRow label={t('round')} value={game.round} />}
+          {game.season && <DetailRow label={t('season')} value={game.season} />}
+          <DetailRow label={t('source')} value={game.source === 'swiss_volley' ? t('sourceSwissVolley') : t('sourceManual')} />
         </div>
+
+        {/* Venue */}
+        {hall && (
+          <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              {t('venue')}
+            </h4>
+            <DetailRow label={t('hallLabel')} value={hall.name} />
+            {hall.address && (
+              <DetailRow label={t('address')} value={[hall.address, hall.city].filter(Boolean).join(', ')} />
+            )}
+            {hall.maps_url && (
+              <div className="flex items-start gap-3 text-sm">
+                <span className="w-20 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
+                <a
+                  href={hall.maps_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-600 hover:underline dark:text-brand-400"
+                >
+                  Google Maps ↗
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Scorer / Täfeler */}
         {(game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
