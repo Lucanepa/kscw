@@ -15,6 +15,9 @@ dist-ssr
 # Environment
 .env
 
+# PocketBase hooks (deployed separately via rsync, may contain secrets)
+pb_hooks/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

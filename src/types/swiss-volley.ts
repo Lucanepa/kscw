@@ -13,6 +13,9 @@
 export interface SvApiGame {
   gameId: number
   playDate: string // "YYYY-MM-DD HH:mm:ss"
+  playDateUtc: string // "YYYY-MM-DDTHH:mm:ssZ"
+  gender: 'm' | 'w'
+  status: number
   teams: {
     home: SvApiTeam
     away: SvApiTeam
@@ -22,32 +25,56 @@ export interface SvApiGame {
   group: SvApiGroup
   hall: SvApiHall
   referees: Record<string, SvApiReferee>
-  setResults: Record<string, SvApiSetResult>
+  setResults: SvApiSetResult[] // array of per-set scores
+  goldenSetResult: unknown[]
   resultSummary: SvApiResultSummary
+  isPartOfBestOfSeries: boolean
+  bestOfSeriesResult: unknown | null
 }
 
 export interface SvApiTeam {
   teamId: number
+  seasonalTeamId: number
   caption: string
-  clubId: number
+  clubId: string
   clubCaption: string
+  logo: string
+  rank: number | null
 }
 
 export interface SvApiLeague {
   leagueId: number
+  season: number
+  leagueCategoryId: number
   caption: string
-  captionShort: string
-  season: string
+  translations: {
+    d: string
+    shortD: string
+    f: string
+    shortF: string
+  }
 }
 
 export interface SvApiPhase {
   phaseId: number
   caption: string
+  translations: {
+    d: string
+    shortD: string
+    f: string
+    shortF: string
+  }
 }
 
 export interface SvApiGroup {
   groupId: number
   caption: string
+  translations: {
+    d: string
+    shortD: string
+    f: string
+    shortF: string
+  }
 }
 
 export interface SvApiHall {
@@ -63,6 +90,7 @@ export interface SvApiHall {
 }
 
 export interface SvApiReferee {
+  refereeId: number
   firstName: string
   lastName: string
 }
@@ -75,18 +103,16 @@ export interface SvApiSetResult {
 export interface SvApiResultSummary {
   wonSetsHomeTeam: number
   wonSetsAwayTeam: number
-  winner: string // team caption or empty string
+  winner: string // "team_home" | "team_away" | ""
 }
 
 // ── GET /indoor/ranking ────────────────────────────────────────────
 
+/** Ranking groups only contain IDs — captions must be resolved from games data */
 export interface SvApiGroupRankings {
   leagueId: number
-  leagueCaption: string
   phaseId: number
-  phaseCaption: string
   groupId: number
-  groupCaption: string
   ranking: SvApiTeamRanking[]
 }
 
@@ -94,13 +120,18 @@ export interface SvApiTeamRanking {
   rank: number
   teamId: number
   teamCaption: string
-  clubCaption: string
+  isTalentOrganisationTeam: boolean
+  isTalentDevelopmentTeam: boolean
   games: number
+  points: number
   wins: number
+  winsClear: number
+  winsNarrow: number
   defeats: number
+  defeatsClear: number
+  defeatsNarrow: number
   setsWon: number
   setsLost: number
   ballsWon: number
   ballsLost: number
-  points: number
 }
