@@ -8,18 +8,21 @@ import { getFileUrl } from '../utils/pbFile'
 import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
 
-function useNavItems() {
+function useNavItems(isLoggedIn: boolean) {
   const { t } = useTranslation('nav')
+  const publicItems = [
+    { to: '/', label: t('calendar'), icon: '📅' },
+    { to: '/games', label: t('games'), icon: '🏆' },
+  ]
+  const authItems = [
+    { to: '/trainings', label: t('trainings'), icon: '🎯' },
+    { to: '/absences', label: t('absences'), icon: '👤' },
+    { to: '/scorer', label: t('scorer'), icon: '📝' },
+    { to: '/events', label: t('events'), icon: '🎉' },
+    { to: '/teams', label: t('teams'), icon: '👥' },
+  ]
   return {
-    navItems: [
-      { to: '/', label: t('calendar'), icon: '📅' },
-      { to: '/games', label: t('games'), icon: '🏆' },
-      { to: '/trainings', label: t('trainings'), icon: '🎯' },
-      { to: '/absences', label: t('absences'), icon: '👤' },
-      { to: '/scorer', label: t('scorer'), icon: '📝' },
-      { to: '/events', label: t('events'), icon: '🎉' },
-      { to: '/teams', label: t('teams'), icon: '👥' },
-    ],
+    navItems: isLoggedIn ? [...publicItems, ...authItems] : publicItems,
     adminItems: [
       { to: '/admin/spielplanung', label: t('gameplan'), icon: '📋' },
     ],
@@ -33,7 +36,7 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme()
   const { t } = useTranslation('nav')
   const isDesktop = useIsDesktop()
-  const { navItems, adminItems } = useNavItems()
+  const { navItems, adminItems } = useNavItems(!!user)
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">

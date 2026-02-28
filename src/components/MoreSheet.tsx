@@ -78,7 +78,7 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
 
         {/* Nav items */}
         <nav className="px-4 pb-2">
-          {secondaryItems.map((item) => (
+          {!user ? null : secondaryItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

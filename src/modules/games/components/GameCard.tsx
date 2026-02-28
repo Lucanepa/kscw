@@ -69,14 +69,14 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm">
-            <span className={game.type === 'home' ? 'font-semibold' : ''}>{game.home_team}</span>
-            <span className="text-gray-400">–</span>
-            <span className={game.type === 'away' ? 'font-semibold' : ''}>{game.away_team}</span>
+            <span className={`text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>{game.home_team}</span>
+            <span className="text-gray-400 dark:text-gray-500">–</span>
+            <span className={`text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>{game.away_team}</span>
           </div>
-          <div className="mt-0.5 text-xs text-gray-400">{game.league}</div>
+          <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{game.league}</div>
         </div>
         {game.status === 'completed' && (
-          <div className="shrink-0 text-right font-mono text-lg font-bold">
+          <div className="shrink-0 text-right font-mono text-lg font-bold text-gray-900 dark:text-white">
             {game.home_score}:{game.away_score}
           </div>
         )}
@@ -103,7 +103,7 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
         <div className="min-w-0 flex-1 text-right">
           <div className="flex items-center justify-end gap-2">
             {kscwTeamName && game.type === 'home' && <TeamChip team={kscwTeamName} size="sm" />}
-            <span className={`truncate text-sm ${game.type === 'home' ? 'font-semibold' : ''}`}>
+            <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'home' ? 'font-semibold' : ''}`}>
               {game.home_team}
             </span>
           </div>
@@ -111,19 +111,19 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
 
         {game.status === 'completed' || game.status === 'live' ? (
           <div className="shrink-0 text-center">
-            <div className="font-mono text-2xl font-bold leading-none">
+            <div className="font-mono text-2xl font-bold leading-none text-gray-900 dark:text-white">
               {game.home_score}
-              <span className="mx-1 text-gray-300">:</span>
+              <span className="mx-1 text-gray-400 dark:text-gray-500">:</span>
               {game.away_score}
             </div>
           </div>
         ) : (
-          <div className="shrink-0 px-3 text-center text-lg font-light text-gray-300">vs</div>
+          <div className="shrink-0 px-3 text-center text-lg font-light text-gray-400 dark:text-gray-500">vs</div>
         )}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`truncate text-sm ${game.type === 'away' ? 'font-semibold' : ''}`}>
+            <span className={`truncate text-sm text-gray-900 dark:text-gray-100 ${game.type === 'away' ? 'font-semibold' : ''}`}>
               {game.away_team}
             </span>
             {kscwTeamName && game.type === 'away' && <TeamChip team={kscwTeamName} size="sm" />}
@@ -132,7 +132,7 @@ export default function GameCard({ game, onClick, variant = 'card' }: GameCardPr
       </div>
 
       {/* Bottom: venue + status */}
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+      <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
         <span className="truncate">{hallName || game.round}</span>
         <StatusBadge status={game.status} />
       </div>
