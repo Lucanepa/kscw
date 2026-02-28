@@ -32,5 +32,6 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 
 ## Changelog
 <!-- Newest entries on top. Overwrite old entries when they become redundant. -->
-- **2026-02-28** — Hallenplan virtual slots: games (home+away), trainings, and GCal hall events now appear as virtual slots in the Hallenplan grid. Dashed border + auto icon for visual differentiation. Away games show striped pattern. VirtualSlotDetailModal for read-only details. GCal "Halle HW" integration (hall_events collection, gcal_sync hooks, cyan filter chip). iCal subscribe/export modal with preset + team filters.
-- **2026-02-28** — Calendar: home/away color differentiation (brand/amber). Away hall sync, "+N" overflow modal. `away_hall_json` for away venues. Icon-based toggles. Vite dev port → 1234.
+- **2026-02-28** — DB relations cleanup: added `hall` relation (multi) to `hall_events`, `hall` to `events`, `team` to `sv_rankings`. Deleted unused `users` collection. Updated GCal sync hook to auto-resolve hall IDs from title/location. Backfilled all 123 existing hall_events. Updated INFRA.md with full schema diagram.
+- **2026-02-28** — Hallenplan virtual slots: games (home+away), trainings, and GCal hall events as virtual slots. VirtualSlotDetailModal, iCal modal. GCal sync hooks.
+- **2026-02-28** — Calendar: home/away colors, away hall sync, `away_hall_json`, icon toggles, Vite dev port 1234.

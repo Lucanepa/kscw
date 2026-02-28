@@ -123,7 +123,7 @@ export default function DaySlotView({
               key={hall.id}
               className="border-r border-gray-100 px-1 py-1.5 text-center text-xs font-medium text-gray-600 last:border-r-0 dark:border-gray-800 dark:text-gray-400"
             >
-              {hall.name.replace(/^KWI /, '')}
+              {hall.name}
             </div>
           ))}
         </div>

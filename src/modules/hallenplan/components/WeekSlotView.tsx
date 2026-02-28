@@ -169,7 +169,7 @@ export default function WeekSlotView({
                     hi === visibleHalls.length - 1 ? 'border-r-gray-200 dark:border-r-gray-700' : ''
                   }`}
                 >
-                  {hall.name.replace(/^KWI /, '')}
+                  {hall.name}
                 </div>
               )),
             )}
