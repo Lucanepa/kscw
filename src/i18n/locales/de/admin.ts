@@ -1,0 +1,16 @@
+export default {
+  clubdeskDescription: 'CSV aus ClubDesk Admin exportieren und hier hochladen, um Volleyball-Mitglieder zu synchronisieren.',
+  dropCsv: 'CSV-Datei hier ablegen',
+  orClickToSelect: 'oder klicken zum Auswählen',
+  csvOnly: 'Nur CSV-Dateien sind erlaubt.',
+  startSync: 'Sync starten',
+  syncing: 'Synchronisiere...',
+  created: 'Erstellt',
+  updated: 'Aktualisiert',
+  skippedLabel: 'Übersprungen',
+  errorsLabel: 'Fehler',
+  details: 'Details',
+  nameLabel: 'Name',
+  actionLabel: 'Aktion',
+  info: 'Info',
+} as const

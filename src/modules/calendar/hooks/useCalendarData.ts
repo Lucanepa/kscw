@@ -17,8 +17,29 @@ interface UseCalendarDataOptions {
   enabled?: boolean
 }
 
-function buildDateFilter(field: string, monthStart: string, monthEnd: string): string {
-  return `${field} >= "${monthStart}" && ${field} <= "${monthEnd}"`
+/**
+ * Compute a wide fetch range: from 1 month before to 1 month after the current month.
+ * This lets month navigation stay instant (no re-fetch) for ±1 month.
+ * When the user navigates further, the range shifts and a single re-fetch occurs.
+ */
+function useFetchRange(month: Date) {
+  return useMemo(() => {
+    // Round to quarter boundaries: Jan/Apr/Jul/Oct
+    // This gives a stable 4-month window that only shifts every ~3 months of navigation
+    const m = month.getMonth()
+    const y = month.getFullYear()
+    const quarterStart = Math.floor(m / 4) * 4 // 0, 4, 8
+    const rangeStart = new Date(y, quarterStart - 1, 1) // 1 month before quarter
+    const rangeEnd = new Date(y, quarterStart + 5, 0) // end of month after quarter+3
+    return {
+      start: format(rangeStart, 'yyyy-MM-dd'),
+      end: format(rangeEnd, 'yyyy-MM-dd'),
+    }
+  }, [month])
+}
+
+function buildDateFilter(field: string, rangeStart: string, rangeEnd: string): string {
+  return `${field} >= "${rangeStart}" && ${field} <= "${rangeEnd}"`
 }
 
 function addTeamFilter(base: string, teamIds: string[], field: string): string {
@@ -123,8 +144,11 @@ function hallEventToEntry(he: HallEvent): CalendarEntry {
 }
 
 export function useCalendarData({ filters, month, enabled = true }: UseCalendarDataOptions) {
-  const monthStart = format(startOfMonth(month), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(month), 'yyyy-MM-dd')
+  // Fetch a wide range (stable ~6-month window) so month navigation is instant
+  const fetchRange = useFetchRange(month)
+
+  const monthStartDate = startOfMonth(month)
+  const monthEndDate = endOfMonth(month)
 
   const noSourceFilter = filters.sources.length === 0
   const wantHome = noSourceFilter || filters.sources.includes('game-home')
@@ -138,7 +162,7 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
   const { data: games, isLoading: gamesLoading } = usePB<Game>('games', {
     enabled: fetchGames,
     filter: addTeamFilter(
-      buildDateFilter('date', monthStart, monthEnd),
+      buildDateFilter('date', fetchRange.start, fetchRange.end),
       filters.selectedTeamIds,
       'kscw_team',
     ),
@@ -150,7 +174,7 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
   const { data: trainings, isLoading: trainingsLoading } = usePB<Training>('trainings', {
     enabled: fetchTrainings,
     filter: addTeamFilter(
-      buildDateFilter('date', monthStart, monthEnd),
+      buildDateFilter('date', fetchRange.start, fetchRange.end),
       filters.selectedTeamIds,
       'team',
     ),
@@ -161,25 +185,26 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
 
   const { data: closuresRaw, isLoading: closuresLoading } = usePB<HallClosure>('hall_closures', {
     enabled: fetchClosures,
-    filter: `start_date <= "${monthEnd}" && end_date >= "${monthStart}"`,
+    filter: `start_date <= "${fetchRange.end}" && end_date >= "${fetchRange.start}"`,
     expand: 'hall',
     all: true,
   })
 
   const { data: events, isLoading: eventsLoading } = usePB<Event>('events', {
     enabled: fetchEvents,
-    filter: buildDateFilter('start_date', monthStart, monthEnd),
+    filter: buildDateFilter('start_date', fetchRange.start, fetchRange.end),
     sort: 'start_date',
     all: true,
   })
 
   const { data: hallEvents, isLoading: hallEventsLoading } = usePB<HallEvent>('hall_events', {
     enabled: fetchHallEvents,
-    filter: buildDateFilter('date', monthStart, monthEnd),
+    filter: buildDateFilter('date', fetchRange.start, fetchRange.end),
     sort: 'date,start_time',
     all: true,
   })
 
+  // Build all entries from wide-range data, then filter to current month
   const entries = useMemo(() => {
     const all: CalendarEntry[] = []
 
@@ -204,7 +229,12 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
     }
     if (fetchHallEvents) all.push(...hallEvents.map(hallEventToEntry))
 
-    all.sort((a, b) => {
+    // Filter to current month client-side
+    const filtered = all.filter((entry) => {
+      return entry.date >= monthStartDate && entry.date <= monthEndDate
+    })
+
+    filtered.sort((a, b) => {
       const dateCmp = toDateKey(a.date).localeCompare(toDateKey(b.date))
       if (dateCmp !== 0) return dateCmp
       if (a.allDay && !b.allDay) return -1
@@ -212,8 +242,8 @@ export function useCalendarData({ filters, month, enabled = true }: UseCalendarD
       return (a.startTime ?? '').localeCompare(b.startTime ?? '')
     })
 
-    return all
-  }, [games, trainings, events, closuresRaw, hallEvents, fetchGames, fetchTrainings, fetchEvents, fetchClosures, fetchHallEvents, wantHome, wantAway])
+    return filtered
+  }, [games, trainings, events, closuresRaw, hallEvents, fetchGames, fetchTrainings, fetchEvents, fetchClosures, fetchHallEvents, wantHome, wantAway, monthStartDate, monthEndDate])
 
   const closedDates = useMemo(() => {
     const dates = new Set<string>()

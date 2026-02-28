@@ -15,6 +15,7 @@ import auth from './locales/en/auth'
 import events from './locales/en/events'
 import home from './locales/en/home'
 import legal from './locales/en/legal'
+import admin from './locales/en/admin'
 
 import deCommon from './locales/de/common'
 import deNav from './locales/de/nav'
@@ -30,6 +31,7 @@ import deAuth from './locales/de/auth'
 import deEvents from './locales/de/events'
 import deHome from './locales/de/home'
 import deLegal from './locales/de/legal'
+import deAdmin from './locales/de/admin'
 
 const savedLng = typeof window !== 'undefined'
   ? localStorage.getItem('kscw-lang') ?? 'de'
@@ -53,6 +55,7 @@ i18n.use(initReactI18next).init({
     'events',
     'home',
     'legal',
+    'admin',
   ],
   defaultNS: 'common',
   resources: {
@@ -71,6 +74,7 @@ i18n.use(initReactI18next).init({
       events,
       home,
       legal,
+      admin,
     },
     de: {
       common: deCommon,
@@ -87,6 +91,7 @@ i18n.use(initReactI18next).init({
       events: deEvents,
       home: deHome,
       legal: deLegal,
+      admin: deAdmin,
     },
   },
   interpolation: {

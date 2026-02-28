@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '../../components/Modal'
+import { useAuth } from '../../hooks/useAuth'
 import { useMutation } from '../../hooks/useMutation'
 import { usePB } from '../../hooks/usePB'
-import type { Training, Team, Hall, Member } from '../../types'
+import type { Training, Team, Hall, Member, MemberTeam } from '../../types'
+
+type MemberTeamExpanded = MemberTeam & { expand?: { member?: Member } }
 
 interface TrainingFormProps {
   open: boolean
@@ -16,14 +19,35 @@ export default function TrainingForm({ open, training, onSave, onCancel }: Train
   const { t } = useTranslation('trainings')
   const { t: tc } = useTranslation('common')
   const { create, update, isLoading } = useMutation<Training>('trainings')
+  const { isAdmin, coachTeamIds } = useAuth()
 
-  const { data: teams } = usePB<Team>('teams', { filter: 'active=true', sort: 'name', perPage: 50 })
+  const { data: allTeams } = usePB<Team>('teams', { filter: 'active=true', sort: 'name', perPage: 50 })
   const { data: halls } = usePB<Hall>('halls', { sort: 'name', perPage: 50 })
-  const { data: coaches } = usePB<Member>('members', {
-    filter: '(role="coach" || role="admin") && active=true',
-    sort: 'name',
-    perPage: 50,
+  const { data: coachMTs } = usePB<MemberTeamExpanded>('member_teams', {
+    filter: 'role="coach" || role="assistant"',
+    expand: 'member',
+    all: true,
   })
+
+  // Deduplicated list of coaches from member_teams
+  const coaches = useMemo(() => {
+    const seen = new Set<string>()
+    const list: Member[] = []
+    for (const mt of coachMTs) {
+      const m = mt.expand?.member
+      if (m && !seen.has(m.id)) {
+        seen.add(m.id)
+        list.push(m)
+      }
+    }
+    return list.sort((a, b) => a.name.localeCompare(b.name))
+  }, [coachMTs])
+
+  // Non-admin coaches only see their own teams
+  const teams = useMemo(
+    () => isAdmin ? allTeams : allTeams.filter((t) => coachTeamIds.includes(t.id)),
+    [isAdmin, allTeams, coachTeamIds],
+  )
 
   const [teamId, setTeamId] = useState('')
   const [date, setDate] = useState('')

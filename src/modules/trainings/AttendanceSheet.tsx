@@ -17,7 +17,7 @@ interface AttendanceSheetProps {
 
 export default function AttendanceSheet({ trainingId, teamId, onClose }: AttendanceSheetProps) {
   const { t } = useTranslation('trainings')
-  const { user, isCoach } = useAuth()
+  const { user, isCoachOf } = useAuth()
   const { members } = useTeamMembers(teamId ?? undefined)
   const { create, update } = useMutation<TrainingAttendance>('training_attendance')
 
@@ -110,7 +110,7 @@ export default function AttendanceSheet({ trainingId, teamId, onClose }: Attenda
           {memberList.map((member) => {
             const attendance = attendanceRecords.find((a) => a.member === member.id) ?? null
             const activeAbsence = absences.find((a) => a.member === member.id) ?? null
-            const canEdit = isCoach || member.id === user?.id
+            const canEdit = isCoachOf(teamId ?? '') || member.id === user?.id
 
             return (
               <AttendanceRow

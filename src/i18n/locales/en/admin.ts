@@ -1,0 +1,16 @@
+export default {
+  clubdeskDescription: 'Export CSV from ClubDesk admin and upload here to sync volleyball members.',
+  dropCsv: 'Drop CSV file here',
+  orClickToSelect: 'or click to select',
+  csvOnly: 'Only CSV files are allowed.',
+  startSync: 'Start sync',
+  syncing: 'Syncing...',
+  created: 'Created',
+  updated: 'Updated',
+  skippedLabel: 'Skipped',
+  errorsLabel: 'Errors',
+  details: 'Details',
+  nameLabel: 'Name',
+  actionLabel: 'Action',
+  info: 'Info',
+} as const

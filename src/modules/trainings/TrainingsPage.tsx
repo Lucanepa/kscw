@@ -21,7 +21,7 @@ type TrainingExpanded = Training & {
 
 export default function TrainingsPage() {
   const { t } = useTranslation('trainings')
-  const { isCoach } = useAuth()
+  const { isCoach, isCoachOf } = useAuth()
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'trainings' | 'dashboard'>('trainings')
   const [attendanceTraining, setAttendanceTraining] = useState<string | null>(null)
@@ -140,8 +140,8 @@ export default function TrainingsPage() {
                 key={training.id}
                 training={training}
                 onOpenAttendance={handleOpenAttendance}
-                onEdit={isCoach ? handleEdit : undefined}
-                onDelete={isCoach ? setDeletingId : undefined}
+                onEdit={isCoachOf(training.team) ? handleEdit : undefined}
+                onDelete={isCoachOf(training.team) ? setDeletingId : undefined}
               />
             ))}
           </div>

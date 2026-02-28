@@ -31,6 +31,7 @@ function useNavItems(isLoggedIn: boolean) {
     ],
     superadminItems: [
       { to: '/admin/database', label: t('manageDb'), icon: '🗄️' },
+      { to: '/admin/clubdesk-sync', label: t('clubdeskSync'), icon: '🔄' },
     ],
   }
 }

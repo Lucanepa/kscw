@@ -13,7 +13,7 @@ import type { Team } from '../../types'
 export default function TeamDetail() {
   const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
-  const { isCoach } = useAuth()
+  const { isCoachOf } = useAuth()
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
   const { members, isLoading: membersLoading } = useTeamMembers(teamId)
@@ -80,7 +80,7 @@ export default function TeamDetail() {
           </div>
         </div>
 
-        {isCoach && (
+        {isCoachOf(teamId ?? '') && (
           <Link
             to={`/teams/${teamId}/roster/edit`}
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
@@ -99,7 +99,7 @@ export default function TeamDetail() {
             title={t('noMembers')}
             description={t('noMembersDescription')}
             action={
-              isCoach ? (
+              isCoachOf(teamId ?? '') ? (
                 <Link
                   to={`/teams/${teamId}/roster/edit`}
                   className="text-sm text-brand-600 hover:text-brand-700"

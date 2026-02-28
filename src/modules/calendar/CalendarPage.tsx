@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import ViewToggle from '../../components/ViewToggle'
 import Modal from '../../components/Modal'
@@ -59,6 +59,11 @@ export default function CalendarPage() {
 
   const needsData = viewMode === 'month' || viewMode === 'list'
   const { entries, closedDates, isLoading } = useCalendarData({ filters: effectiveFilters, month, enabled: needsData })
+
+  // Only show full-page spinner on initial load, not on month navigation
+  const hasLoadedOnce = useRef(false)
+  if (!isLoading && needsData) hasLoadedOnce.current = true
+  const showSpinner = isLoading && !hasLoadedOnce.current
 
   function handleViewChange(v: string) {
     setViewMode(v as CalendarViewMode)
@@ -123,9 +128,9 @@ export default function CalendarPage() {
       {/* Views */}
       {viewMode === 'hallenplan' && <HallenplanView />}
 
-      {needsData && isLoading && <LoadingSpinner />}
+      {needsData && showSpinner && <LoadingSpinner />}
 
-      {needsData && !isLoading && (
+      {needsData && !showSpinner && (
         <div className="flex flex-1 flex-col">
           {viewMode === 'month' && (
             <UnifiedCalendarView

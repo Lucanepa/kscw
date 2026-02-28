@@ -17,7 +17,7 @@ type ExpandedMemberTeam = MemberTeam & { expand?: { team?: Team } }
 export default function PlayerProfile() {
   const { t } = useTranslation('teams')
   const { memberId } = useParams<{ memberId: string }>()
-  const { isCoach } = useAuth()
+  const { isCoachOf } = useAuth()
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -104,7 +104,7 @@ export default function PlayerProfile() {
             <span className="capitalize">{member.position}</span>
             {member.role.map((r) => <StatusBadge key={r} status={r} />)}
           </div>
-          {isCoach && (
+          {memberTeams.some((mt) => isCoachOf(mt.team)) && (
             <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
               {member.birthdate && (
                 <span>{t('age', { years: differenceInYears(new Date(), new Date(member.birthdate)) })}</span>

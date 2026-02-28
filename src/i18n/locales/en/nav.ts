@@ -21,4 +21,5 @@ export default {
   myProfile: 'My Profile',
   privacy: 'Privacy',
   impressum: 'Imprint',
+  clubdeskSync: 'ClubDesk Sync',
 } as const

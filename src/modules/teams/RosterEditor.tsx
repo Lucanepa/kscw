@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, Navigate } from 'react-router-dom'
 import pb from '../../pb'
+import { useAuth } from '../../hooks/useAuth'
 import { useTeamMembers } from '../../hooks/useTeamMembers'
 import { useMutation } from '../../hooks/useMutation'
 import { usePB } from '../../hooks/usePB'
@@ -15,6 +16,7 @@ import type { Team, Member, MemberTeam } from '../../types'
 export default function RosterEditor() {
   const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
+  const { isCoachOf } = useAuth()
   const season = getCurrentSeason()
   const { members, isLoading, refetch } = useTeamMembers(teamId, season)
   const { data: allMembers } = usePB<Member>('members', { filter: 'active=true', perPage: 500, sort: 'name' })
@@ -31,6 +33,10 @@ export default function RosterEditor() {
       .then(setTeam)
       .catch(() => setTeam(null))
   }, [teamId])
+
+  if (!isCoachOf(teamId ?? '')) {
+    return <Navigate to={`/teams/${teamId}`} replace />
+  }
 
   const rosterMemberIds = new Set(members.map((mt) => mt.member))
   const availableMembers = allMembers.filter(

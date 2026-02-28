@@ -142,6 +142,22 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
                 </svg>
                 {t('manageDb')}
               </NavLink>
+              <NavLink
+                to="/admin/clubdesk-sync"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `flex min-h-[48px] items-center gap-4 rounded-lg px-4 py-3 text-base font-medium transition-colors ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/50 dark:text-gold-400'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`
+                }
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.015 4.356v4.992" />
+                </svg>
+                {t('clubdeskSync')}
+              </NavLink>
             </>
           )}
         </nav>

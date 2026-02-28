@@ -2,7 +2,7 @@ import PocketBase from 'pocketbase'
 
 const PB_URL = process.env.PB_URL ?? 'https://kscw-api-dev.lucanepa.com'
 const PB_EMAIL = process.env.PB_EMAIL ?? 'admin@kscw.ch'
-const PB_PASSWORD = process.env.PB_PASSWORD ?? '@Bocconi13'
+const PB_PASSWORD = process.env.PB_PASSWORD ?? 'thamykscw_1972'
 
 const pb = new PocketBase(PB_URL)
 await pb.collection('_superusers').authWithPassword(PB_EMAIL, PB_PASSWORD)

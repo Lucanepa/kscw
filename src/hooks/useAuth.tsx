@@ -1,13 +1,21 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
 import type { RecordModel } from 'pocketbase'
 import pb from '../pb'
-import type { Member } from '../types'
+import type { Member, MemberTeam } from '../types'
+
+interface MyTeamRole {
+  teamId: string
+  role: MemberTeam['role']
+}
 
 interface AuthContextValue {
   user: (RecordModel & Member) | null
   isSuperAdmin: boolean
   isAdmin: boolean
   isCoach: boolean
+  isCoachOf: (teamId: string) => boolean
+  coachTeamIds: string[]
+  myTeamRoles: MyTeamRole[]
   isVorstand: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
@@ -21,7 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pb.authStore.record as (RecordModel & Member) | null,
   )
   const [isLoading, setIsLoading] = useState(true)
+  const [myTeamRoles, setMyTeamRoles] = useState<MyTeamRole[]>([])
 
+  // Auth refresh
   useEffect(() => {
     if (pb.authStore.isValid) {
       pb.collection('members').authRefresh()
@@ -38,6 +48,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe
   }, [])
 
+  // Fetch user's team roles from member_teams
+  useEffect(() => {
+    if (!user?.id) {
+      setMyTeamRoles([])
+      return
+    }
+
+    pb.collection('member_teams')
+      .getFullList<MemberTeam>({ filter: `member="${user.id}"` })
+      .then((records) => {
+        setMyTeamRoles(records.map((r) => ({ teamId: r.team, role: r.role })))
+      })
+      .catch(() => setMyTeamRoles([]))
+  }, [user?.id])
+
   const login = useCallback(async (email: string, password: string) => {
     await pb.collection('members').authWithPassword(email, password)
   }, [])
@@ -49,11 +74,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roles = user?.role ?? []
   const isSuperAdmin = roles.includes('superadmin')
   const isAdmin = roles.includes('admin') || isSuperAdmin
-  const isCoach = roles.includes('coach') || isAdmin
   const isVorstand = roles.includes('vorstand') || isAdmin
 
+  // Team-scoped coach: derived from member_teams, not members.role
+  const coachTeamIds = useMemo(
+    () => myTeamRoles
+      .filter((r) => r.role === 'coach' || r.role === 'assistant')
+      .map((r) => r.teamId),
+    [myTeamRoles],
+  )
+
+  const isCoach = coachTeamIds.length > 0 || isAdmin
+
+  const isCoachOf = useCallback(
+    (teamId: string) => isAdmin || coachTeamIds.includes(teamId),
+    [isAdmin, coachTeamIds],
+  )
+
   return (
-    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isCoach, isVorstand, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isCoach, isCoachOf, coachTeamIds, myTeamRoles, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
