@@ -13,6 +13,7 @@ import hallenplan from './locales/en/hallenplan'
 import spielplanung from './locales/en/spielplanung'
 import auth from './locales/en/auth'
 import events from './locales/en/events'
+import home from './locales/en/home'
 
 import deCommon from './locales/de/common'
 import deNav from './locales/de/nav'
@@ -26,6 +27,7 @@ import deHallenplan from './locales/de/hallenplan'
 import deSpielplanung from './locales/de/spielplanung'
 import deAuth from './locales/de/auth'
 import deEvents from './locales/de/events'
+import deHome from './locales/de/home'
 
 const savedLng = typeof window !== 'undefined'
   ? localStorage.getItem('kscw-lang') ?? 'de'
@@ -47,6 +49,7 @@ i18n.use(initReactI18next).init({
     'spielplanung',
     'auth',
     'events',
+    'home',
   ],
   defaultNS: 'common',
   resources: {
@@ -63,6 +66,7 @@ i18n.use(initReactI18next).init({
       spielplanung,
       auth,
       events,
+      home,
     },
     de: {
       common: deCommon,
@@ -77,6 +81,7 @@ i18n.use(initReactI18next).init({
       spielplanung: deSpielplanung,
       auth: deAuth,
       events: deEvents,
+      home: deHome,
     },
   },
   interpolation: {

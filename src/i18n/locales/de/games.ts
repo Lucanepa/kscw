@@ -48,6 +48,7 @@ export default {
   referee2nd: '2. Schiri',
   gameNumber: 'Spiel-Nr.',
   taefeler: 'Täfeler',
+  scorerTaefeler: 'Schreiber/Schiri',
   confirmed: 'Bestätigt',
   gameInfo: 'Spielinfo',
   venue: 'Spielort',

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
+import { differenceInYears } from 'date-fns'
 import pb from '../../pb'
 import { usePB } from '../../hooks/usePB'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,6 +15,7 @@ import type { Member, MemberTeam, Team, Absence, TrainingAttendance } from '../.
 type ExpandedMemberTeam = MemberTeam & { expand?: { team?: Team } }
 
 export default function PlayerProfile() {
+  const { t } = useTranslation('teams')
   const { memberId } = useParams<{ memberId: string }>()
   const { isCoach } = useAuth()
   const [member, setMember] = useState<Member | null>(null)
@@ -99,10 +102,16 @@ export default function PlayerProfile() {
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
             {member.number && <span>#{member.number}</span>}
             <span className="capitalize">{member.position}</span>
-            <StatusBadge status={member.role} />
+            {member.role.map((r) => <StatusBadge key={r} status={r} />)}
           </div>
           {isCoach && (
             <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
+              {member.birthdate && (
+                <span>{t('age', { years: differenceInYears(new Date(), new Date(member.birthdate)) })}</span>
+              )}
+              {!member.birthdate && member.yob > 0 && (
+                <span>{t('age', { years: new Date().getFullYear() - member.yob })}</span>
+              )}
               {member.email && <span>{member.email}</span>}
               {member.phone && <span>{member.phone}</span>}
               {member.license_nr && <span>License: {member.license_nr}</span>}

@@ -12,7 +12,8 @@ import SwitchToggle from './SwitchToggle'
 function useNavItems(isLoggedIn: boolean) {
   const { t } = useTranslation('nav')
   const publicItems = [
-    { to: '/', label: t('calendar'), icon: '📅' },
+    { to: '/', label: t('home'), icon: '🏠' },
+    { to: '/calendar', label: t('calendar'), icon: '📅' },
     { to: '/games', label: t('games'), icon: '🏆' },
   ]
   const authItems = [

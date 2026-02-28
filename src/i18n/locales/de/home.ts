@@ -1,0 +1,16 @@
+export default {
+  subtitle: 'Volleyball- und Basketballclub Zürich',
+  events: 'Events',
+  allEvents: 'Alle Events',
+  noEvents: 'Keine anstehenden Events.',
+  nextGames: 'Nächste Spiele',
+  allGames: 'Alle Spiele',
+  noUpcoming: 'Keine anstehenden Spiele.',
+  latestResults: 'Letzte Resultate',
+  allResults: 'Alle Resultate',
+  noResults: 'Noch keine Resultate.',
+  nextTrainings: 'Nächste Trainings',
+  allTrainings: 'Alle Trainings',
+  noTrainings: 'Keine anstehenden Trainings.',
+  myTeams: 'Meine Teams',
+} as const

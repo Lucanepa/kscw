@@ -1,4 +1,5 @@
 export default {
+  home: 'Home',
   calendar: 'Kalender',
   games: 'Spiele & Resultate',
   gamesShort: 'Spiele',

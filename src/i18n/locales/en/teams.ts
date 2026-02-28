@@ -32,6 +32,10 @@ export default {
   removeConfirmTitle: 'Remove player',
   removeConfirmMessage: 'Remove {{name}} from the roster?',
 
+  // Team detail
+  sponsors: 'Sponsors',
+  age: '{{years}} years',
+
   // Empty state
   noTeams: 'No teams',
   noTeamsDescription: 'No teams found.',

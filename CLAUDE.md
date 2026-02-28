@@ -32,6 +32,9 @@ All infrastructure details (IPs, URLs, ports, credentials, deploy commands) are 
 
 ## Changelog
 <!-- Newest entries on top. Overwrite old entries when they become redundant. -->
+- **2026-02-28** — Schreibereinsätze integration: added `scorer_licence` to members, 6 relation fields to games (`scorer_member`, `taefeler_member`, `scorer_taefeler_member`, `*_duty_team`), `scorer_edit_log` collection. Migrated 34 member licences + 77 game assignments from standalone app. Rewrote scorer module: relation-based AssignmentEditor, combined mode (Schreiber/Schiri), team overview tab, past games section, iCal export, audit logging. Updated GameDetailModal.
+- **2026-02-28** — Members/Teams schema expansion: added `birthdate`, `yob` to members; `team_picture`, `social_url`, `sponsors`, `sponsors_logos` to teams. Migrated 39 players (H3+D2) from Supabase `wiedikon_data` with photos. Updated TeamDetail (banner, social link, sponsors section), PlayerProfile (age display), TeamCard (background image). MinIO S3 storage setup documented in INFRA.md.
+- **2026-02-28** — HomePage: new public landing page at `/` with club logo, upcoming events (left), next 5 games + latest 5 results (right). CalendarPage moved to `/calendar`. Nav updated with Home + Calendar as separate entries in sidebar and bottom tab bar.
 - **2026-02-28** — DB relations cleanup: added `hall` relation (multi) to `hall_events`, `hall` to `events`, `team` to `sv_rankings`. Deleted unused `users` collection. Updated GCal sync hook to auto-resolve hall IDs from title/location. Backfilled all 123 existing hall_events. Updated INFRA.md with full schema diagram.
 - **2026-02-28** — Hallenplan virtual slots: games (home+away), trainings, and GCal hall events as virtual slots. VirtualSlotDetailModal, iCal modal. GCal sync hooks.
 - **2026-02-28** — Calendar: home/away colors, away hall sync, `away_hall_json`, icon toggles, Vite dev port 1234.

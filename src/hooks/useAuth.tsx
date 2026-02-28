@@ -45,9 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pb.authStore.clear()
   }, [])
 
-  const isAdmin = user?.role === 'admin'
-  const isCoach = user?.role === 'coach' || isAdmin
-  const isVorstand = user?.role === 'vorstand' || isAdmin
+  const roles = user?.role ?? []
+  const isAdmin = roles.includes('admin')
+  const isCoach = roles.includes('coach') || isAdmin
+  const isVorstand = roles.includes('vorstand') || isAdmin
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, isCoach, isVorstand, isLoading, login, logout }}>

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RecordModel } from 'pocketbase'
-import type { Game, Team, Hall } from '../../../types'
+import type { Game, Team, Hall, Member } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
 
 interface GameDetailModalProps {
@@ -13,6 +13,12 @@ type ExpandedGame = Game & {
   expand?: {
     kscw_team?: Team & RecordModel
     hall?: Hall & RecordModel
+    scorer_member?: Member & RecordModel
+    taefeler_member?: Member & RecordModel
+    scorer_taefeler_member?: Member & RecordModel
+    scorer_duty_team?: Team & RecordModel
+    taefeler_duty_team?: Team & RecordModel
+    scorer_taefeler_duty_team?: Team & RecordModel
   }
 }
 
@@ -215,22 +221,41 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
         )}
 
         {/* Scorer / Täfeler */}
-        {(game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
+        {(game.scorer_member || game.taefeler_member || game.scorer_taefeler_member ||
+          game.scorer_team || game.scorer_person || game.taefeler_team || game.taefeler_person) && (
           <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               {t('scorerDuties')}
             </h4>
-            {(game.scorer_team || game.scorer_person) && (
+            {expanded.expand?.scorer_taefeler_member ? (
               <DetailRow
-                label={t('scorer')}
-                value={[game.scorer_team, game.scorer_person].filter(Boolean).join(' — ')}
+                label={t('scorerTaefeler')}
+                value={[
+                  expanded.expand.scorer_taefeler_duty_team?.name,
+                  `${expanded.expand.scorer_taefeler_member.first_name} ${expanded.expand.scorer_taefeler_member.last_name}`,
+                ].filter(Boolean).join(' — ')}
               />
-            )}
-            {(game.taefeler_team || game.taefeler_person) && (
-              <DetailRow
-                label={t('taefeler')}
-                value={[game.taefeler_team, game.taefeler_person].filter(Boolean).join(' — ')}
-              />
+            ) : (
+              <>
+                {(expanded.expand?.scorer_member || game.scorer_team || game.scorer_person) && (
+                  <DetailRow
+                    label={t('scorer')}
+                    value={expanded.expand?.scorer_member
+                      ? [expanded.expand.scorer_duty_team?.name, `${expanded.expand.scorer_member.first_name} ${expanded.expand.scorer_member.last_name}`].filter(Boolean).join(' — ')
+                      : [game.scorer_team, game.scorer_person].filter(Boolean).join(' — ')
+                    }
+                  />
+                )}
+                {(expanded.expand?.taefeler_member || game.taefeler_team || game.taefeler_person) && (
+                  <DetailRow
+                    label={t('taefeler')}
+                    value={expanded.expand?.taefeler_member
+                      ? [expanded.expand.taefeler_duty_team?.name, `${expanded.expand.taefeler_member.first_name} ${expanded.expand.taefeler_member.last_name}`].filter(Boolean).join(' — ')
+                      : [game.taefeler_team, game.taefeler_person].filter(Boolean).join(' — ')
+                    }
+                  />
+                )}
+              </>
             )}
             <DetailRow
               label={t('confirmed')}

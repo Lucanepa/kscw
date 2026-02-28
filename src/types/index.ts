@@ -10,6 +10,10 @@ export interface Team extends RecordModel {
   color: string
   coach: string
   active: boolean
+  team_picture: string
+  social_url: string
+  sponsors: string[]
+  sponsors_logos: string[]
 }
 
 export interface Member extends RecordModel {
@@ -22,8 +26,11 @@ export interface Member extends RecordModel {
   number: number
   position: 'setter' | 'outside' | 'middle' | 'opposite' | 'libero' | 'coach' | 'other'
   photo: string
-  role: 'player' | 'coach' | 'vorstand' | 'admin'
+  role: ('player' | 'coach' | 'vorstand' | 'admin')[]
   active: boolean
+  birthdate: string
+  yob: number
+  scorer_licence: boolean
 }
 
 export interface MemberTeam extends RecordModel {
@@ -96,9 +103,24 @@ export interface Game extends RecordModel {
   scorer_person: string
   taefeler_team: string
   taefeler_person: string
+  scorer_member: string
+  taefeler_member: string
+  scorer_taefeler_member: string
+  scorer_duty_team: string
+  taefeler_duty_team: string
+  scorer_taefeler_duty_team: string
   duty_confirmed: boolean
   referees_json: Array<{ name: string; id?: number }>
   source: 'swiss_volley' | 'manual'
+}
+
+export interface ScorerEditLog extends RecordModel {
+  action: string
+  game: string
+  field_name: string
+  old_value: string
+  new_value: string
+  changed_by: string
 }
 
 export interface SvRanking extends RecordModel {

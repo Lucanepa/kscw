@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { ThemeProvider } from './hooks/useTheme'
 import Layout from './components/Layout'
@@ -9,6 +9,7 @@ import TrainingsPage from './modules/trainings/TrainingsPage'
 import AbsencesPage from './modules/absences/AbsencesPage'
 import ScorerPage from './modules/scorer/ScorerPage'
 import CalendarPage from './modules/calendar/CalendarPage'
+import HomePage from './modules/home/HomePage'
 import TeamsPage from './modules/teams/TeamsPage'
 import TeamDetail from './modules/teams/TeamDetail'
 import PlayerProfile from './modules/teams/PlayerProfile'
@@ -32,7 +33,8 @@ export default function App() {
           <Route path="signup" element={<SignUpPage />} />
 
           <Route element={<Layout />}>
-            <Route index element={<CalendarPage />} />
+            <Route index element={<HomePage />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="games" element={<GamesPage />} />
             <Route path="trainings" element={<TrainingsPage />} />
             <Route path="absences" element={<AbsencesPage />} />
@@ -44,8 +46,6 @@ export default function App() {
             <Route path="events" element={<EventsPage />} />
             <Route path="profile" element={<AuthRoute><ProfilePage /></AuthRoute>} />
             <Route path="admin/spielplanung" element={<AdminRoute><SpielplanungPage /></AdminRoute>} />
-            {/* Redirect old calendar route */}
-            <Route path="calendar" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>

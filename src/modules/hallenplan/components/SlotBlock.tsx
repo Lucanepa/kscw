@@ -44,8 +44,11 @@ export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, 
       }
     : undefined
 
-  // Compact mode: just colored box with team abbreviation
+  // Compact mode: colored box with team name + type label inside
   if (compact) {
+    const compactShowType = height >= 24 && slot.slot_type !== 'training'
+    const compactShowTime = height >= 36
+
     return (
       <div
         className={`absolute z-20 overflow-hidden rounded-sm border-l-2 ${borderStyle} px-0.5 py-px text-[9px] leading-tight shadow-sm ${
@@ -68,6 +71,16 @@ export default function SlotBlock({ positioned, teamName, hasConflict, isAdmin, 
         <span className={`truncate font-semibold ${isCancelled ? 'line-through' : ''}`}>
           {teamName || slot.label || typeLabels[slot.slot_type]}
         </span>
+        {compactShowType && (
+          <div className={`truncate opacity-80 ${isCancelled ? 'line-through' : ''}`}>
+            {typeLabels[slot.slot_type]}
+          </div>
+        )}
+        {compactShowTime && (
+          <div className={`truncate opacity-70 ${isCancelled ? 'line-through' : ''}`}>
+            {slot.start_time}–{slot.end_time}
+          </div>
+        )}
       </div>
     )
   }

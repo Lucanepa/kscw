@@ -1,0 +1,16 @@
+export default {
+  subtitle: 'since 1972',
+  events: 'Events',
+  allEvents: 'All events',
+  noEvents: 'No upcoming events.',
+  nextGames: 'Next Games',
+  allGames: 'All games',
+  noUpcoming: 'No upcoming games.',
+  latestResults: 'Latest Results',
+  allResults: 'All results',
+  noResults: 'No results yet.',
+  nextTrainings: 'Next Trainings',
+  allTrainings: 'All trainings',
+  noTrainings: 'No upcoming trainings.',
+  myTeams: 'My Teams',
+} as const

@@ -40,7 +40,7 @@ export default function SignUpPage() {
         email,
         password,
         passwordConfirm,
-        role: 'player',
+        role: ['player'],
         active: true,
       })
       await login(email, password)

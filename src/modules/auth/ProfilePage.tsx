@@ -90,7 +90,7 @@ export default function ProfilePage() {
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
             {user.number > 0 && <span>#{user.number}</span>}
             <span className="capitalize">{user.position}</span>
-            <StatusBadge status={user.role} />
+            {user.role.map((r) => <StatusBadge key={r} status={r} />)}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {memberTeams.map((mt) => (
