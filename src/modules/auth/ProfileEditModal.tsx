@@ -19,10 +19,13 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [number, setNumber] = useState<number>(0)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
 
   useEffect(() => {
     if (user && open) {
@@ -30,9 +33,12 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
       setLastName(user.last_name ?? '')
       setEmail(user.email ?? '')
       setPhone(user.phone ?? '')
+      setNumber(user.number ?? 0)
       setPhotoFile(null)
       setPhotoPreview(null)
       setError('')
+      setResetSent(false)
+      setResetLoading(false)
     }
   }, [user, open])
 
@@ -43,6 +49,19 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
     setPhotoPreview(URL.createObjectURL(file))
   }
 
+  async function handlePasswordReset() {
+    if (!user?.email) return
+    setResetLoading(true)
+    try {
+      await pb.collection('members').requestPasswordReset(user.email)
+      setResetSent(true)
+    } catch {
+      setError(t('errorSaving'))
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user) return
@@ -50,12 +69,37 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
     setLoading(true)
 
     try {
+      // Check for duplicate number in the same team(s)
+      if (number > 0 && number !== user.number) {
+        const myTeams = await pb.collection('member_teams').getFullList({
+          filter: `member="${user.id}"`,
+        })
+        const teamIds = myTeams.map((mt) => mt.team)
+        if (teamIds.length > 0) {
+          const teamFilter = teamIds.map((id) => `team="${id}"`).join(' || ')
+          const teammates = await pb.collection('member_teams').getFullList({
+            filter: `(${teamFilter}) && member!="${user.id}"`,
+            expand: 'member',
+          })
+          const conflict = teammates.find(
+            (mt) => (mt.expand as { member?: { number?: number } })?.member?.number === number
+          )
+          if (conflict) {
+            const conflictName = (conflict.expand as { member?: { name?: string } })?.member?.name ?? '?'
+            setError(t('numberTaken', { name: conflictName }))
+            setLoading(false)
+            return
+          }
+        }
+      }
+
       const formData = new FormData()
       formData.append('first_name', firstName)
       formData.append('last_name', lastName)
       formData.append('name', `${firstName} ${lastName}`.trim())
       formData.append('email', email)
       formData.append('phone', phone)
+      formData.append('number', String(number))
       if (photoFile) {
         formData.append('photo', photoFile)
       }
@@ -151,6 +195,40 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('number')}</label>
+          <input
+            type="number"
+            min={0}
+            max={99}
+            value={number || ''}
+            onChange={(e) => setNumber(parseInt(e.target.value) || 0)}
+            placeholder="#"
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          />
+        </div>
+
+        {/* Change Password */}
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-600 dark:bg-gray-800/50">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t('changePassword')}
+          </span>
+          {resetSent ? (
+            <span className="text-sm text-green-600 dark:text-green-400">
+              {t('resetLinkSent')}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePasswordReset}
+              disabled={resetLoading}
+              className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-400 dark:text-brand-400 dark:hover:bg-brand-900/20"
+            >
+              {resetLoading ? tc('saving') : t('sendResetLink')}
+            </button>
+          )}
+        </div>
+
         {/* Read-only fields */}
         <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-gray-600 dark:bg-gray-800/50">
           <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -158,7 +236,6 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
           </p>
           <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
             {user.license_nr && <span>{t('licenseNr')}: {user.license_nr}</span>}
-            {user.number > 0 && <span>{t('number')}: #{user.number}</span>}
             <span className="capitalize">{t('position')}: {user.position}</span>
           </div>
         </div>

@@ -26,6 +26,9 @@ export default {
   managedByCoach: 'Wird von Trainer/Admin verwaltet',
   position: 'Position',
   number: 'Nummer',
+  changePassword: 'Passwort ändern',
+  sendResetLink: 'Link senden',
+  numberTaken: 'Diese Nummer wird bereits von {{name}} verwendet',
   errorSaving: 'Fehler beim Speichern',
 
   // Training label

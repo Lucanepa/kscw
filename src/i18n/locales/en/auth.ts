@@ -26,6 +26,9 @@ export default {
   managedByCoach: 'Managed by coach/admin',
   position: 'Position',
   number: 'Number',
+  changePassword: 'Change Password',
+  sendResetLink: 'Send reset link',
+  numberTaken: 'This number is already used by {{name}}',
   errorSaving: 'Error saving',
 
   // Training label

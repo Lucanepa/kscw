@@ -3,7 +3,12 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
+import { usePB } from '../hooks/usePB'
+import TeamChip from './TeamChip'
 import SwitchToggle from './SwitchToggle'
+import type { MemberTeam, Team } from '../types'
+
+type ExpandedMemberTeam = MemberTeam & { expand?: { team?: Team } }
 
 const secondaryItems = [
   {
@@ -53,6 +58,12 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
   const { user, isAdmin, isApproved, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
+
+  const { data: memberTeams } = usePB<ExpandedMemberTeam>('member_teams', {
+    filter: user ? `member="${user.id}"` : '',
+    expand: 'team',
+    perPage: 10,
+  })
 
   // Prevent body scroll when sheet is open
   useEffect(() => {
@@ -234,19 +245,28 @@ export default function MoreSheet({ onClose }: MoreSheetProps) {
               </NavLink>
             </nav>
             <div className="mx-4 border-t border-gray-200 dark:border-gray-700" />
-            <div className="flex items-center justify-between px-8 py-4">
-              <span className="truncate text-sm text-gray-500 dark:text-gray-400">
-                {user.name || user.email}
-              </span>
-              <button
-                onClick={() => {
-                  logout()
-                  onClose()
-                }}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-              >
-                {t('logout')}
-              </button>
+            <div className="px-8 py-4">
+              <div className="flex items-center justify-between">
+                <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {user.first_name} {user.last_name}
+                </span>
+                <button
+                  onClick={() => {
+                    logout()
+                    onClose()
+                  }}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  {t('logout')}
+                </button>
+              </div>
+              {memberTeams.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {memberTeams.map((mt) => (
+                    <TeamChip key={mt.id} team={mt.expand?.team?.name ?? '?'} size="sm" />
+                  ))}
+                </div>
+              )}
             </div>
           </>
         ) : (

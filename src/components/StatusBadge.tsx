@@ -31,7 +31,7 @@ const labelMap: Record<string, string> = {
   coach: 'Coach',
   vorstand: 'Board',
   admin: 'Admin',
-  superadmin: 'Superadmin',
+  superadmin: 'SuperAdmin',
 }
 
 interface StatusBadgeProps {
