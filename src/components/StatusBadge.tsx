@@ -13,6 +13,7 @@ const defaultColors: Record<string, { bg: string; text: string }> = {
   coach: { bg: '#dcfce7', text: '#166534' },
   vorstand: { bg: '#fef3c7', text: '#92400e' },
   admin: { bg: '#fee2e2', text: '#991b1b' },
+  superadmin: { bg: '#f3e8ff', text: '#6b21a8' },
 }
 
 const labelMap: Record<string, string> = {
@@ -30,6 +31,7 @@ const labelMap: Record<string, string> = {
   coach: 'Coach',
   vorstand: 'Board',
   admin: 'Admin',
+  superadmin: 'Superadmin',
 }
 
 interface StatusBadgeProps {

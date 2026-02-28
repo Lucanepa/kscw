@@ -47,12 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const roles = user?.role ?? []
-  const isAdmin = roles.includes('admin')
+  const isSuperAdmin = roles.includes('superadmin')
+  const isAdmin = roles.includes('admin') || isSuperAdmin
   const isCoach = roles.includes('coach') || isAdmin
   const isVorstand = roles.includes('vorstand') || isAdmin
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, isCoach, isVorstand, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isCoach, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
