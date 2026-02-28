@@ -17,6 +17,7 @@ import PlayerProfile from './modules/teams/PlayerProfile'
 import RosterEditor from './modules/teams/RosterEditor'
 import DatabasePage from './modules/admin/DatabasePage'
 import ClubDeskSyncPage from './modules/admin/ClubDeskSyncPage'
+import HallenplanPage from './modules/hallenplan/HallenplanPage'
 import EmbedGamesPage from './modules/games/EmbedGamesPage'
 import LoginPage from './modules/auth/LoginPage'
 import SignUpPage from './modules/auth/SignUpPage'
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="impressum" element={<ImpressumPage />} />
             <Route path="profile" element={<AuthRoute><ProfilePage /></AuthRoute>} />
             <Route path="admin/spielplanung" element={<AdminRoute><SpielplanungPage /></AdminRoute>} />
+            <Route path="admin/hallenplan" element={<AdminRoute><HallenplanPage /></AdminRoute>} />
             <Route path="admin/database" element={<SuperAdminRoute><DatabasePage /></SuperAdminRoute>} />
             <Route path="admin/clubdesk-sync" element={<SuperAdminRoute><ClubDeskSyncPage /></SuperAdminRoute>} />
           </Route>

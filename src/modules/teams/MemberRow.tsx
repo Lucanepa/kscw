@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import StatusBadge from '../../components/StatusBadge'
 import { getFileUrl } from '../../utils/pbFile'
 import type { ExpandedMemberTeam } from '../../hooks/useTeamMembers'
+import type { Team } from '../../types'
 
 interface MemberRowProps {
   memberTeam: ExpandedMemberTeam
   teamId: string
+  team?: Team | null
 }
 
 const positionKeys: Record<string, string> = {
@@ -24,15 +26,24 @@ const roleColors: Record<string, { bg: string; text: string }> = {
   coach: { bg: '#dbeafe', text: '#1e40af' },
   assistant: { bg: '#e0f2fe', text: '#075985' },
   team_responsible: { bg: '#ede9fe', text: '#5b21b6' },
-  player: { bg: '#f3f4f6', text: '#374151' },
 }
 
-export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
+function getMemberRole(memberId: string, team?: Team | null): string | null {
+  if (!team) return null
+  if (team.coach?.includes(memberId)) return 'coach'
+  if (team.assistant?.includes(memberId)) return 'assistant'
+  if (team.captain?.includes(memberId)) return 'captain'
+  if (team.team_responsible?.includes(memberId)) return 'team_responsible'
+  return null
+}
+
+export default function MemberRow({ memberTeam, teamId, team }: MemberRowProps) {
   const { t } = useTranslation('teams')
   const member = memberTeam.expand?.member
   if (!member) return null
 
   const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
+  const role = getMemberRole(member.id, team)
 
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -64,7 +75,7 @@ export default function MemberRow({ memberTeam, teamId }: MemberRowProps) {
         {positionKeys[member.position] ? t(positionKeys[member.position]) : member.position}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge status={memberTeam.role} colorMap={roleColors} />
+        {role && <StatusBadge status={role} colorMap={roleColors} />}
       </td>
     </tr>
   )

@@ -25,6 +25,7 @@ export default {
   roleCol: 'Rolle',
 
   // Roster editor
+  teamLeadership: 'Teamführung',
   editRoster: 'Kader bearbeiten',
   addPlayer: 'Spieler hinzufügen',
   searchPlaceholder: 'Nach Name suchen...',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, Link, Navigate } from 'react-router-dom'
 import pb from '../../pb'
@@ -13,6 +13,8 @@ import { getFileUrl } from '../../utils/pbFile'
 import { getCurrentSeason } from '../../utils/dateHelpers'
 import type { Team, Member, MemberTeam } from '../../types'
 
+type LeadershipRole = 'coach' | 'assistant' | 'captain' | 'team_responsible'
+
 export default function RosterEditor() {
   const { t } = useTranslation('teams')
   const { teamId } = useParams<{ teamId: string }>()
@@ -20,7 +22,7 @@ export default function RosterEditor() {
   const season = getCurrentSeason()
   const { members, isLoading, refetch } = useTeamMembers(teamId, season)
   const { data: allMembers } = usePB<Member>('members', { filter: 'active=true', perPage: 500, sort: 'name' })
-  const { create, update, remove } = useMutation<MemberTeam>('member_teams')
+  const { create, remove } = useMutation<MemberTeam>('member_teams')
 
   const [team, setTeam] = useState<Team | null>(null)
   const [search, setSearch] = useState('')
@@ -45,7 +47,7 @@ export default function RosterEditor() {
 
   async function handleAdd(memberId: string) {
     if (!teamId) return
-    await create({ member: memberId, team: teamId, season, role: 'player' })
+    await create({ member: memberId, team: teamId, season })
     setSearch('')
     refetch()
   }
@@ -57,10 +59,32 @@ export default function RosterEditor() {
     refetch()
   }
 
-  async function handleRoleChange(memberTeamId: string, role: string) {
-    await update(memberTeamId, { role })
-    refetch()
-  }
+  // Leadership role management — stored on teams collection
+  const leadershipRoles: { key: LeadershipRole; label: string }[] = [
+    { key: 'coach', label: t('roleCoach') },
+    { key: 'assistant', label: t('roleAssistant') },
+    { key: 'captain', label: t('roleCaptain') },
+    { key: 'team_responsible', label: t('roleTeamResponsible') },
+  ]
+
+  const rosterMembers = useMemo(
+    () => members.map((mt) => mt.expand?.member).filter((m): m is Member => !!m),
+    [members],
+  )
+
+  const toggleLeadership = useCallback(async (memberId: string, role: LeadershipRole) => {
+    if (!team) return
+    const current: string[] = team[role] ?? []
+    const next = current.includes(memberId)
+      ? current.filter((id) => id !== memberId)
+      : [...current, memberId]
+    try {
+      await pb.collection('teams').update(team.id, { [role]: next })
+      setTeam((prev) => prev ? { ...prev, [role]: next } : prev)
+    } catch {
+      // ignore
+    }
+  }, [team])
 
   if (isLoading) {
     return <div className="py-12 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
@@ -123,6 +147,41 @@ export default function RosterEditor() {
         )}
       </div>
 
+      {/* Team leadership */}
+      {team && rosterMembers.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('teamLeadership')}</h2>
+          <div className="mt-4 space-y-4">
+            {leadershipRoles.map(({ key, label }) => {
+              const currentIds: string[] = team[key] ?? []
+              return (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {rosterMembers.map((m) => {
+                      const active = currentIds.includes(m.id)
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleLeadership(m.id, key)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            active
+                              ? 'bg-brand-500 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                          }`}
+                        >
+                          {m.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Current roster */}
       <div className="mt-8">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -152,17 +211,6 @@ export default function RosterEditor() {
                     </div>
                   )}
                   <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">{member.name}</span>
-                  <select
-                    value={mt.role}
-                    onChange={(e) => handleRoleChange(mt.id, e.target.value)}
-                    className="rounded border px-2 py-1 text-sm text-gray-700 dark:text-gray-300"
-                  >
-                    <option value="player">{t('rolePlayer')}</option>
-                    <option value="captain">{t('roleCaptain')}</option>
-                    <option value="coach">{t('roleCoach')}</option>
-                    <option value="assistant">{t('roleAssistant')}</option>
-                    <option value="team_responsible">{t('roleTeamResponsible')}</option>
-                  </select>
                   <button
                     onClick={() => setRemovingId(mt.id)}
                     className="text-sm text-red-600 hover:text-red-800"

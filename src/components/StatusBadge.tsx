@@ -9,7 +9,7 @@ const defaultColors: Record<string, { bg: string; text: string }> = {
   personal: { bg: '#f3e8ff', text: '#6b21a8' },
   other: { bg: '#f3f4f6', text: '#374151' },
   // Roles
-  player: { bg: '#dbeafe', text: '#1e40af' },
+  user: { bg: '#dbeafe', text: '#1e40af' },
   coach: { bg: '#dcfce7', text: '#166534' },
   vorstand: { bg: '#fef3c7', text: '#92400e' },
   admin: { bg: '#fee2e2', text: '#991b1b' },
@@ -27,7 +27,7 @@ const labelMap: Record<string, string> = {
   personal: 'Personal',
   other: 'Other',
   // Roles
-  player: 'Player',
+  user: 'User',
   coach: 'Coach',
   vorstand: 'Board',
   admin: 'Admin',

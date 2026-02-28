@@ -9,6 +9,11 @@ import BottomTabBar from './BottomTabBar'
 import MoreSheet from './MoreSheet'
 import PrivacyNotice from './PrivacyNotice'
 import SwitchToggle from './SwitchToggle'
+import TeamChip from './TeamChip'
+import { usePB } from '../hooks/usePB'
+import type { MemberTeam, Team } from '../types'
+
+type ExpandedMemberTeam = MemberTeam & { expand?: { team?: Team } }
 
 function useNavItems(isLoggedIn: boolean, isApproved: boolean) {
   const { t } = useTranslation('nav')
@@ -28,6 +33,7 @@ function useNavItems(isLoggedIn: boolean, isApproved: boolean) {
     navItems: isLoggedIn && isApproved ? [...publicItems, ...authItems] : publicItems,
     adminItems: [
       { to: '/admin/spielplanung', label: t('gameplan'), icon: '📋' },
+      { to: '/admin/hallenplan', label: t('hallenplan'), icon: '🏟️' },
     ],
     superadminItems: [
       { to: '/admin/database', label: t('manageDb'), icon: '🗄️' },
@@ -44,6 +50,11 @@ export default function Layout() {
   const { t, i18n } = useTranslation('nav')
   const isDesktop = useIsDesktop()
   const { navItems, adminItems, superadminItems } = useNavItems(!!user, isApproved)
+  const { data: memberTeams } = usePB<ExpandedMemberTeam>('member_teams', {
+    filter: user ? `member="${user.id}"` : '',
+    expand: 'team',
+    perPage: 10,
+  })
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -277,7 +288,16 @@ export default function Layout() {
                         {`${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase()}
                       </div>
                     )}
-                    <span className="truncate">{user.name || user.email}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate">{user.first_name} {user.last_name}</span>
+                      {memberTeams.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {memberTeams.map((mt) => (
+                            <TeamChip key={mt.id} team={mt.expand?.team?.name ?? '?'} size="sm" />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </NavLink>
                   <button
                     onClick={logout}

@@ -90,7 +90,7 @@ export default function SignUpPage() {
         email: email.trim().toLowerCase(),
         password,
         passwordConfirm,
-        role: ['player'],
+        role: ['user'],
         active: true,
         approved: false,
         requested_team: selectedTeam,

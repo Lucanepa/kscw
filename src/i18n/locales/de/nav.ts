@@ -9,6 +9,7 @@ export default {
   teams: 'Teams',
   events: 'Events',
   gameplan: 'Spielplanung',
+  hallenplan: 'Hallenplan',
   manageDb: 'Datenbank verwalten',
   openInNewTab: 'In neuem Tab öffnen',
   admin: 'Admin',

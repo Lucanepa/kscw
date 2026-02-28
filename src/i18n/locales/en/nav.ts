@@ -9,6 +9,7 @@ export default {
   teams: 'Teams',
   events: 'Events',
   gameplan: 'Game Planning',
+  hallenplan: 'Hall Slots',
   manageDb: 'Manage Database',
   openInNewTab: 'Open in new tab',
   admin: 'Admin',

@@ -25,7 +25,7 @@ export function useTeamMembers(teamId: string | undefined, season?: string) {
       const result = await pb.collection('member_teams').getFullList<ExpandedMemberTeam>({
         filter,
         expand: 'member',
-        sort: 'role,member',
+        sort: 'member',
       })
       setMembers(result)
     } catch (err) {

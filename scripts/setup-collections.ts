@@ -97,7 +97,7 @@ const collections: CollectionDef[] = [
       number('number'),
       select('position', ['setter', 'outside', 'middle', 'opposite', 'libero', 'coach', 'other']),
       file('photo', { maxSize: 5242880, mimeTypes: ['image/jpeg', 'image/png', 'image/webp'] }),
-      select('role', ['player', 'coach', 'vorstand', 'admin']),
+      select('role', ['user', 'vorstand', 'admin', 'superuser']),
       bool('active'),
     ],
   },
@@ -140,14 +140,18 @@ const hallsId = await getCollectionId('halls')
 const teamsId = await getCollectionId('teams')
 const membersId = await getCollectionId('members')
 
-// Patch teams.coach_id → relation to members
-console.log('\n=== Patching teams.coach → relation to members ===')
+// Patch teams: coach (multi-relation), assistant, captain, team_responsible
+console.log('\n=== Patching teams leadership relations ===')
 const teamsCol = await pb.collections.getOne('teams')
-const patchedFields = teamsCol.fields
-  .filter((f: { name: string }) => f.name !== 'coach_id')
-  .concat([relation('coach', membersId)])
+const patchedFields = [
+  ...teamsCol.fields.filter((f: { name: string }) => !['coach_id', 'coach'].includes(f.name)),
+  relation('coach', membersId, { maxSelect: 999 }),
+  relation('assistant', membersId, { maxSelect: 999 }),
+  relation('captain', membersId, { maxSelect: 999 }),
+  relation('team_responsible', membersId, { maxSelect: 999 }),
+]
 await pb.collections.update(teamsCol.id, { fields: patchedFields })
-console.log('  ✓ teams.coach patched')
+console.log('  ✓ teams leadership relations patched')
 
 // Phase 2: collections that depend on the above
 console.log('\n=== Phase 2: Create dependent collections ===')
@@ -161,7 +165,6 @@ const dependentCollections: CollectionDef[] = [
       relation('member', membersId, { required: true }),
       relation('team', teamsId, { required: true }),
       text('season'),
-      select('role', ['player', 'coach', 'captain', 'assistant']),
     ],
   },
 

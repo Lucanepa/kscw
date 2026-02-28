@@ -25,6 +25,7 @@ export default {
   roleCol: 'Role',
 
   // Roster editor
+  teamLeadership: 'Team Leadership',
   editRoster: 'Edit roster',
   addPlayer: 'Add player',
   searchPlaceholder: 'Search by name...',

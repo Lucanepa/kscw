@@ -8,7 +8,10 @@ export interface Team extends RecordModel {
   league: string
   season: string
   color: string
-  coach: string
+  coach: string[]
+  assistant: string[]
+  captain: string[]
+  team_responsible: string[]
   active: boolean
   team_picture: string
   social_url: string
@@ -26,7 +29,7 @@ export interface Member extends RecordModel {
   number: number
   position: 'setter' | 'outside' | 'middle' | 'opposite' | 'libero' | 'coach' | 'other'
   photo: string
-  role: ('player' | 'vorstand' | 'admin' | 'superadmin')[]
+  role: ('user' | 'vorstand' | 'admin' | 'superadmin')[]
   active: boolean
   birthdate: string
   yob: number
@@ -39,7 +42,6 @@ export interface MemberTeam extends RecordModel {
   member: string
   team: string
   season: string
-  role: 'player' | 'coach' | 'captain' | 'assistant' | 'team_responsible'
 }
 
 export interface Hall extends RecordModel {

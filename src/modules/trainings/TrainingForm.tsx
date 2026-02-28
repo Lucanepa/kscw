@@ -4,9 +4,7 @@ import Modal from '../../components/Modal'
 import { useAuth } from '../../hooks/useAuth'
 import { useMutation } from '../../hooks/useMutation'
 import { usePB } from '../../hooks/usePB'
-import type { Training, Team, Hall, Member, MemberTeam } from '../../types'
-
-type MemberTeamExpanded = MemberTeam & { expand?: { member?: Member } }
+import type { Training, Team, Hall, Member } from '../../types'
 
 interface TrainingFormProps {
   open: boolean
@@ -21,27 +19,26 @@ export default function TrainingForm({ open, training, onSave, onCancel }: Train
   const { create, update, isLoading } = useMutation<Training>('trainings')
   const { isAdmin, coachTeamIds } = useAuth()
 
-  const { data: allTeams } = usePB<Team>('teams', { filter: 'active=true', sort: 'name', perPage: 50 })
+  type TeamExpanded = Team & { expand?: { coach?: Member[]; assistant?: Member[]; team_responsible?: Member[] } }
+  const { data: allTeams } = usePB<TeamExpanded>('teams', { filter: 'active=true', sort: 'name', perPage: 50, expand: 'coach,assistant,team_responsible' })
   const { data: halls } = usePB<Hall>('halls', { sort: 'name', perPage: 50 })
-  const { data: coachMTs } = usePB<MemberTeamExpanded>('member_teams', {
-    filter: 'role="coach" || role="assistant" || role="team_responsible"',
-    expand: 'member',
-    all: true,
-  })
 
-  // Deduplicated list of coaches from member_teams
+  // Deduplicated list of coaches from teams.coach/assistant/team_responsible
   const coaches = useMemo(() => {
     const seen = new Set<string>()
     const list: Member[] = []
-    for (const mt of coachMTs) {
-      const m = mt.expand?.member
-      if (m && !seen.has(m.id)) {
-        seen.add(m.id)
-        list.push(m)
+    for (const team of allTeams) {
+      for (const arr of [team.expand?.coach, team.expand?.assistant, team.expand?.team_responsible]) {
+        for (const m of arr ?? []) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id)
+            list.push(m)
+          }
+        }
       }
     }
     return list.sort((a, b) => a.name.localeCompare(b.name))
-  }, [coachMTs])
+  }, [allTeams])
 
   // Non-admin coaches only see their own teams
   const teams = useMemo(
@@ -213,26 +210,28 @@ export default function TrainingForm({ open, training, onSave, onCancel }: Train
           />
         </div>
 
-        <div>
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <input
-              type="checkbox"
-              checked={cancelled}
-              onChange={(e) => setCancelled(e.target.checked)}
-              className="rounded border-gray-300 dark:border-gray-600"
-            />
-            {t('cancelTraining')}
-          </label>
-          {cancelled && (
-            <textarea
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              rows={2}
-              placeholder={t('cancelReason')}
-              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            />
-          )}
-        </div>
+        {training && (
+          <div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={cancelled}
+                onChange={(e) => setCancelled(e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600"
+              />
+              {t('cancelTraining')}
+            </label>
+            {cancelled && (
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={2}
+                placeholder={t('cancelReason')}
+                className="mt-2 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              />
+            )}
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 

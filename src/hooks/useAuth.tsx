@@ -1,12 +1,7 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import type { RecordModel } from 'pocketbase'
 import pb from '../pb'
-import type { Member, MemberTeam } from '../types'
-
-interface MyTeamRole {
-  teamId: string
-  role: MemberTeam['role']
-}
+import type { Member, Team } from '../types'
 
 interface AuthContextValue {
   user: (RecordModel & Member) | null
@@ -16,7 +11,6 @@ interface AuthContextValue {
   isCoach: boolean
   isCoachOf: (teamId: string) => boolean
   coachTeamIds: string[]
-  myTeamRoles: MyTeamRole[]
   isVorstand: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
@@ -30,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pb.authStore.record as (RecordModel & Member) | null,
   )
   const [isLoading, setIsLoading] = useState(true)
-  const [myTeamRoles, setMyTeamRoles] = useState<MyTeamRole[]>([])
+  const [coachTeamIds, setCoachTeamIds] = useState<string[]>([])
 
   // Auth refresh
   useEffect(() => {
@@ -49,19 +43,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe
   }, [])
 
-  // Fetch user's team roles from member_teams
+  // Fetch teams where user has a leadership role (coach, assistant, team_responsible)
   useEffect(() => {
     if (!user?.id) {
-      setMyTeamRoles([])
+      setCoachTeamIds([])
       return
     }
 
-    pb.collection('member_teams')
-      .getFullList<MemberTeam>({ filter: `member="${user.id}"` })
-      .then((records) => {
-        setMyTeamRoles(records.map((r) => ({ teamId: r.team, role: r.role })))
+    const uid = user.id
+    pb.collection('teams')
+      .getFullList<Team>({
+        filter: `active=true && (coach~"${uid}" || assistant~"${uid}" || team_responsible~"${uid}")`,
       })
-      .catch(() => setMyTeamRoles([]))
+      .then((teams) => {
+        setCoachTeamIds(teams.map((t) => t.id))
+      })
+      .catch(() => setCoachTeamIds([]))
   }, [user?.id])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -78,14 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isApproved = user?.approved !== false
   const isVorstand = roles.includes('vorstand') || isAdmin
 
-  // Team-scoped coach: derived from member_teams, not members.role
-  const coachTeamIds = useMemo(
-    () => myTeamRoles
-      .filter((r) => r.role === 'coach' || r.role === 'assistant' || r.role === 'team_responsible')
-      .map((r) => r.teamId),
-    [myTeamRoles],
-  )
-
   const isCoach = coachTeamIds.length > 0 || isAdmin
 
   const isCoachOf = useCallback(
@@ -94,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isApproved, isCoach, isCoachOf, coachTeamIds, myTeamRoles, isVorstand, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isApproved, isCoach, isCoachOf, coachTeamIds, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

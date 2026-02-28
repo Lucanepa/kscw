@@ -29,7 +29,6 @@ export default function TeamDetail() {
         member: member.id,
         team: teamId,
         season: getCurrentSeason(),
-        role: 'player',
       })
       refetchPending()
     } catch {
@@ -185,7 +184,7 @@ export default function TeamDetail() {
               </thead>
               <tbody>
                 {members.map((mt) => (
-                  <MemberRow key={mt.id} memberTeam={mt} teamId={team.id} />
+                  <MemberRow key={mt.id} memberTeam={mt} teamId={team.id} team={team} />
                 ))}
               </tbody>
             </table>
