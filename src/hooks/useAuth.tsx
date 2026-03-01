@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const roles = user?.role ?? []
-  const isSuperAdmin = roles.includes('superadmin')
+  const isSuperAdmin = roles.includes('superuser')
   const isAdmin = roles.includes('admin') || isSuperAdmin
   const isApproved = user?.approved === true || isAdmin
   const isProfileComplete = !!user?.language
