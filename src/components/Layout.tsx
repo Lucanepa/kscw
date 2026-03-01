@@ -11,6 +11,7 @@ import PrivacyNotice from './PrivacyNotice'
 import SwitchToggle from './SwitchToggle'
 import TeamChip from './TeamChip'
 import { usePB } from '../hooks/usePB'
+import ProfileEditModal from '../modules/auth/ProfileEditModal'
 import type { MemberTeam, Team } from '../types'
 
 type ExpandedMemberTeam = MemberTeam & { expand?: { team?: Team } }
@@ -45,7 +46,7 @@ function useNavItems(isLoggedIn: boolean, isApproved: boolean) {
 export default function Layout() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
-  const { user, isAdmin, isApproved, isSuperAdmin, logout } = useAuth()
+  const { user, isAdmin, isApproved, isProfileComplete, isSuperAdmin, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation('nav')
   const isDesktop = useIsDesktop()
@@ -228,32 +229,34 @@ export default function Layout() {
                     </svg>
                   }
                 />
-                <SwitchToggle
-                  enabled={i18n.language === 'de'}
-                  onChange={() => {
-                    const next = i18n.language === 'de' ? 'en' : 'de'
-                    i18n.changeLanguage(next)
-                    localStorage.setItem('kscw-lang', next)
-                  }}
-                  iconOff={
-                    <svg viewBox="0 0 60 60">
-                      <g transform="translate(0,12)">
-                        <rect width="60" height="36" fill="#012169"/>
-                        <path d="M0,0 L60,36 M60,0 L0,36" stroke="#fff" strokeWidth="7"/>
-                        <path d="M0,0 L60,36 M60,0 L0,36" stroke="#C8102E" strokeWidth="4.5"/>
-                        <path d="M30,0 V36 M0,18 H60" stroke="#fff" strokeWidth="12"/>
-                        <path d="M30,0 V36 M0,18 H60" stroke="#C8102E" strokeWidth="7"/>
-                      </g>
-                    </svg>
-                  }
-                  iconOn={
-                    <svg viewBox="0 0 32 32" className="rounded-sm">
-                      <rect width="32" height="32" fill="#D52B1E" rx="2"/>
-                      <rect x="13" y="6" width="6" height="20" fill="#fff"/>
-                      <rect x="6" y="13" width="20" height="6" fill="#fff"/>
-                    </svg>
-                  }
-                />
+                {(!user || !user.language) && (
+                  <SwitchToggle
+                    enabled={i18n.language === 'de'}
+                    onChange={() => {
+                      const next = i18n.language === 'de' ? 'en' : 'de'
+                      i18n.changeLanguage(next)
+                      localStorage.setItem('kscw-lang', next)
+                    }}
+                    iconOff={
+                      <svg viewBox="0 0 60 60">
+                        <g transform="translate(0,12)">
+                          <rect width="60" height="36" fill="#012169"/>
+                          <path d="M0,0 L60,36 M60,0 L0,36" stroke="#fff" strokeWidth="7"/>
+                          <path d="M0,0 L60,36 M60,0 L0,36" stroke="#C8102E" strokeWidth="4.5"/>
+                          <path d="M30,0 V36 M0,18 H60" stroke="#fff" strokeWidth="12"/>
+                          <path d="M30,0 V36 M0,18 H60" stroke="#C8102E" strokeWidth="7"/>
+                        </g>
+                      </svg>
+                    }
+                    iconOn={
+                      <svg viewBox="0 0 32 32" className="rounded-sm">
+                        <rect width="32" height="32" fill="#D52B1E" rx="2"/>
+                        <rect x="13" y="6" width="6" height="20" fill="#fff"/>
+                        <rect x="6" y="13" width="20" height="6" fill="#fff"/>
+                      </svg>
+                    }
+                  />
+                )}
               </div>
 
               {user ? (
@@ -358,6 +361,15 @@ export default function Layout() {
       {moreOpen && <MoreSheet onClose={() => setMoreOpen(false)} />}
 
       <PrivacyNotice />
+
+      {/* Onboarding modal — non-dismissable, shown once until profile is complete */}
+      {user && isApproved && !isProfileComplete && (
+        <ProfileEditModal
+          open
+          onClose={() => {}}
+          onboarding
+        />
+      )}
     </div>
   )
 }

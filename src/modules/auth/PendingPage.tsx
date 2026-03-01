@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
+import ProfileEditModal from './ProfileEditModal'
 import pb from '../../pb'
 import type { Team } from '../../types'
 
 export default function PendingPage() {
-  const { user, isApproved, isLoading, logout } = useAuth()
+  const { user, isApproved, isProfileComplete, isLoading, logout } = useAuth()
   const { theme } = useTheme()
   const { t } = useTranslation('auth')
   const navigate = useNavigate()
@@ -112,6 +113,14 @@ export default function PendingPage() {
           </div>
         </div>
       </div>
+      {/* Onboarding modal for unapproved users who haven't set language */}
+      {user && !isProfileComplete && (
+        <ProfileEditModal
+          open
+          onClose={() => {}}
+          onboarding
+        />
+      )}
     </div>
   )
 }

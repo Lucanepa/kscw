@@ -29,6 +29,9 @@ const labelMap: Record<string, string> = {
   // Roles
   user: 'User',
   coach: 'Coach',
+  assistant: 'Assistant',
+  captain: 'Captain',
+  team_responsible: 'Team Resp.',
   vorstand: 'Board',
   admin: 'Admin',
   superadmin: 'SuperAdmin',

@@ -30,6 +30,7 @@ export default {
   sendResetLink: 'Send reset link',
   numberTaken: 'This number is already used by {{name}}',
   errorSaving: 'Error saving',
+  fileTooLarge: 'File is too large (max 5 MB)',
 
   // Training label
   training: 'Training',
@@ -64,4 +65,14 @@ export default {
   refreshStatus: 'Refresh Status',
   checking: 'Checking...',
   logout: 'Log out',
+
+  // Onboarding
+  onboardingTitle: 'Welcome to KSC Wiedikon',
+  onboardingSubtitle: 'Please complete your profile to continue.',
+  clubdeskNotice: 'Your data was imported from Clubdesk. Please review and confirm.',
+  language: 'Language',
+  languageGerman: 'Deutsch',
+  languageEnglish: 'English',
+  completeProfile: 'Confirm Profile',
+  birthdate: 'Birthdate',
 } as const

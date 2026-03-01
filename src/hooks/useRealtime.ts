@@ -12,21 +12,27 @@ export function useRealtime<T extends RecordModel>(
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
+  const actionsRef = useRef(actions)
+  actionsRef.current = actions
+
   useEffect(() => {
+    let cancelled = false
     let unsubscribe: (() => void) | undefined
 
     pb.collection(collection)
       .subscribe('*', (e: RecordSubscription<T>) => {
-        if (!actions || actions.includes(e.action as RealtimeAction)) {
+        if (!actionsRef.current || actionsRef.current.includes(e.action as RealtimeAction)) {
           callbackRef.current(e)
         }
       })
       .then((unsub) => {
-        unsubscribe = unsub
+        if (cancelled) unsub()
+        else unsubscribe = unsub
       })
 
     return () => {
+      cancelled = true
       unsubscribe?.()
     }
-  }, [collection, actions])
+  }, [collection])
 }

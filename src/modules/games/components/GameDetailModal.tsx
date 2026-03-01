@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { RecordModel } from 'pocketbase'
 import type { Game, Team, Hall, Member } from '../../../types'
 import TeamChip from '../../../components/TeamChip'
+import { sanitizeUrl } from '../../../utils/sanitizeUrl'
 
 interface GameDetailModalProps {
   game: Game | null
@@ -192,11 +193,11 @@ export default function GameDetailModal({ game, onClose }: GameDetailModalProps)
             {hall.address && (
               <DetailRow label={t('address')} value={[hall.address, hall.city].filter(Boolean).join(', ')} />
             )}
-            {hall.maps_url && (
+            {hall.maps_url && sanitizeUrl(hall.maps_url) && (
               <div className="flex items-start gap-3 text-sm">
                 <span className="w-28 shrink-0 text-gray-500 dark:text-gray-400">{t('map')}</span>
                 <a
-                  href={hall.maps_url}
+                  href={sanitizeUrl(hall.maps_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-brand-600 hover:underline dark:text-brand-400"

@@ -36,6 +36,7 @@ export interface Member extends RecordModel {
   scorer_licence: boolean
   approved: boolean
   requested_team: string
+  language: 'english' | 'german' | ''
 }
 
 export interface MemberTeam extends RecordModel {
@@ -55,12 +56,29 @@ export interface Hall extends RecordModel {
   sv_hall_id: string
 }
 
+export interface SlotClaim extends RecordModel {
+  hall_slot: string
+  hall: string
+  date: string
+  start_time: string
+  end_time: string
+  claimed_by_team: string
+  claimed_by_member: string
+  freed_reason: 'cancelled_training' | 'away_game'
+  freed_source_id: string
+  notes: string
+  status: 'active' | 'revoked'
+}
+
 export interface VirtualSlotMeta {
   source: 'game' | 'training' | 'hall_event'
   sourceId: string
   sourceRecord: Game | Training | HallEvent
   isAway?: boolean
   isCancelled?: boolean
+  isFreed?: boolean
+  isClaimed?: boolean
+  claimRecord?: SlotClaim
 }
 
 export interface HallSlot extends RecordModel {

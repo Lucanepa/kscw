@@ -23,6 +23,7 @@ export function usePB<T extends RecordModel>(
   const sort = options?.sort ?? ''
   const filter = options?.filter ?? ''
   const expand = options?.expand ?? ''
+  const fields = options?.fields ?? ''
 
   const fetchData = useCallback(async () => {
     if (!enabled) {
@@ -34,20 +35,15 @@ export function usePB<T extends RecordModel>(
     setIsLoading(true)
     setError(null)
     try {
+      const queryOpts: Record<string, string> = { sort, filter, expand }
+      if (fields) queryOpts.fields = fields
+
       if (all) {
-        const items = await pb.collection(collection).getFullList<T>({
-          sort,
-          filter,
-          expand,
-        })
+        const items = await pb.collection(collection).getFullList<T>(queryOpts)
         setData(items)
         setTotal(items.length)
       } else {
-        const result: ListResult<T> = await pb.collection(collection).getList(page, perPage, {
-          sort,
-          filter,
-          expand,
-        })
+        const result: ListResult<T> = await pb.collection(collection).getList(page, perPage, queryOpts)
         setData(result.items)
         setTotal(result.totalItems)
       }
@@ -56,7 +52,7 @@ export function usePB<T extends RecordModel>(
     } finally {
       setIsLoading(false)
     }
-  }, [collection, enabled, all, page, perPage, sort, filter, expand])
+  }, [collection, enabled, all, page, perPage, sort, filter, expand, fields])
 
   useEffect(() => {
     fetchData()

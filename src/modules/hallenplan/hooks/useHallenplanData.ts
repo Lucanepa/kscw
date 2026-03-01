@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { usePB } from '../../../hooks/usePB'
-import type { Hall, HallSlot, HallClosure, Team, Game, Training, HallEvent } from '../../../types'
+import type { Hall, HallSlot, HallClosure, Team, Game, Training, HallEvent, SlotClaim } from '../../../types'
 import {
   gameToVirtualSlot,
   trainingToVirtualSlot,
@@ -76,6 +76,17 @@ export function useHallenplanData(
     sort: 'date,start_time',
   })
 
+  // Slot claims for this week
+  const {
+    data: slotClaims,
+    isLoading: claimsLoading,
+    refetch: refetchClaims,
+  } = usePB<SlotClaim>('slot_claims', {
+    filter: `date >= "${mondayStr}" && date <= "${sundayStr}" && status = "active"`,
+    expand: 'claimed_by_team,claimed_by_member,hall_slot',
+    perPage: 100,
+  })
+
   // Build teamId -> hallId mapping from recurring training slots (for away games display)
   const teamTrainingHalls = useMemo(() => {
     const map = new Map<string, string>()
@@ -113,17 +124,18 @@ export function useHallenplanData(
       ? virtualSlots.filter((vs) => hallSet.has(vs.hall))
       : virtualSlots
 
-    return mergeVirtualSlots(rawSlots, filteredVirtual)
-  }, [rawSlots, games, trainings, hallEvents, weekDays, halls, teamTrainingHalls, selectedHallIds])
+    return mergeVirtualSlots(rawSlots, filteredVirtual, slotClaims, closures, games, weekDays)
+  }, [rawSlots, games, trainings, hallEvents, weekDays, halls, teamTrainingHalls, selectedHallIds, slotClaims, closures])
 
   const refetch = () => {
     refetchSlots()
     refetchClosures()
+    refetchClaims()
   }
 
   const isLoading =
     hallsLoading || teamsLoading || slotsLoading || closuresLoading ||
-    gamesLoading || trainingsLoading || hallEventsLoading
+    gamesLoading || trainingsLoading || hallEventsLoading || claimsLoading
 
-  return { halls, teams, slots, rawSlots, closures, isLoading, refetch }
+  return { halls, teams, slots, rawSlots, closures, slotClaims, isLoading, refetch }
 }

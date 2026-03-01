@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { usePendingMembers } from '../../hooks/usePendingMembers'
 import TeamChip from '../../components/TeamChip'
 import EmptyState from '../../components/EmptyState'
+import { sanitizeUrl } from '../../utils/sanitizeUrl'
 import MemberRow from './MemberRow'
 import { getFileUrl } from '../../utils/pbFile'
 import { getCurrentSeason } from '../../utils/dateHelpers'
@@ -86,9 +87,9 @@ export default function TeamDetail() {
           <div className="flex items-center gap-3">
             <TeamChip team={team.name} />
             <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{team.full_name}</h1>
-            {team.social_url && (
+            {team.social_url && sanitizeUrl(team.social_url) && (
               <a
-                href={team.social_url}
+                href={sanitizeUrl(team.social_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 transition-colors hover:text-brand-500"
@@ -172,13 +173,16 @@ export default function TeamDetail() {
             }
           />
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-lg border bg-white dark:bg-gray-800">
-            <table className="w-full">
+          <div className="mt-4 overflow-x-auto rounded-lg border bg-white dark:bg-gray-800 w-fit max-w-full">
+            <table>
               <thead>
                 <tr className="border-b bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   <th className="px-4 py-3">{t('playerCol')}</th>
                   <th className="px-4 py-3">{t('numberCol')}</th>
                   <th className="hidden px-4 py-3 sm:table-cell">{t('positionCol')}</th>
+                  <th className="hidden px-4 py-3 md:table-cell">{t('emailCol')}</th>
+                  <th className="hidden px-4 py-3 md:table-cell">{t('phoneCol')}</th>
+                  <th className="hidden px-4 py-3 lg:table-cell">{t('birthdateCol')}</th>
                   <th className="px-4 py-3">{t('roleCol')}</th>
                 </tr>
               </thead>

@@ -63,6 +63,7 @@ export default function ScorerPage() {
     filter: 'active = true',
     sort: '+last_name,+first_name',
     perPage: 500,
+    fields: 'id,name,first_name,last_name,scorer_licence',
   })
 
   const { data: teams } = usePB<Team>('teams', {

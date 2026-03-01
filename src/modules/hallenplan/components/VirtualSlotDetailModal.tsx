@@ -31,10 +31,10 @@ export default function VirtualSlotDetailModal({ slot, halls, teams, onClose }: 
   function renderGame() {
     const game = meta.sourceRecord as Game
     const statusLabels: Record<string, string> = {
-      scheduled: 'Geplant',
-      live: 'Live',
-      completed: 'Abgeschlossen',
-      postponed: 'Verschoben',
+      scheduled: t('statusScheduled'),
+      live: t('statusLive'),
+      completed: t('statusCompleted'),
+      postponed: t('statusPostponed'),
     }
 
     return (
@@ -46,12 +46,12 @@ export default function VirtualSlotDetailModal({ slot, halls, teams, onClose }: 
             <TeamChip team={teamName} size="sm" />
           </div>
         )}
-        <DetailRow label="Liga" value={game.league} />
-        <DetailRow label="Start" value={game.time?.slice(0, 5) || ''} />
-        <DetailRow label="Slot" value={`${slot.start_time}–${slot.end_time}`} />
-        <DetailRow label="Status" value={statusLabels[game.status] || game.status} />
+        <DetailRow label={t('league')} value={game.league} />
+        <DetailRow label={t('start')} value={game.time?.slice(0, 5) || ''} />
+        <DetailRow label={t('slot')} value={`${slot.start_time}–${slot.end_time}`} />
+        <DetailRow label={t('common:status')} value={statusLabels[game.status] || game.status} />
         {game.status === 'completed' && (
-          <DetailRow label="Ergebnis" value={`${game.home_score}:${game.away_score}`} />
+          <DetailRow label={t('result')} value={`${game.home_score}:${game.away_score}`} />
         )}
         {meta.isAway && (
           <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
@@ -93,9 +93,9 @@ export default function VirtualSlotDetailModal({ slot, halls, teams, onClose }: 
       <div className="space-y-1">
         <DetailRow label={t('hall')} value={hallName} />
         <DetailRow label={t('label')} value={event.title} />
-        <DetailRow label={t('startTime')} value={event.start_time?.slice(0, 5) || 'Ganztägig'} />
+        <DetailRow label={t('startTime')} value={event.start_time?.slice(0, 5) || t('allDay')} />
         <DetailRow label={t('endTime')} value={event.end_time?.slice(0, 5) || ''} />
-        <DetailRow label="Ort" value={event.location} />
+        <DetailRow label={t('location')} value={event.location} />
       </div>
     )
   }

@@ -14,6 +14,7 @@ interface DaySlotViewProps {
   halls: Hall[]
   selectedHallIds: string[]
   isAdmin: boolean
+  isCoach?: boolean
   onSlotClick: (slot: HallSlot) => void
   onEmptyCellClick: (dayOfWeek: number, time: string, hallId: string) => void
 }
@@ -26,6 +27,7 @@ export default function DaySlotView({
   halls,
   selectedHallIds,
   isAdmin,
+  isCoach = false,
   onSlotClick,
   onEmptyCellClick,
 }: DaySlotViewProps) {
@@ -193,6 +195,7 @@ export default function DaySlotView({
                   teamName={getTeamName(ps.slot)}
                   hasConflict={conflictSet.has(ps.slot.id)}
                   isAdmin={isAdmin}
+                  isCoach={isCoach}
                   compact={multiHall}
                   onClick={() => onSlotClick(ps.slot)}
                 />

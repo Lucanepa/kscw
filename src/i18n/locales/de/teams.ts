@@ -22,6 +22,9 @@ export default {
   playerCol: 'Spieler',
   numberCol: '#',
   positionCol: 'Position',
+  emailCol: 'E-Mail',
+  phoneCol: 'Telefon',
+  birthdateCol: 'Geburtstag',
   roleCol: 'Rolle',
 
   // Roster editor

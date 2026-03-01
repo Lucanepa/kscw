@@ -11,7 +11,9 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 
 function buildTeamFilter(team: string): string {
   if (!team) return ''
-  return `kscw_team.name ~ "${team}"`
+  const sanitized = team.replace(/[^a-zA-Z0-9\s\-]/g, '')
+  if (!sanitized) return ''
+  return `kscw_team.name ~ "${sanitized}"`
 }
 
 export default function EmbedGamesPage() {

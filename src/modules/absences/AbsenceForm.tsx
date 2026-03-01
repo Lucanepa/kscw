@@ -21,6 +21,7 @@ export default function AbsenceForm({ open, absence, onSave, onCancel }: Absence
     filter: 'active=true',
     sort: 'name',
     perPage: 500,
+    fields: 'id,name,first_name,last_name',
   })
 
   const [memberId, setMemberId] = useState('')

@@ -30,6 +30,7 @@ export default {
   sendResetLink: 'Link senden',
   numberTaken: 'Diese Nummer wird bereits von {{name}} verwendet',
   errorSaving: 'Fehler beim Speichern',
+  fileTooLarge: 'Datei ist zu gross (max. 5 MB)',
 
   // Training label
   training: 'Training',
@@ -64,4 +65,14 @@ export default {
   refreshStatus: 'Status aktualisieren',
   checking: 'Prüfe...',
   logout: 'Abmelden',
+
+  // Onboarding
+  onboardingTitle: 'Willkommen beim KSC Wiedikon',
+  onboardingSubtitle: 'Bitte vervollständige dein Profil, um fortzufahren.',
+  clubdeskNotice: 'Deine Daten wurden aus Clubdesk importiert. Bitte überprüfe sie und bestätige.',
+  language: 'Sprache',
+  languageGerman: 'Deutsch',
+  languageEnglish: 'English',
+  completeProfile: 'Profil bestätigen',
+  birthdate: 'Geburtsdatum',
 } as const

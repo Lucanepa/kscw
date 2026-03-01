@@ -42,8 +42,13 @@ export default function MemberRow({ memberTeam, teamId, team }: MemberRowProps) 
   const member = memberTeam.expand?.member
   if (!member) return null
 
+  const displayName = [member.first_name, member.last_name].filter(Boolean).join(' ') || member.name || '—'
   const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
   const role = getMemberRole(member.id, team)
+
+  const birthdate = member.birthdate
+    ? new Date(member.birthdate).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null
 
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -52,7 +57,7 @@ export default function MemberRow({ memberTeam, teamId, team }: MemberRowProps) 
           {member.photo ? (
             <img
               src={getFileUrl('members', member.id, member.photo)}
-              alt={member.name}
+              alt={displayName}
               className="h-8 w-8 rounded-full object-cover"
             />
           ) : (
@@ -62,9 +67,9 @@ export default function MemberRow({ memberTeam, teamId, team }: MemberRowProps) 
           )}
           <Link
             to={`/teams/player/${member.id}?from=${teamId}`}
-            className="text-sm font-medium text-gray-900 hover:text-brand-600"
+            className="text-sm font-medium text-gray-900 hover:text-brand-600 dark:text-gray-100"
           >
-            {member.name}
+            {displayName}
           </Link>
         </div>
       </td>
@@ -73,6 +78,15 @@ export default function MemberRow({ memberTeam, teamId, team }: MemberRowProps) 
       </td>
       <td className="hidden px-4 py-3 text-sm text-gray-500 sm:table-cell dark:text-gray-400">
         {positionKeys[member.position] ? t(positionKeys[member.position]) : member.position}
+      </td>
+      <td className="hidden px-4 py-3 text-sm text-gray-500 md:table-cell dark:text-gray-400">
+        {member.email || '—'}
+      </td>
+      <td className="hidden px-4 py-3 text-sm text-gray-500 md:table-cell dark:text-gray-400">
+        {member.phone || '—'}
+      </td>
+      <td className="hidden px-4 py-3 text-sm text-gray-500 lg:table-cell dark:text-gray-400">
+        {birthdate || '—'}
       </td>
       <td className="px-4 py-3">
         {role && <StatusBadge status={role} colorMap={roleColors} />}

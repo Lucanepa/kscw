@@ -61,4 +61,7 @@ export default {
 
   // Permissions
   permissionsNotice: 'Schreiberdienst kann nur von Admins und Coaches verwaltet werden.',
+
+  // iCal export
+  scorerDutyIcal: 'Schreiberdienst: {{home}} vs {{away}}',
 } as const

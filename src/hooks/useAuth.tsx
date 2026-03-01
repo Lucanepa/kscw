@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import type { RecordModel } from 'pocketbase'
 import pb from '../pb'
+import i18n from '../i18n'
+import { pbLangToI18n } from '../utils/languageMap'
 import type { Member, Team } from '../types'
 
 interface AuthContextValue {
@@ -8,6 +10,7 @@ interface AuthContextValue {
   isSuperAdmin: boolean
   isAdmin: boolean
   isApproved: boolean
+  isProfileComplete: boolean
   isCoach: boolean
   isCoachOf: (teamId: string) => boolean
   coachTeamIds: string[]
@@ -43,6 +46,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe
   }, [])
 
+  // Sync i18n language from user's stored preference
+  useEffect(() => {
+    if (user?.language) {
+      const lang = pbLangToI18n(user.language)
+      if (i18n.language !== lang) {
+        i18n.changeLanguage(lang)
+        localStorage.setItem('kscw-lang', lang)
+      }
+    }
+  }, [user?.language])
+
   // Fetch teams where user has a leadership role (coach, assistant, team_responsible)
   useEffect(() => {
     if (!user?.id) {
@@ -72,7 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roles = user?.role ?? []
   const isSuperAdmin = roles.includes('superadmin')
   const isAdmin = roles.includes('admin') || isSuperAdmin
-  const isApproved = user?.approved !== false
+  const isApproved = user?.approved === true || isAdmin
+  const isProfileComplete = !!user?.language
   const isVorstand = roles.includes('vorstand') || isAdmin
 
   const isCoach = coachTeamIds.length > 0 || isAdmin
@@ -83,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isApproved, isCoach, isCoachOf, coachTeamIds, isVorstand, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isSuperAdmin, isAdmin, isApproved, isProfileComplete, isCoach, isCoachOf, coachTeamIds, isVorstand, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -61,4 +61,7 @@ export default {
 
   // Permissions
   permissionsNotice: 'Scorer assignments can only be managed by admins and coaches.',
+
+  // iCal export
+  scorerDutyIcal: 'Scorer duty: {{home}} vs {{away}}',
 } as const

@@ -88,12 +88,12 @@ export function DutyStatus({ game }: { game: Game }) {
   )
 }
 
-function handleExportICal(game: ExpandedGame) {
+function handleExportICal(game: ExpandedGame, title: string) {
   const hallName = game.expand?.hall?.name ?? ''
   const entry: CalendarEntry = {
     id: `duty-${game.id}`,
     type: 'game',
-    title: `Schreiberdienst: ${game.home_team} vs ${game.away_team}`,
+    title,
     date: new Date(game.date),
     startTime: game.time,
     endTime: null,
@@ -103,7 +103,7 @@ function handleExportICal(game: ExpandedGame) {
     description: `${game.home_team} vs ${game.away_team}\n${game.league}`,
     source: game,
   }
-  downloadICal([entry], `schreiberdienst-${game.date}.ics`)
+  downloadICal([entry], `scorer-duty-${game.date}.ics`)
 }
 
 type AssignRole = 'scorer' | 'taefeler' | 'scorer_taefeler'
@@ -203,7 +203,7 @@ export default function ScorerRow({
         </span>
         <DutyStatus game={game} />
         <button
-          onClick={() => handleExportICal(expanded)}
+          onClick={() => handleExportICal(expanded, t('scorerDutyIcal', { home: game.home_team, away: game.away_team }))}
           title={t('exportICal')}
           className="ml-auto rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
         >

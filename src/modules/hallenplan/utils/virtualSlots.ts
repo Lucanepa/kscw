@@ -1,4 +1,4 @@
-import type { Game, Training, HallEvent, HallSlot, Hall } from '../../../types'
+import type { Game, Training, HallEvent, HallSlot, HallClosure, Hall, SlotClaim } from '../../../types'
 import { toISODate, timeToMinutes, minutesToTime } from '../../../utils/dateHelpers'
 
 /** Games occupy the hall from 1h before start, game itself lasts ~2h → 3h total */
@@ -177,12 +177,137 @@ export function hallEventToVirtualSlots(
 }
 
 /**
+ * Checks whether a date+hall overlaps with any hall closure.
+ */
+function isClosedOnDate(
+  hallId: string,
+  dateStr: string,
+  closures: HallClosure[],
+): boolean {
+  return closures.some(
+    (c) => c.hall === hallId && c.start_date <= dateStr && c.end_date >= dateStr,
+  )
+}
+
+/**
+ * Annotates virtual slots with isFreed/isClaimed metadata based on
+ * cancelled trainings, away games, and active claims.
+ *
+ * A cancelled training (with hall_slot set) → its virtual slot gets isFreed=true
+ * unless an active claim exists for that date+hall_slot.
+ *
+ * An away game → the team's recurring training slot for that weekday is freed,
+ * unless already suppressed by a cancelled training or claimed.
+ */
+export function annotateFreedSlots(
+  virtualSlots: HallSlot[],
+  realSlots: HallSlot[],
+  claims: SlotClaim[],
+  closures: HallClosure[],
+  games: Game[],
+  weekDays: Date[],
+): HallSlot[] {
+  // Index active claims by hall_slot + date for fast lookup
+  const claimsByKey = new Map<string, SlotClaim>()
+  for (const claim of claims) {
+    if (claim.status === 'active') {
+      const dateStr = claim.date.slice(0, 10)
+      claimsByKey.set(`${claim.hall_slot}-${dateStr}`, claim)
+    }
+  }
+
+  // Find which recurring training slots are freed by away games
+  // Key: "hallSlotId-dateStr" → game
+  const awayFreedKeys = new Map<string, Game>()
+  for (const game of games) {
+    if (game.type !== 'away' || game.status === 'postponed') continue
+    const gameDate = game.date.slice(0, 10)
+    const dayIndex = weekDays.findIndex((d) => toISODate(d) === gameDate)
+    if (dayIndex === -1) continue
+
+    // Find recurring training slots for this team on this weekday
+    for (const slot of realSlots) {
+      if (
+        slot.recurring &&
+        slot.slot_type === 'training' &&
+        slot.team === game.kscw_team &&
+        slot.day_of_week === dayIndex
+      ) {
+        awayFreedKeys.set(`${slot.id}-${gameDate}`, game)
+      }
+    }
+  }
+
+  return virtualSlots.map((vs) => {
+    const meta = vs._virtual
+    if (!meta) return vs
+
+    // Case 1: Cancelled training with hall_slot → freed
+    if (meta.source === 'training' && meta.isCancelled) {
+      const training = meta.sourceRecord as Training
+      if (training.hall_slot) {
+        const dateStr = training.date.slice(0, 10)
+        if (isClosedOnDate(vs.hall, dateStr, closures)) return vs
+
+        const claim = claimsByKey.get(`${training.hall_slot}-${dateStr}`)
+        return {
+          ...vs,
+          _virtual: {
+            ...meta,
+            isFreed: !claim,
+            isClaimed: !!claim,
+            claimRecord: claim,
+          },
+        }
+      }
+    }
+
+    // Case 2: Away game → check if there's a recurring training slot freed
+    if (meta.source === 'game' && meta.isAway) {
+      const game = meta.sourceRecord as Game
+      const gameDate = game.date.slice(0, 10)
+
+      // Check if this away game frees a recurring training slot
+      for (const slot of realSlots) {
+        if (
+          slot.recurring &&
+          slot.slot_type === 'training' &&
+          slot.team === game.kscw_team &&
+          slot.day_of_week === vs.day_of_week
+        ) {
+          if (isClosedOnDate(vs.hall, gameDate, closures)) break
+
+          const claim = claimsByKey.get(`${slot.id}-${gameDate}`)
+          return {
+            ...vs,
+            _virtual: {
+              ...meta,
+              isFreed: !claim,
+              isClaimed: !!claim,
+              claimRecord: claim,
+            },
+          }
+        }
+      }
+    }
+
+    return vs
+  })
+}
+
+/**
  * Merges real hall_slots with virtual slots, deduplicating recurring slots
  * that have a corresponding training instance for the same day.
+ * Also checks for away games that free up recurring training slots without
+ * an explicit training record.
  */
 export function mergeVirtualSlots(
   realSlots: HallSlot[],
   virtualSlots: HallSlot[],
+  claims: SlotClaim[],
+  closures: HallClosure[],
+  games: Game[],
+  weekDays: Date[],
 ): HallSlot[] {
   // Find training virtuals linked to a recurring hall_slot → suppress the template
   const suppressedSlotDays = new Set<string>()
@@ -195,11 +320,35 @@ export function mergeVirtualSlots(
     }
   }
 
+  // Also suppress recurring templates that are freed by away games
+  // (team is away → their regular slot is suppressed, shown via the away game virtual)
+  for (const game of games) {
+    if (game.type !== 'away' || game.status === 'postponed') continue
+    const gameDate = game.date.slice(0, 10)
+    const dayIndex = weekDays.findIndex((d) => toISODate(d) === gameDate)
+    if (dayIndex === -1) continue
+    for (const slot of realSlots) {
+      if (
+        slot.recurring &&
+        slot.slot_type === 'training' &&
+        slot.team === game.kscw_team &&
+        slot.day_of_week === dayIndex
+      ) {
+        suppressedSlotDays.add(`${slot.id}-${dayIndex}`)
+      }
+    }
+  }
+
   const filteredReal = realSlots.filter((slot) => {
     if (!slot.recurring) return true
     const key = `${slot.id}-${slot.day_of_week}`
     return !suppressedSlotDays.has(key)
   })
 
-  return [...filteredReal, ...virtualSlots]
+  // Annotate virtual slots with freed/claimed metadata
+  const annotated = annotateFreedSlots(
+    virtualSlots, realSlots, claims, closures, games, weekDays,
+  )
+
+  return [...filteredReal, ...annotated]
 }

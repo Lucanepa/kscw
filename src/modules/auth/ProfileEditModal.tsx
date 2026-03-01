@@ -3,16 +3,18 @@ import { useTranslation } from 'react-i18next'
 import Modal from '../../components/Modal'
 import { useAuth } from '../../hooks/useAuth'
 import { getFileUrl } from '../../utils/pbFile'
+import { pbLangToI18n } from '../../utils/languageMap'
 import pb from '../../pb'
 
 interface ProfileEditModalProps {
   open: boolean
   onClose: () => void
+  onboarding?: boolean
 }
 
-export default function ProfileEditModal({ open, onClose }: ProfileEditModalProps) {
+export default function ProfileEditModal({ open, onClose, onboarding }: ProfileEditModalProps) {
   const { user } = useAuth()
-  const { t } = useTranslation('auth')
+  const { t, i18n } = useTranslation('auth')
   const { t: tc } = useTranslation('common')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [firstName, setFirstName] = useState('')
@@ -20,6 +22,8 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [number, setNumber] = useState<number>(0)
+  const [birthdate, setBirthdate] = useState('')
+  const [language, setLanguage] = useState<'german' | 'english'>('german')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -34,6 +38,8 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
       setEmail(user.email ?? '')
       setPhone(user.phone ?? '')
       setNumber(user.number ?? 0)
+      setBirthdate(user.birthdate ? user.birthdate.slice(0, 10) : '')
+      setLanguage((user.language as 'german' | 'english') || 'german')
       setPhotoFile(null)
       setPhotoPreview(null)
       setError('')
@@ -45,8 +51,18 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setError(t('fileTooLarge'))
+      return
+    }
     setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
+  }
+
+  function handleLanguageChange(val: 'german' | 'english') {
+    setLanguage(val)
+    // Immediately preview the chosen language in the UI
+    i18n.changeLanguage(pbLangToI18n(val))
   }
 
   async function handlePasswordReset() {
@@ -96,15 +112,20 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
       const formData = new FormData()
       formData.append('first_name', firstName)
       formData.append('last_name', lastName)
-      formData.append('name', `${firstName} ${lastName}`.trim())
       formData.append('email', email)
       formData.append('phone', phone)
       formData.append('number', String(number))
+      formData.append('language', language)
+      if (birthdate) {
+        formData.append('birthdate', birthdate)
+      }
       if (photoFile) {
         formData.append('photo', photoFile)
       }
 
       await pb.collection('members').update(user.id, formData)
+      // Persist language to localStorage
+      localStorage.setItem('kscw-lang', pbLangToI18n(language))
       await pb.collection('members').authRefresh()
       onClose()
     } catch {
@@ -120,9 +141,50 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
   const currentPhoto = photoPreview
     ?? (user.photo ? getFileUrl('members', user.id, user.photo) : null)
 
+  const inputClass = 'mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100'
+
+  // In onboarding mode, data is pre-populated if the member was imported from Clubdesk
+  const hasExistingData = onboarding && !!user.first_name
+
   return (
-    <Modal open={open} onClose={onClose} title={t('editProfile')} size="md">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={onboarding ? t('onboardingTitle') : t('editProfile')}
+      size="md"
+      hideClose={onboarding}
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Onboarding subtitle */}
+        {onboarding && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t('onboardingSubtitle')}
+          </p>
+        )}
+
+        {/* Clubdesk notice */}
+        {hasExistingData && (
+          <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+            {t('clubdeskNotice')}
+          </div>
+        )}
+
+        {/* Language selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t('language')} {onboarding && <span className="text-red-500">*</span>}
+          </label>
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value as 'german' | 'english')}
+            required
+            className={inputClass}
+          >
+            <option value="german">{t('languageGerman')}</option>
+            <option value="english">{t('languageEnglish')}</option>
+          </select>
+        </div>
+
         {/* Photo */}
         <div className="flex items-center gap-4">
           {currentPhoto ? (
@@ -156,32 +218,41 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('firstName')}</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('firstName')} {onboarding && <span className="text-red-500">*</span>}
+            </label>
             <input
               type="text"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              required
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('lastName')}</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('lastName')} {onboarding && <span className="text-red-500">*</span>}
+            </label>
             <input
               type="text"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              required
+              className={inputClass}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('email')}</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t('email')} {onboarding && <span className="text-red-500">*</span>}
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            required
+            className={inputClass}
           />
         </div>
 
@@ -191,73 +262,90 @@ export default function ProfileEditModal({ open, onClose }: ProfileEditModalProp
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            className={inputClass}
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('number')}</label>
-          <input
-            type="number"
-            min={0}
-            max={99}
-            value={number || ''}
-            onChange={(e) => setNumber(parseInt(e.target.value) || 0)}
-            placeholder="#"
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-          />
-        </div>
-
-        {/* Change Password */}
-        <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-600 dark:bg-gray-800/50">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {t('changePassword')}
-          </span>
-          {resetSent ? (
-            <span className="text-sm text-green-600 dark:text-green-400">
-              {t('resetLinkSent')}
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={handlePasswordReset}
-              disabled={resetLoading}
-              className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-400 dark:text-brand-400 dark:hover:bg-brand-900/20"
-            >
-              {resetLoading ? tc('saving') : t('sendResetLink')}
-            </button>
-          )}
-        </div>
-
-        {/* Read-only fields */}
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-gray-600 dark:bg-gray-800/50">
-          <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-            {t('managedByCoach')}
-          </p>
-          <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
-            {user.license_nr && <span>{t('licenseNr')}: {user.license_nr}</span>}
-            <span className="capitalize">{t('position')}: {user.position}</span>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('number')}</label>
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={number || ''}
+              onChange={(e) => setNumber(parseInt(e.target.value) || 0)}
+              placeholder="#"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('birthdate')}</label>
+            <input
+              type="date"
+              value={birthdate}
+              onChange={(e) => setBirthdate(e.target.value)}
+              className={inputClass}
+            />
           </div>
         </div>
+
+        {/* Change Password — hidden in onboarding */}
+        {!onboarding && (
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-600 dark:bg-gray-800/50">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('changePassword')}
+            </span>
+            {resetSent ? (
+              <span className="text-sm text-green-600 dark:text-green-400">
+                {t('resetLinkSent')}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetLoading}
+                className="rounded-lg border border-brand-500 px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-400 dark:text-brand-400 dark:hover:bg-brand-900/20"
+              >
+                {resetLoading ? tc('saving') : t('sendResetLink')}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Read-only fields — hidden in onboarding */}
+        {!onboarding && (
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 dark:border-gray-600 dark:bg-gray-800/50">
+            <p className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              {t('managedByCoach')}
+            </p>
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
+              {user.license_nr && <span>{t('licenseNr')}: {user.license_nr}</span>}
+              <span className="capitalize">{t('position')}: {user.position}</span>
+            </div>
+          </div>
+        )}
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-          >
-            {tc('cancel')}
-          </button>
+          {!onboarding && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              {tc('cancel')}
+            </button>
+          )}
           <button
             type="submit"
             disabled={loading}
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
           >
-            {loading ? tc('saving') : tc('save')}
+            {loading ? tc('saving') : onboarding ? t('completeProfile') : tc('save')}
           </button>
         </div>
       </form>
