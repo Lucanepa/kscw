@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, Link, Navigate } from 'react-router-dom'
 import pb from '../../pb'
@@ -13,8 +13,8 @@ import { getFileUrl } from '../../utils/pbFile'
 import { getCurrentSeason } from '../../utils/dateHelpers'
 import type { Team, Member, MemberTeam } from '../../types'
 
-type LeadershipRole = 'coach' | 'assistant' | 'captain' | 'team_responsible'
-const ROLES: LeadershipRole[] = ['coach', 'assistant', 'captain', 'team_responsible']
+type LeadershipRole = 'coach' | 'captain' | 'team_responsible'
+const ROLES: LeadershipRole[] = ['coach', 'captain', 'team_responsible']
 
 function displayName(m: Member): string {
   return [m.last_name, m.first_name].filter(Boolean).join(' ') || '—'
@@ -26,21 +26,18 @@ function getMemberRoles(memberId: string, team: Team): LeadershipRole[] {
 
 const ROLE_SHORT: Record<LeadershipRole, string> = {
   coach: 'C',
-  assistant: 'A',
   captain: 'Cap',
   team_responsible: 'TR',
 }
 
 const ROLE_I18N: Record<LeadershipRole, string> = {
   coach: 'roleCoach',
-  assistant: 'roleAssistant',
   captain: 'roleCaptain',
   team_responsible: 'roleTeamResponsible',
 }
 
 const ROLE_COLORS: Record<LeadershipRole, string> = {
   coach: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  assistant: 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300',
   captain: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
   team_responsible: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
 }
@@ -72,6 +69,15 @@ export default function RosterEditor() {
   if (team && !isCoachOf(team.id)) {
     return <Navigate to={`/teams/${teamSlug}`} replace />
   }
+
+  const sortedMembers = useMemo(() => {
+    return [...members].sort((a, b) => {
+      const ma = a.expand?.member
+      const mb = b.expand?.member
+      if (!ma || !mb) return 0
+      return (ma.last_name ?? '').localeCompare(mb.last_name ?? '') || (ma.first_name ?? '').localeCompare(mb.first_name ?? '')
+    })
+  }, [members])
 
   const rosterMemberIds = new Set(members.map((mt) => mt.member))
   const searchLower = search.toLowerCase()
@@ -157,7 +163,7 @@ export default function RosterEditor() {
           <EmptyState icon="👤" title={t('noMembers')} description={t('noMembersDescription')} />
         ) : (
           <div className="mt-4 space-y-2">
-            {members.map((mt) => {
+            {sortedMembers.map((mt) => {
               const member = mt.expand?.member
               if (!member) return null
               const initials = `${member.first_name?.[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()

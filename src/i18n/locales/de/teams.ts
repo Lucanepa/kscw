@@ -15,7 +15,7 @@ export default {
   rolePlayer: 'Spieler/in',
   roleCaptain: 'Captain',
   roleCoach: 'Trainer/in',
-  roleAssistant: 'Assistent/in',
+
   roleTeamResponsible: 'Teamverantwortliche/r',
 
   // Table headers

@@ -19,16 +19,16 @@ export default function TrainingForm({ open, training, onSave, onCancel }: Train
   const { create, update, isLoading } = useMutation<Training>('trainings')
   const { isAdmin, coachTeamIds } = useAuth()
 
-  type TeamExpanded = Team & { expand?: { coach?: Member[]; assistant?: Member[]; team_responsible?: Member[] } }
-  const { data: allTeams } = usePB<TeamExpanded>('teams', { filter: 'active=true', sort: 'name', perPage: 50, expand: 'coach,assistant,team_responsible' })
+  type TeamExpanded = Team & { expand?: { coach?: Member[]; team_responsible?: Member[] } }
+  const { data: allTeams } = usePB<TeamExpanded>('teams', { filter: 'active=true', sort: 'name', perPage: 50, expand: 'coach,team_responsible' })
   const { data: halls } = usePB<Hall>('halls', { sort: 'name', perPage: 50 })
 
-  // Deduplicated list of coaches from teams.coach/assistant/team_responsible
+  // Deduplicated list of coaches from teams.coach/team_responsible
   const coaches = useMemo(() => {
     const seen = new Set<string>()
     const list: Member[] = []
     for (const team of allTeams) {
-      for (const arr of [team.expand?.coach, team.expand?.assistant, team.expand?.team_responsible]) {
+      for (const arr of [team.expand?.coach, team.expand?.team_responsible]) {
         for (const m of arr ?? []) {
           if (!seen.has(m.id)) {
             seen.add(m.id)

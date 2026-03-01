@@ -32,15 +32,13 @@ const positionKeys: Record<string, string> = {
 export const roleColors: Record<string, { bg: string; text: string }> = {
   captain: { bg: '#fef3c7', text: '#92400e' },
   coach: { bg: '#dbeafe', text: '#1e40af' },
-  assistant: { bg: '#e0f2fe', text: '#075985' },
   team_responsible: { bg: '#ede9fe', text: '#5b21b6' },
 }
 
-type LeadershipRole = 'coach' | 'assistant' | 'captain' | 'team_responsible'
-const LEADERSHIP_ROLES: LeadershipRole[] = ['coach', 'assistant', 'captain', 'team_responsible']
+type LeadershipRole = 'coach' | 'captain' | 'team_responsible'
+const LEADERSHIP_ROLES: LeadershipRole[] = ['coach', 'captain', 'team_responsible']
 const roleI18nKeys: Record<LeadershipRole, string> = {
   coach: 'roleCoach',
-  assistant: 'roleAssistant',
   captain: 'roleCaptain',
   team_responsible: 'roleTeamResponsible',
 }
@@ -48,7 +46,6 @@ const roleI18nKeys: Record<LeadershipRole, string> = {
 export function getMemberRole(memberId: string, team?: Team | null): string | null {
   if (!team) return null
   if (team.coach?.includes(memberId)) return 'coach'
-  if (team.assistant?.includes(memberId)) return 'assistant'
   if (team.captain?.includes(memberId)) return 'captain'
   if (team.team_responsible?.includes(memberId)) return 'team_responsible'
   return null

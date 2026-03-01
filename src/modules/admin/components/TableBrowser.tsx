@@ -38,18 +38,42 @@ export default function TableBrowser() {
   const [editRecord, setEditRecord] = useState<RecordModel | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
-  // Fetch all collections
+  // Fetch all collections via our SQL admin endpoint (pb.collections API is superusers-only)
   useEffect(() => {
     setLoadingCollections(true)
-    pb.collections
-      .getFullList()
-      .then((cols) => {
-        const infos = cols.map((c) => ({
-          id: c.id,
-          name: c.name,
-          type: c.type,
-          schema: (c.schema ?? []) as SchemaField[],
-        }))
+    pb.send('/api/admin/sql', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: "SELECT id, name, type, fields FROM _collections ORDER BY name",
+      }),
+    })
+      .then((res: { success: boolean; columns: string[]; rows: unknown[][] }) => {
+        if (!res.success) return
+        const idIdx = res.columns.indexOf('id')
+        const nameIdx = res.columns.indexOf('name')
+        const typeIdx = res.columns.indexOf('type')
+        const fieldsIdx = res.columns.indexOf('fields')
+        const infos: CollectionInfo[] = res.rows.map((row) => {
+          let fields: SchemaField[] = []
+          try {
+            const parsed = JSON.parse(String(row[fieldsIdx] || '[]'))
+            fields = parsed
+              .filter((f: Record<string, unknown>) => !f.system && f.name !== 'id')
+              .map((f: Record<string, unknown>) => ({
+                id: f.id || '',
+                name: f.name || '',
+                type: f.type || 'text',
+                required: !!f.required,
+                options: (f.options || {}) as Record<string, unknown>,
+              }))
+          } catch {}
+          return {
+            id: String(row[idIdx]),
+            name: String(row[nameIdx]),
+            type: String(row[typeIdx]),
+            schema: fields,
+          }
+        })
         infos.sort((a, b) => a.name.localeCompare(b.name))
         setCollections(infos)
       })
@@ -60,7 +84,7 @@ export default function TableBrowser() {
   const selectedCol = collections.find((c) => c.name === selected)
 
   // Build sort string
-  const sort = sortField ? `${sortDir}${sortField}` : '-created'
+  const sort = sortField ? `${sortDir}${sortField}` : ''
 
   // Fetch records for selected collection
   const { data: records, total, isLoading, refetch } = usePB(selected, {

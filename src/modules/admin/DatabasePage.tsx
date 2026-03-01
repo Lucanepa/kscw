@@ -5,7 +5,7 @@ import TableBrowser from './components/TableBrowser'
 
 const PB_ADMIN_URL = `${import.meta.env.VITE_PB_URL || 'https://kscw-api.lucanepa.com'}/_/`
 
-type Tab = 'sql' | 'tables' | 'pbadmin'
+type Tab = 'sql' | 'tables'
 
 export default function DatabasePage() {
   const { t } = useTranslation('admin')
@@ -18,21 +18,19 @@ export default function DatabasePage() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">
           {t('database')}
         </h1>
-        {tab === 'pbadmin' && (
-          <a
-            href={PB_ADMIN_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            {t('openInNewTab')}
-          </a>
-        )}
+        <a
+          href={PB_ADMIN_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+        >
+          {t('tab_pbadmin')} ↗
+        </a>
       </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-        {(['sql', 'tables', 'pbadmin'] as Tab[]).map((key) => (
+        {(['sql', 'tables'] as Tab[]).map((key) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -51,13 +49,6 @@ export default function DatabasePage() {
       <div className="mt-4 flex-1 overflow-auto">
         {tab === 'sql' && <SqlEditor />}
         {tab === 'tables' && <TableBrowser />}
-        {tab === 'pbadmin' && (
-          <iframe
-            src={PB_ADMIN_URL}
-            className="h-full w-full rounded-lg border border-gray-200 dark:border-gray-700"
-            title="PocketBase Admin"
-          />
-        )}
       </div>
     </div>
   )

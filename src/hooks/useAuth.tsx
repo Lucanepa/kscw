@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.language])
 
-  // Fetch teams where user has a leadership role (coach, assistant, team_responsible)
+  // Fetch teams where user has a leadership role (coach, team_responsible)
   useEffect(() => {
     if (!user?.id) {
       setCoachTeamIds([])
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const uid = user.id
     pb.collection('teams')
       .getFullList<Team>({
-        filter: `active=true && (coach~"${uid}" || assistant~"${uid}" || team_responsible~"${uid}")`,
+        filter: `active=true && (coach~"${uid}" || team_responsible~"${uid}")`,
       })
       .then((teams) => {
         setCoachTeamIds(teams.map((t) => t.id))

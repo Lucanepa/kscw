@@ -35,7 +35,10 @@ export function usePB<T extends RecordModel>(
     setIsLoading(true)
     setError(null)
     try {
-      const queryOpts: Record<string, string> = { sort, filter, expand }
+      const queryOpts: Record<string, string> = {}
+      if (sort) queryOpts.sort = sort
+      if (filter) queryOpts.filter = filter
+      if (expand) queryOpts.expand = expand
       if (fields) queryOpts.fields = fields
 
       if (all) {

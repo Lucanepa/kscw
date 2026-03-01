@@ -9,7 +9,6 @@ export interface Team extends RecordModel {
   season: string
   color: string
   coach: string[]
-  assistant: string[]
   captain: string[]
   team_responsible: string[]
   active: boolean
