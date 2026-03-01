@@ -1,34 +1,88 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
 import pb from '../../pb'
-import { useTeamMembers } from '../../hooks/useTeamMembers'
+import { useTeamMembers, type ExpandedMemberTeam } from '../../hooks/useTeamMembers'
 import { useAuth } from '../../hooks/useAuth'
 import { usePendingMembers } from '../../hooks/usePendingMembers'
 import TeamChip from '../../components/TeamChip'
 import EmptyState from '../../components/EmptyState'
 import { sanitizeUrl } from '../../utils/sanitizeUrl'
-import MemberRow from './MemberRow'
+import MemberRow, { getMemberRole } from './MemberRow'
 import { getFileUrl } from '../../utils/pbFile'
 import { getCurrentSeason } from '../../utils/dateHelpers'
 import type { Team, Member } from '../../types'
 
+type SortKey = 'name' | 'number' | 'position' | 'email' | 'phone' | 'birthdate' | 'role'
+type SortDir = 'asc' | 'desc'
+
 export default function TeamDetail() {
   const { t } = useTranslation('teams')
-  const { teamId } = useParams<{ teamId: string }>()
+  const { teamSlug } = useParams<{ teamSlug: string }>()
   const { isCoachOf, isAdmin } = useAuth()
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
+  const teamId = team?.id
   const { members, isLoading: membersLoading } = useTeamMembers(teamId)
   const canManage = isCoachOf(teamId ?? '') || isAdmin
   const { data: pendingMembers, refetch: refetchPending } = usePendingMembers(canManage ? teamId : undefined)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedMembers = useMemo(() => {
+    const sorted = [...members]
+    const dir = sortDir === 'asc' ? 1 : -1
+    sorted.sort((a, b) => {
+      const ma = a.expand?.member
+      const mb = b.expand?.member
+      if (!ma || !mb) return 0
+      let cmp = 0
+      switch (sortKey) {
+        case 'name':
+          cmp = (ma.last_name ?? '').localeCompare(mb.last_name ?? '') || (ma.first_name ?? '').localeCompare(mb.first_name ?? '')
+          break
+        case 'number':
+          cmp = (ma.number || 999) - (mb.number || 999)
+          break
+        case 'position':
+          cmp = (ma.position ?? '').localeCompare(mb.position ?? '')
+          break
+        case 'email':
+          cmp = (ma.email ?? '').localeCompare(mb.email ?? '')
+          break
+        case 'phone':
+          cmp = (ma.phone ?? '').localeCompare(mb.phone ?? '')
+          break
+        case 'birthdate':
+          cmp = (ma.birthdate ?? '').localeCompare(mb.birthdate ?? '')
+          break
+        case 'role': {
+          const ra = getMemberRole(ma.id, team) ?? ''
+          const rb = getMemberRole(mb.id, team) ?? ''
+          cmp = ra.localeCompare(rb)
+          break
+        }
+      }
+      return cmp * dir
+    })
+    return sorted
+  }, [members, sortKey, sortDir, team])
 
   async function handleApprove(member: Member) {
     try {
       await pb.collection('members').update(member.id, { approved: true })
       await pb.collection('member_teams').create({
         member: member.id,
-        team: teamId,
+        team: teamId!,
         season: getCurrentSeason(),
       })
       refetchPending()
@@ -47,14 +101,14 @@ export default function TeamDetail() {
   }
 
   useEffect(() => {
-    if (!teamId) return
+    if (!teamSlug) return
     setLoading(true)
     pb.collection('teams')
-      .getOne<Team>(teamId)
+      .getFirstListItem<Team>(`name="${teamSlug}"`)
       .then(setTeam)
       .catch(() => setTeam(null))
       .finally(() => setLoading(false))
-  }, [teamId])
+  }, [teamSlug])
 
   if (loading || membersLoading) {
     return <div className="py-12 text-center text-gray-500 dark:text-gray-400">{t('common:loading')}</div>
@@ -110,7 +164,7 @@ export default function TeamDetail() {
 
         {isCoachOf(teamId ?? '') && (
           <Link
-            to={`/teams/${teamId}/roster/edit`}
+            to={`/teams/${teamSlug}/roster/edit`}
             className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
           >
             {t('editRoster')}
@@ -164,7 +218,7 @@ export default function TeamDetail() {
             action={
               isCoachOf(teamId ?? '') ? (
                 <Link
-                  to={`/teams/${teamId}/roster/edit`}
+                  to={`/teams/${teamSlug}/roster/edit`}
                   className="text-sm text-brand-600 hover:text-brand-700"
                 >
                   {t('addPlayer')}
@@ -177,18 +231,27 @@ export default function TeamDetail() {
             <table>
               <thead>
                 <tr className="border-b bg-gray-50 dark:bg-gray-900 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  <th className="px-4 py-3">{t('playerCol')}</th>
-                  <th className="px-4 py-3">{t('numberCol')}</th>
-                  <th className="hidden px-4 py-3 sm:table-cell">{t('positionCol')}</th>
-                  <th className="hidden px-4 py-3 md:table-cell">{t('emailCol')}</th>
-                  <th className="hidden px-4 py-3 md:table-cell">{t('phoneCol')}</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">{t('birthdateCol')}</th>
-                  <th className="px-4 py-3">{t('roleCol')}</th>
+                  <SortHeader label={t('playerCol')} sortKey="name" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={t('numberCol')} sortKey="number" current={sortKey} dir={sortDir} onClick={handleSort} />
+                  <SortHeader label={t('positionCol')} sortKey="position" current={sortKey} dir={sortDir} onClick={handleSort} className="hidden sm:table-cell" />
+                  <SortHeader label={t('emailCol')} sortKey="email" current={sortKey} dir={sortDir} onClick={handleSort} className="hidden md:table-cell" />
+                  <SortHeader label={t('phoneCol')} sortKey="phone" current={sortKey} dir={sortDir} onClick={handleSort} className="hidden md:table-cell" />
+                  <SortHeader label={t('birthdateCol')} sortKey="birthdate" current={sortKey} dir={sortDir} onClick={handleSort} className="hidden lg:table-cell" />
+                  <SortHeader label={t('roleCol')} sortKey="role" current={sortKey} dir={sortDir} onClick={handleSort} />
                 </tr>
               </thead>
               <tbody>
-                {members.map((mt) => (
-                  <MemberRow key={mt.id} memberTeam={mt} teamId={team.id} team={team} />
+                {sortedMembers.map((mt) => (
+                  <MemberRow
+                    key={mt.id}
+                    memberTeam={mt}
+                    teamId={team.id}
+                    teamSlug={team.name}
+                    team={team}
+                    canEdit={canManage}
+                    isAdmin={isAdmin}
+                    onTeamUpdate={(updated) => setTeam((prev) => prev ? { ...prev, ...updated } : prev)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -217,5 +280,33 @@ export default function TeamDetail() {
         </div>
       )}
     </div>
+  )
+}
+
+function SortHeader({ label, sortKey: key, current, dir, onClick, className = '' }: {
+  label: string
+  sortKey: SortKey
+  current: SortKey
+  dir: SortDir
+  onClick: (key: SortKey) => void
+  className?: string
+}) {
+  const active = current === key
+  return (
+    <th
+      className={`px-4 py-3 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 ${className}`}
+      onClick={() => onClick(key)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active && (
+          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
+            {dir === 'asc'
+              ? <path d="M6 3L10 9H2z" />
+              : <path d="M6 9L2 3h8z" />}
+          </svg>
+        )}
+      </span>
+    </th>
   )
 }

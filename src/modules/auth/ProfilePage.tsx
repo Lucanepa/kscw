@@ -94,7 +94,7 @@ export default function ProfilePage() {
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {memberTeams.map((mt) => (
-              <Link key={mt.id} to={`/teams/${mt.team}`}>
+              <Link key={mt.id} to={`/teams/${mt.expand?.team?.name ?? mt.team}`}>
                 <TeamChip team={mt.expand?.team?.name ?? '?'} />
               </Link>
             ))}

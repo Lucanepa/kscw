@@ -29,7 +29,7 @@ export interface Member extends RecordModel {
   number: number
   position: 'setter' | 'outside' | 'middle' | 'opposite' | 'libero' | 'coach' | 'other'
   photo: string
-  role: ('user' | 'vorstand' | 'admin' | 'superadmin')[]
+  role: ('user' | 'vorstand' | 'admin' | 'superuser')[]
   active: boolean
   birthdate: string
   yob: number

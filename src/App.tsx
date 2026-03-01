@@ -48,8 +48,8 @@ export default function App() {
             <Route path="absences" element={<AuthRoute><AbsencesPage /></AuthRoute>} />
             <Route path="scorer" element={<AuthRoute><ScorerPage /></AuthRoute>} />
             <Route path="teams" element={<TeamsPage />} />
-            <Route path="teams/:teamId" element={<TeamDetail />} />
-            <Route path="teams/:teamId/roster/edit" element={<AuthRoute><RosterEditor /></AuthRoute>} />
+            <Route path="teams/:teamSlug" element={<TeamDetail />} />
+            <Route path="teams/:teamSlug/roster/edit" element={<AuthRoute><RosterEditor /></AuthRoute>} />
             <Route path="teams/player/:memberId" element={<PlayerProfile />} />
             <Route path="events" element={<EventsPage />} />
             <Route path="datenschutz" element={<DatenschutzPage />} />

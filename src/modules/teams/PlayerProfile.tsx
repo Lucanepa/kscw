@@ -125,7 +125,7 @@ export default function PlayerProfile() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Teams</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {memberTeams.map((mt) => (
-            <Link key={mt.id} to={`/teams/${mt.team}`}>
+            <Link key={mt.id} to={`/teams/${mt.expand?.team?.name ?? mt.team}`}>
               <TeamChip team={mt.expand?.team?.name ?? '?'} />
             </Link>
           ))}
