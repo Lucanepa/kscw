@@ -3786,6 +3786,53 @@ export default ({ action, filter, init, schedule }, { services, database, logger
   }
 
   /**
+   * Cancel trainings whose sign-up deadline has passed without reaching
+   * `min_participants`.
+   *
+   * ⚠ `p.is_staff = false` is load-bearing: `min_participants` counts PLAYERS.
+   * The frontend has always agreed (`countConfirmedPlayers` in
+   * src/utils/participationWarnings.ts drops staff rows), but this query
+   * counted every confirmed row, so a coach's RSVP could hold a training open
+   * that the UI was already warning would be cancelled. Harmless while staff
+   * rarely had a row at all; from 2026-08-15 auto-confirm creates one for every
+   * coach on every training, which would have quietly raised the effective
+   * threshold on every auto-cancel team.
+   *
+   * ⚠⚠ The deadline bound is the INSTANT, not its calendar day. Until
+   * 2026-09-06 this read `respond_by::date <= CURRENT_DATE`, so the 07:00 UTC
+   * run cancelled a training up to a full day BEFORE its deadline expired —
+   * killing sessions that still had every chance of filling, and killing them
+   * on the strength of a headcount taken before the people it was counting
+   * were done answering. Same sentinel handling as everywhere else
+   * (`effectiveDeadlineSql`), and it is why this now needs its own schedule:
+   * an honest bound on a once-daily cron would only cancel the morning AFTER
+   * the deadline, which for a team on `training_respond_by_days = 0` is after
+   * the training has already happened.
+   *
+   * ⚠ `date >= CURRENT_DATE` is new and was missing entirely — without a floor
+   * the sweep reached the whole back-catalogue and could rewrite historical
+   * attendance, the same shape the 2026-08-08 audit fixed in the tentative
+   * sweep. (Nothing to repair: prod holds no past uncancelled under-min
+   * training, checked before shipping.)
+   */
+  async function autoCancelTrainingsUnderMin() {
+    return database.raw(`
+      UPDATE trainings SET cancelled = true, cancel_reason = 'auto_cancel_min_not_met'
+      WHERE auto_cancel_on_min = true
+        AND cancelled = false
+        AND respond_by IS NOT NULL
+        AND date >= CURRENT_DATE
+        AND min_participants > 0
+        AND (
+          SELECT COUNT(*) FROM participations p
+          WHERE p.activity_type = 'training' AND p.activity_id = trainings.id::text
+            AND p.status = 'confirmed' AND p.is_staff = false
+        ) < min_participants
+        AND ${effectiveDeadlineSql('respond_by', 'start_time')} < now()
+    `)
+  }
+
+  /**
    * Decline one activity kind's non-responders and report exactly who was
    * declined. The INSERT lives in a data-modifying CTE alongside the candidate
    * SELECT, so the rows handed back are the rows whose insert actually landed —
@@ -3953,6 +4000,30 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     return { declined: declined.length, fined }
   }
 
+  // ── Cron: Auto-cancel under-min trainings (every 30 min, :02/:32) ──
+  //
+  // Its own schedule because the bound is now the deadline INSTANT and the
+  // daily 07:00 run is far too coarse for it: a deadline at 20:00 would not be
+  // acted on until 07:00 the next morning, and a team on
+  // `training_respond_by_days = 0` (a real setting — "respond before it
+  // starts") would have its training cancelled after it had already been
+  // played. Half-hourly means the cancellation lands within 30 minutes of the
+  // deadline, which is when the answer is actually known.
+  //
+  // ⚠ Offset to :02/:32 rather than :00/:30 so it never races the 07:00
+  // participation cron, which calls the same helper first precisely so a
+  // training about to be cancelled cannot first decline and fine its
+  // non-responders.
+  schedule('2,32 * * * *', async () => {
+    try {
+      const res = await autoCancelTrainingsUnderMin()
+      if (res?.rowCount > 0) log.info(`Auto-cancel under-min: ${res.rowCount} training(s) cancelled`)
+    } catch (err) {
+      log.error({ msg: `Auto-cancel under-min: ${err.message}`, event: 'cron.auto_cancel_under_min', stack: err.stack })
+      logCronError('auto_cancel_under_min', err)
+    }
+  })
+
   // ── 6. Cron: Participation Reminders (07:00 UTC) ───────────────
   // Creates in-app notifications for unresponded members when deadline is tomorrow.
   // Uses batch INSERT...SELECT — no per-member loop.
@@ -4010,28 +4081,12 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       `, [tomorrowStr])
 
       // Auto-cancel trainings past deadline with insufficient participation.
-      //
-      // ⚠ `p.is_staff = false` is load-bearing: `min_participants` counts
-      // PLAYERS. The frontend has always agreed (`countConfirmedPlayers` in
-      // src/utils/participationWarnings.ts drops staff rows), but this query
-      // counted every confirmed row, so a coach's RSVP could hold a training
-      // open that the UI was already warning would be cancelled. Harmless while
-      // staff rarely had a row at all; from 2026-08-15 auto-confirm creates one
-      // for every coach on every training, which would have quietly raised the
-      // effective threshold on every auto-cancel team.
-      const autoCancelled = await database.raw(`
-        UPDATE trainings SET cancelled = true, cancel_reason = 'auto_cancel_min_not_met'
-        WHERE auto_cancel_on_min = true
-          AND cancelled = false
-          AND respond_by IS NOT NULL
-          AND respond_by::date <= CURRENT_DATE
-          AND min_participants > 0
-          AND (
-            SELECT COUNT(*) FROM participations p
-            WHERE p.activity_type = 'training' AND p.activity_id = trainings.id::text
-              AND p.status = 'confirmed' AND p.is_staff = false
-          ) < min_participants
-      `)
+      // Runs here as well as on its own half-hourly schedule so it is
+      // GUARANTEED to have settled before the two sweeps below: a training that
+      // is about to be auto-cancelled must not first decline and fine its
+      // non-responders. Idempotent (`cancelled = false` guard), so the double
+      // call costs one no-op UPDATE.
+      const autoCancelled = await autoCancelTrainingsUnderMin()
 
       // Auto-decline tentatives past deadline (per-team feature)
       //
