@@ -13,6 +13,7 @@ export default {
   confirmed: 'Zuegseit',
   declined: 'Abgseit',
   declinedAbsence: 'Abgseit (Absänz)',
+  declinedNoResponse: 'Abgseit (kei Antwort)',
   declinedUnavailable: 'Nöd verfüegbar',
   tentative: 'Villicht',
   absent: 'Abwesend',

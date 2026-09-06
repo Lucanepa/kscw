@@ -89,4 +89,13 @@ export default {
   team_fine_issued: '{{team}} a reçu une amende d\'équipe de {{amount}}',
   team_fine_paid: 'L\'amende d\'équipe de {{amount}} ({{team}}) est marquée comme payée',
   team_fine_waived: 'L\'amende d\'équipe de {{amount}} ({{team}}) a été annulée',
+
+  // Deadline sweep (migration 352). The daily cron declines a member who never
+  // answered before respond_by and — where the team's late_signin rule is on —
+  // fines them for it. Same storage shape as the fines rows above: the key
+  // lives in `title`, a {team, date, amount} bag in `body`, so the bell renders
+  // in the READER's language rather than the cron's.
+  deadlineMissed: 'Délai dépassé',
+  auto_declined_deadline: 'Tu as manqué le délai d\'inscription pour {{date}} ({{team}}) — inscrit comme absent',
+  auto_declined_deadline_fined: 'Tu as manqué le délai d\'inscription pour {{date}} ({{team}}) — inscrit comme absent, amende {{amount}}',
 } as const

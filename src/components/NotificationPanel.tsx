@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ClipboardList, Clock, AlertTriangle, Trophy, Bell, ArrowRightLeft, BellRing, BellOff, UserPlus, Trash2, ChevronDown, X, Banknote, Megaphone, IdCard, Gavel } from 'lucide-react'
+import { ClipboardList, Clock, AlertTriangle, Trophy, Bell, ArrowRightLeft, BellRing, BellOff, UserPlus, Trash2, ChevronDown, X, Banknote, Megaphone, IdCard, Gavel, CalendarX } from 'lucide-react'
 import type { Notification } from '../types'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
@@ -32,6 +32,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   team_fine_issued: <Gavel className="h-4 w-4" />,
   team_fine_paid: <Gavel className="h-4 w-4" />,
   team_fine_waived: <Gavel className="h-4 w-4" />,
+  auto_declined_deadline: <CalendarX className="h-4 w-4" />,
 }
 
 const typeLabels: Record<string, string> = {
@@ -51,6 +52,7 @@ const typeLabels: Record<string, string> = {
   team_fine_issued: 'fineLabel',
   team_fine_paid: 'fineLabel',
   team_fine_waived: 'fineLabel',
+  auto_declined_deadline: 'deadlineMissed',
 }
 
 function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {

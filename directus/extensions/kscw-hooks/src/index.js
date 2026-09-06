@@ -3732,6 +3732,227 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     }
   })
 
+  // ── No-response deadline sweep (migration 352) ─────────────────
+  //
+  // "Late sign-in" used to catch exactly one thing: a leader confirming
+  // somebody past respond_by, which pops IssueFineModal in the roster. The
+  // member who never answered AT ALL was invisible to it — no participation
+  // row, so no prompt, no fine, and a roster that counted them as undecided
+  // right up to the whistle. Ignoring the deadline is the behaviour the rule
+  // was written to price, and it was the one behaviour the rule could not see.
+  //
+  // Once the deadline has passed this writes the decline they never sent and
+  // auto-issues the late_signin fine for it.
+  //
+  // ⚠ Opt-in is ONE switch: the team must hold an ENABLED `fine_rules` row for
+  // `late_signin`. No rule → not swept, not declined, not fined. A team that
+  // has never opened the Fines panel is untouched by all of this.
+  //
+  // ⚠ Bounded at BOTH ends. Upper: the deadline has actually passed. Lower:
+  // no longer ago than DEADLINE_SWEEP_LOOKBACK_DAYS. Without a lower bound the
+  // first run after deploy reaches back across every activity whose deadline
+  // had ever passed and fines a whole club at once for deadlines nobody was
+  // told had teeth. A few days rather than one, so an overnight cron failure
+  // still catches up instead of letting a day's worth escape forever.
+  //
+  // ⚠ Staff are out (`is_staff = false`) — a late sign-in is a player rule,
+  // not a coach one, the same line the roster's manual prompt draws.
+  //
+  // ⚠ Called-up guests are out: the GAME branch joins `teamPeopleSql`, NOT
+  // `GAME_SQUAD_JOIN`, so `game_guests` never appear. Somebody doing another
+  // team a favour for a single fixture does not owe that team a fine, and the
+  // escalation counter keys on member×team — a team they are not even on.
+  //
+  // ⚠ `activity_id` is POLYMORPHIC (a varchar whose meaning depends on
+  // activity_type) and the training/game id spaces overlap almost completely,
+  // both sequences starting at 1. Every correlation below carries atype WITH
+  // aid — the exact mistake the 2026-08-08 audit found in the sibling
+  // tentative sweep, where training 137's deadline declined a maybe on GAME 137.
+  const DEADLINE_SWEEP_LOOKBACK_DAYS = 3
+
+  /** SQL mirror of getDeadlineDate() (src/utils/dateHelpers.ts): a respond_by
+   *  whose Europe/Zurich wall time is exactly 00:00:00 is the "no time given"
+   *  SENTINEL, not a midnight deadline — it resolves to the activity's own
+   *  start time, else 23:59. Comparing the raw column would fire the sweep up
+   *  to a full day EARLY on every row carrying the sentinel, declining and
+   *  fining people whose deadline had not arrived yet. */
+  function effectiveDeadlineSql(col, startCol) {
+    return `(CASE
+        WHEN (${col} AT TIME ZONE 'Europe/Zurich')::time = '00:00:00'
+        THEN (((${col} AT TIME ZONE 'Europe/Zurich')::date
+               + COALESCE(${startCol}, '23:59'::time)) AT TIME ZONE 'Europe/Zurich')
+        ELSE ${col}
+      END)`
+  }
+
+  /**
+   * Decline one activity kind's non-responders and report exactly who was
+   * declined. The INSERT lives in a data-modifying CTE alongside the candidate
+   * SELECT, so the rows handed back are the rows whose insert actually landed —
+   * a member who acquired a participation row between the two halves of a
+   * SELECT-then-INSERT can never be fined for silence they didn't keep.
+   *
+   * @param {'training'|'game'} kind
+   */
+  async function declineNoResponders(kind) {
+    const isTraining = kind === 'training'
+    const table = isTraining ? 'trainings' : 'games'
+    const teamCol = isTraining ? 'a.team' : 'a.kscw_team'
+    // `games` names its clock column "time" (reserved word, hence quoted);
+    // `trainings` calls the same thing start_time.
+    const startCol = isTraining ? 'a.start_time' : 'a."time"'
+    const liveClause = isTraining
+      ? 'a.cancelled = false'
+      : `COALESCE(a.status, '') NOT IN ('completed', 'postponed', 'cancelled')`
+    // Trainings let guests answer unless the training excluded their level;
+    // games never do (trg_participations_guest_block hard-blocks a guest's
+    // confirm), which is why the deadline reminder drops them there too — and
+    // a member who cannot answer must never be fined for not answering.
+    const guestClause = isTraining
+      ? `AND NOT (COALESCE(a.excluded_guest_levels, '[]')::jsonb @> to_jsonb(mt.guest_level))`
+      : 'AND mt.guest_level = 0'
+    const deadline = effectiveDeadlineSql('a.respond_by', startCol)
+
+    const res = await database.raw(`
+      WITH cand AS (
+        SELECT '${kind}'::text                      AS atype,
+               a.id::text                           AS aid,
+               ${teamCol}                           AS team_id,
+               to_char(a.date, 'YYYY-MM-DD')        AS adate_iso,
+               to_char(a.date, 'DD.MM.YYYY')        AS adate_label,
+               COALESCE(tm.name, '')                AS team_name,
+               mt.member                            AS member
+        FROM ${table} a
+        JOIN LATERAL ${teamPeopleSql(teamCol)} mt ON true
+        JOIN fine_rules fr
+          ON fr.team = ${teamCol}
+         AND fr.category = 'late_signin'
+         AND fr.enabled = true
+        LEFT JOIN teams tm ON tm.id = ${teamCol}
+        WHERE ${teamCol} IS NOT NULL
+          AND ${liveClause}
+          AND a.respond_by IS NOT NULL
+          AND a.date IS NOT NULL
+          AND ${deadline} < now()
+          AND ${deadline} >= now() - (?::integer * interval '1 day')
+          AND a.date >= CURRENT_DATE
+          AND mt.is_staff = false
+          ${guestClause}
+          AND NOT EXISTS (
+            SELECT 1 FROM participations p
+            WHERE p.activity_type = '${kind}'
+              AND p.activity_id = a.id::text
+              AND p.member = mt.member
+          )
+      ), ins AS (
+        INSERT INTO participations
+          (member, activity_type, activity_id, status, note, guest_count, is_staff, auto_declined_deadline)
+        SELECT member, atype, aid, 'declined', '', 0, false, true FROM cand
+        RETURNING member, activity_type, activity_id
+      )
+      SELECT c.atype, c.aid, c.team_id, c.adate_iso, c.adate_label, c.team_name, c.member
+      FROM cand c
+      JOIN ins i
+        ON i.member = c.member
+       AND i.activity_type = c.atype
+       AND i.activity_id = c.aid
+    `, [DEADLINE_SWEEP_LOOKBACK_DAYS])
+    return res?.rows || []
+  }
+
+  /**
+   * The sweep proper: decline every non-responder past their deadline, issue
+   * the fine, tell them once.
+   *
+   * The fine goes through ItemsService rather than a raw insert precisely so
+   * `filter('fines.items.create')` runs it through kscw_compute_fine_amount —
+   * the escalation tier is the whole point, and a raw insert would have to
+   * re-derive it. `auto_issued: true` survives because there is no
+   * accountability.user here; the same filter forces it false for every human
+   * caller, so the flag cannot be forged from the API.
+   *
+   * One push per member, not two: `action('fines.items.create')` skips its own
+   * push for auto-issued rows and leaves the bell entry, so the member gets a
+   * single notification that names both the decline and the money.
+   */
+  async function sweepDeadlineNoResponses() {
+    const declined = [
+      ...(await declineNoResponders('training')),
+      ...(await declineNoResponders('game')),
+    ]
+    if (declined.length === 0) return { declined: 0, fined: 0 }
+
+    const schema = await getSchema()
+    const { ItemsService } = services
+    const finesService = new ItemsService('fines', { schema, knex: database })
+
+    let fined = 0
+    for (const row of declined) {
+      let amountStr = null
+      try {
+        const fineId = await finesService.createOne({
+          member: Number(row.member),
+          team: Number(row.team_id),
+          category: 'late_signin',
+          activity_type: row.atype,
+          activity_id: Number(row.aid),
+          activity_date: row.adate_iso,
+          auto_issued: true,
+        })
+        const fine = await database('fines').where('id', fineId).first('amount', 'currency')
+        if (fine) amountStr = formatChf(fine.amount, fine.currency)
+        fined += 1
+      } catch (err) {
+        // A rule that is enabled but has no tiers configured throws
+        // FINE_NO_RULE — the team asked for the deadline to bite but never
+        // priced it. The decline still stands (the roster is honest either
+        // way); only the charge is skipped. Same for the unique-index backstop
+        // if this ever runs twice against one activity.
+        log.warn({
+          msg: `[deadline-sweep] no fine for member ${row.member} on ${row.atype} ${row.aid}: ${err.message}`,
+          event: 'deadline_sweep_fine_skipped',
+        })
+      }
+
+      try {
+        const titleKey = row.atype === 'training' ? 'autoDeclinedTraining' : 'autoDeclinedGame'
+        const bodyKey = amountStr ? 'autoDeclinedFined.body' : 'autoDeclined.body'
+        const vars = { date: row.adate_label, team: row.team_name, amount: amountStr || '' }
+
+        await database('notifications').insert({
+          member: row.member,
+          type: 'auto_declined_deadline',
+          title: amountStr ? 'auto_declined_deadline_fined' : 'auto_declined_deadline',
+          body: JSON.stringify(vars),
+          activity_type: row.atype,
+          activity_id: String(row.aid),
+          team: row.team_id,
+          read: false,
+        })
+
+        await sendLocalizedPush(
+          database, [row.member],
+          (ids, title, body) => sendPushToMembers(
+            database, ids, title, body,
+            `${FRONTEND_URL}/${row.atype}s/${row.aid}`,
+            `deadline-decline-${row.atype}-${row.aid}`,
+            log,
+          ),
+          `${titleKey}.title`, bodyKey, vars,
+        )
+      } catch (err) {
+        // Never let a notification failure strand the sweep — the decline and
+        // the fine are already committed, and the member still sees both in
+        // the app.
+        log.warn({
+          msg: `[deadline-sweep] notify failed for member ${row.member}: ${err.message}`,
+          event: 'deadline_sweep_notify_failed',
+        })
+      }
+    }
+    return { declined: declined.length, fined }
+  }
+
   // ── 6. Cron: Participation Reminders (07:00 UTC) ───────────────
   // Creates in-app notifications for unresponded members when deadline is tomorrow.
   // Uses batch INSERT...SELECT — no per-member loop.
@@ -3854,7 +4075,19 @@ export default ({ action, filter, init, schedule }, { services, database, logger
           )
       `)
 
-      log.info(`Participation reminders: games=${gamesInserted?.rowCount || 0}, trainings=${trainingsInserted?.rowCount || 0}, auto-cancelled=${autoCancelled?.rowCount || 0}`)
+      // Non-responders past their deadline (migration 352). Runs AFTER the
+      // tentative sweep on purpose: a `tentative` that just became `declined`
+      // already has a row, so it is not a non-responder and must not be fined
+      // for a maybe it did give.
+      let noResponse = { declined: 0, fined: 0 }
+      try {
+        noResponse = await sweepDeadlineNoResponses()
+      } catch (sweepErr) {
+        log.error({ msg: `Deadline no-response sweep: ${sweepErr.message}`, event: 'cron.deadline_no_response_sweep', stack: sweepErr.stack })
+        logCronError('deadline_no_response_sweep', sweepErr)
+      }
+
+      log.info(`Participation reminders: games=${gamesInserted?.rowCount || 0}, trainings=${trainingsInserted?.rowCount || 0}, auto-cancelled=${autoCancelled?.rowCount || 0}, no-response-declined=${noResponse.declined}, auto-fined=${noResponse.fined}`)
 
       // Send push notifications for deadline reminders
       try {
@@ -6748,8 +6981,9 @@ export default ({ action, filter, init, schedule }, { services, database, logger
   //   tier_offense + reset_window_at_issue onto the row. If amount is
   //   non-null (leader override), still snapshot the tier metadata for
   //   audit but DON'T overwrite their amount. Auto-fill `issued_by` from
-  //   accountability.user → members.id and force `auto_issued = false`
-  //   (no silent server-issued path exists yet — defense-in-depth).
+  //   accountability.user → members.id and force `auto_issued = false` for
+  //   every human caller — only system context (the deadline sweep below)
+  //   may set it true, so the flag cannot be forged from the API.
   //
   // filter('fines.items.update'):
   //   Block edits to amount / category / reason / member / team to enforce
@@ -6851,7 +7085,13 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         filled.reset_window_at_issue = filled.reset_window_at_issue ?? computed.reset_window_at_issue
       }
       if (issuerId) filled.issued_by = issuerId
-      filled.auto_issued = false // hard rule: no silent server-issued path exists yet
+      // `auto_issued` is server-owned. Forced false for anyone carrying an
+      // accountability.user, so a coach cannot POST a fine that claims the
+      // system issued it. System context — the no-response deadline sweep in
+      // the daily participation cron — is the one path allowed to set it, and
+      // that flag is the whole difference between a charge a leader stands
+      // behind and one nobody clicked.
+      filled.auto_issued = accountability?.user ? false : payload.auto_issued === true
       return filled
     } catch (err) {
       // Security gates (scope + payload validation) must fail closed — never
@@ -6940,7 +7180,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     try {
       if (!key) return
       const fine = await database('fines').where('id', key).first(
-        'id', 'member', 'team', 'category', 'amount', 'currency', 'reason',
+        'id', 'member', 'team', 'category', 'amount', 'currency', 'reason', 'auto_issued',
       )
       if (!fine) return
       if (!fine.member) { await notifyTeamFine(fine, 'issued'); return }
@@ -6961,7 +7201,12 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         read: false,
       })
 
-      // Push to the recipient
+      // Push to the recipient — EXCEPT for the deadline sweep's own fines.
+      // That sweep declines the member and fines them in one stroke, and
+      // pushes once itself naming both; a second "New fine" buzz for the same
+      // event is noise the member cannot act on separately. The bell entry
+      // above still lands, so /fines stays one tap away.
+      if (fine.auto_issued) return
       await sendLocalizedPush(
         database, [fine.member],
         (ids, title, body) => sendPushToMembers(database, ids, title, body, `${FRONTEND_URL}/fines`, `fine-${fine.id}`, log),

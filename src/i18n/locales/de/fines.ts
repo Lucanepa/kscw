@@ -93,6 +93,7 @@ export default {
   settingsTitle: 'Bussen',
   settingsDescription: 'Eskalationsstufen und Reset-Fenster pro Kategorie.',
   settingsEnabled: 'Aktiviert',
+  settingsLateSigninSweep: 'Solange dies aktiv ist, wird jede Person, die bis zur Frist nicht geantwortet hat, am nächsten Morgen automatisch als nicht dabei eingetragen und gebüsst.',
   settingsResetWindow: 'Reset-Fenster',
   settingsTiers: 'Eskalationsstufen',
   settingsAddTier: 'Stufe hinzufügen',

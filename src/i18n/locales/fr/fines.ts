@@ -93,6 +93,7 @@ export default {
   settingsTitle: 'Amendes',
   settingsDescription: 'Paliers d’escalade et fenêtres de réinitialisation par catégorie.',
   settingsEnabled: 'Activé',
+  settingsLateSigninSweep: 'Tant que ceci est activé, toute personne qui n\'a pas répondu avant le délai est inscrite comme absente et sanctionnée automatiquement le lendemain matin.',
   settingsResetWindow: 'Fenêtre de réinitialisation',
   settingsTiers: 'Paliers d’escalade',
   settingsAddTier: 'Ajouter un palier',

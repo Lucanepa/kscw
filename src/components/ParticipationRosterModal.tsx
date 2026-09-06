@@ -1297,6 +1297,13 @@ export default function ParticipationRosterModal({
       const isWeekly = coveringAbsenceByMember.get(String(memberId))?.type === 'weekly'
       return t(isWeekly ? 'declinedUnavailable' : 'declinedAbsence')
     }
+    // A row the deadline sweep wrote (migration 352) would otherwise read as a
+    // flat "Declined", which is exactly the wrong story: this member never said
+    // anything at all, and the late_signin fine hanging off it is for the
+    // silence, not for a refusal the coach could have planned around. Checked
+    // AFTER the absence branch — a covering absence is the better explanation
+    // when a later absence lands on top of a swept row and both markers stand.
+    if (baseStatus === 'declined' && p?.auto_declined_deadline) return t('declinedNoResponse')
     return t(baseStatus)
   }
 

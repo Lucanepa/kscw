@@ -85,6 +85,39 @@ const T = {
     fr: 'La date limite d’inscription est demain',
     it: 'La scadenza per l’iscrizione è domani',
   },
+  // Deadline sweep (migration 352) — the member never answered, so the daily
+  // cron declined them for it and (where the team's late_signin rule is on)
+  // fined them. ONE push covers both: the fine's own create-action push is
+  // suppressed for auto-issued rows so this is the only buzz.
+  // {date} = dd.mm.yyyy, {team} = team name, {amount} = "CHF 20.00".
+  'autoDeclinedTraining.title': {
+    de: 'Training: Frist verpasst',
+    gsw: 'Training: Frist verpasst',
+    en: 'Training: deadline missed',
+    fr: 'Entraînement : délai dépassé',
+    it: 'Allenamento: scadenza mancata',
+  },
+  'autoDeclinedGame.title': {
+    de: 'Spiel: Frist verpasst',
+    gsw: 'Spiel: Frist verpasst',
+    en: 'Game: deadline missed',
+    fr: 'Match : délai dépassé',
+    it: 'Partita: scadenza mancata',
+  },
+  'autoDeclined.body': {
+    de: '{date} — du bist als nicht dabei eingetragen',
+    gsw: '{date} — du bisch als nöd debi iiträit',
+    en: '{date} — you\'ve been marked as not coming',
+    fr: '{date} — tu es inscrit comme absent',
+    it: '{date} — sei registrato come assente',
+  },
+  'autoDeclinedFined.body': {
+    de: '{date} — als nicht dabei eingetragen, Busse {amount}',
+    gsw: '{date} — als nöd debi iiträit, Bueß {amount}',
+    en: '{date} — marked as not coming, fine {amount}',
+    fr: '{date} — inscrit comme absent, amende {amount}',
+    it: '{date} — registrato come assente, multa {amount}',
+  },
   'joinRequest.title': {
     de: 'Neue Beitrittsanfrage: {name}',
     gsw: 'Neui Bytrittsaafrog: {name}',

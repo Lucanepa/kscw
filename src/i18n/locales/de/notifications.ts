@@ -90,4 +90,13 @@ export default {
   team_fine_issued: '{{team}} hat als Team eine Busse über {{amount}} erhalten',
   team_fine_paid: 'Die Teambusse über {{amount}} ({{team}}) ist als bezahlt markiert',
   team_fine_waived: 'Die Teambusse über {{amount}} ({{team}}) wurde erlassen',
+
+  // Deadline sweep (migration 352). The daily cron declines a member who never
+  // answered before respond_by and — where the team's late_signin rule is on —
+  // fines them for it. Same storage shape as the fines rows above: the key
+  // lives in `title`, a {team, date, amount} bag in `body`, so the bell renders
+  // in the READER's language rather than the cron's.
+  deadlineMissed: 'Frist verpasst',
+  auto_declined_deadline: 'Du hast die Anmeldefrist für {{date}} ({{team}}) verpasst — als nicht dabei eingetragen',
+  auto_declined_deadline_fined: 'Du hast die Anmeldefrist für {{date}} ({{team}}) verpasst — als nicht dabei eingetragen, Busse {{amount}}',
 } as const

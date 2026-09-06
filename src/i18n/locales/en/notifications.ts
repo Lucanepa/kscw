@@ -97,4 +97,13 @@ export default {
   team_fine_issued: '{{team}} was fined {{amount}} as a team',
   team_fine_paid: 'The team fine of {{amount}} ({{team}}) is marked as paid',
   team_fine_waived: 'The team fine of {{amount}} ({{team}}) was waived',
+
+  // Deadline sweep (migration 352). The daily cron declines a member who never
+  // answered before respond_by and — where the team's late_signin rule is on —
+  // fines them for it. Same storage shape as the fines rows above: the key
+  // lives in `title`, a {team, date, amount} bag in `body`, so the bell renders
+  // in the READER's language rather than the cron's.
+  deadlineMissed: 'Deadline missed',
+  auto_declined_deadline: 'You missed the sign-up deadline for {{date}} ({{team}}) — marked as not coming',
+  auto_declined_deadline_fined: 'You missed the sign-up deadline for {{date}} ({{team}}) — marked as not coming, fine {{amount}}',
 } as const

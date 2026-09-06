@@ -206,6 +206,16 @@ function CategoryEditor({ teamId, category, rule, onChange }: CategoryEditorProp
         </label>
       </div>
 
+      {/* late_signin is the one category that acts on its own: enabling it arms
+          the nightly sweep that declines and fines everyone who never answered.
+          A coach ticking a box called "Enabled" deserves to be told that here,
+          not to discover it from a member asking why they owe CHF 20. */}
+      {category === 'late_signin' && enabled && (
+        <p className="text-xs italic text-gray-500 dark:text-gray-400">
+          {t('fines:settingsLateSigninSweep')}
+        </p>
+      )}
+
       {(enabled || rule) && (
         <>
           {/* Reset window */}

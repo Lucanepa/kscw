@@ -93,6 +93,7 @@ export default {
   settingsTitle: 'Multe',
   settingsDescription: 'Scaglioni di escalation e finestre di reset per categoria.',
   settingsEnabled: 'Attivato',
+  settingsLateSigninSweep: 'Finché è attivo, chi non ha risposto entro la scadenza viene registrato come assente e multato automaticamente la mattina successiva.',
   settingsResetWindow: 'Finestra di reset',
   settingsTiers: 'Scaglioni di escalation',
   settingsAddTier: 'Aggiungi scaglione',

@@ -93,6 +93,7 @@ export default {
   settingsTitle: 'Bueße',
   settingsDescription: 'Eskalationsstufe und Reset-Fenster pro Kategorii.',
   settingsEnabled: 'Aktiviert',
+  settingsLateSigninSweep: 'Solang das aktiv isch, wird jede wo bis zur Frist nöd gantwortet hät, am nächste Morge automatisch als nöd debi iiträit und büesst.',
   settingsResetWindow: 'Reset-Fenster',
   settingsTiers: 'Eskalationsstufe',
   settingsAddTier: 'Stufe dezuetue',

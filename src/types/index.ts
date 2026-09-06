@@ -796,6 +796,14 @@ export interface Participation extends BaseRecord {
    *  changes `status` (migration 038), so a non-null marker is the definitive
    *  signal that "this row was system-set, not user-set". */
   auto_declined_by?: number | null
+  /** Migration 352. Set by the daily deadline sweep when it declines a member
+   *  who never answered before `respond_by` — the same "system-owned row"
+   *  contract as `auto_declined_by`: `trg_participations_clear_auto_marker`
+   *  flips it back to false the moment anyone changes `status`, so a surviving
+   *  true means nobody has touched it. Without it the roster shows a bare
+   *  "Declined" and a missed deadline is indistinguishable from a real "I
+   *  can't come" — which is the distinction the late_signin fine charges for. */
+  auto_declined_deadline?: boolean
   /** Per-field edit attribution (migration 047). Set by the kscw-hooks
    *  `participations.items.{create,update}` filter ONLY when the matching
    *  field is in the write payload, so editing the note doesn't reset the
@@ -1132,7 +1140,7 @@ export interface ScorerDelegation extends BaseRecord {
 
 export interface Notification extends BaseRecord {
   member: string
-  type: 'activity_change' | 'upcoming_activity' | 'deadline_reminder' | 'result_available' | 'duty_delegation_request' | 'member_join_request' | 'poll_created' | 'event_invite' | 'new_report' | 'form_published' | 'form_submission' | 'form_reminder' | 'expense_status' | 'announcement' | 'licence_status'
+  type: 'activity_change' | 'upcoming_activity' | 'deadline_reminder' | 'result_available' | 'duty_delegation_request' | 'member_join_request' | 'poll_created' | 'event_invite' | 'new_report' | 'form_published' | 'form_submission' | 'form_reminder' | 'expense_status' | 'announcement' | 'licence_status' | 'auto_declined_deadline'
   title: string
   body: string
   activity_type: 'game' | 'training' | 'event' | 'scorer_duty' | 'team' | 'poll' | 'report' | 'form' | 'expense' | 'announcement' | 'fine' | ''

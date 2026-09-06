@@ -89,4 +89,13 @@ export default {
   team_fine_issued: '{{team}} ha ricevuto una multa di squadra di {{amount}}',
   team_fine_paid: 'La multa di squadra di {{amount}} ({{team}}) è segnata come pagata',
   team_fine_waived: 'La multa di squadra di {{amount}} ({{team}}) è stata annullata',
+
+  // Deadline sweep (migration 352). The daily cron declines a member who never
+  // answered before respond_by and — where the team's late_signin rule is on —
+  // fines them for it. Same storage shape as the fines rows above: the key
+  // lives in `title`, a {team, date, amount} bag in `body`, so the bell renders
+  // in the READER's language rather than the cron's.
+  deadlineMissed: 'Scadenza mancata',
+  auto_declined_deadline: 'Hai mancato la scadenza per l\'iscrizione del {{date}} ({{team}}) — registrato come assente',
+  auto_declined_deadline_fined: 'Hai mancato la scadenza per l\'iscrizione del {{date}} ({{team}}) — registrato come assente, multa {{amount}}',
 } as const

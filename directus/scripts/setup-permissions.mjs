@@ -1756,6 +1756,9 @@ async function main() {
     'guest_count', 'is_staff',
     'session_id', 'waitlisted_at',
     'auto_declined_by', 'auto_declined_by_game', 'auto_cancelled_by_closure',
+    // migration 352 — the roster needs it to tell a missed deadline apart from
+    // a real decline, and members read their own rows through this policy.
+    'auto_declined_deadline',
     'last_status_edited_at', 'last_note_edited_at', 'last_edited_at',
     'date_created', 'date_updated',
   ]

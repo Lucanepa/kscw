@@ -104,6 +104,7 @@ export default {
   settingsTitle: 'Fines',
   settingsDescription: 'Escalation tiers and reset windows per category.',
   settingsEnabled: 'Enabled',
+  settingsLateSigninSweep: 'While this is on, anyone who has not answered by the deadline is marked as not coming and fined automatically the next morning.',
   settingsResetWindow: 'Reset window',
   settingsTiers: 'Escalation tiers',
   settingsAddTier: 'Add tier',

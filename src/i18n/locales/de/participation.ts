@@ -13,6 +13,7 @@ export default {
   confirmed: 'Zugesagt',
   declined: 'Abgesagt',
   declinedAbsence: 'Abgesagt (Absenz)',
+  declinedNoResponse: 'Abgesagt (keine Antwort)',
   declinedUnavailable: 'Nicht verfügbar',
   tentative: 'Vielleicht',
   absent: 'Abwesend',
