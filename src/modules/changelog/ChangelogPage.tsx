@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.4.0'
+const APP_VERSION = '2.4.1'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,19 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.4.1',
+    date: '06.09.2026',
+    sections: [
+      {
+        title: 'Basketball planner fixes',
+        items: [
+          'A game placed in the Spielplansitzung planner can now be edited from the calendar too. Tapping the date showed "Edit in the planner" next to it and then did nothing; that row now opens the same editor the planner grid uses (team, opponent, home/guest game, note, remove).',
+          'A team that already hosts on a date is no longer offered more slots on it. The slot generator knew a team could not host while playing away, but not while already hosting \u2014 so it kept suggesting the rest of the day. It applies immediately, without re-generating the slot list.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.4.0',
     date: '03.09.2026',

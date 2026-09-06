@@ -123,6 +123,7 @@ See `INFRA.md → Domains & Hosting Overview` for full map.
      (append new dev/deploy entries THERE, not here). User-facing release notes → CHANGELOG.md.
      Keep this list pruned to ~5 entries. -->
 - **2026-09-06** The sign-up deadline only ever bit the people who answered (migration 352, dev; prod pending approval)
+- **2026-09-06** The label that promised an editor, and a generator that only knew half of "this team already plays" (no migration, dev+prod, v2.4.1)
 - **2026-09-03** A basketball game could be created and never corrected — and a home one held a court nobody could see (migration 351, dev+prod, v2.4.0)
 - **2026-09-02** "Member left" existed for a day and was never committed — and departing was never one column (no migration, dev+prod, v2.3.0)
 - **2026-09-01** Three sisters, one mother, and two of them had no account at all (migrations 348 + 349, dev; prod pending approval, v2.2.0).

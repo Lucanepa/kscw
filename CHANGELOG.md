@@ -2,6 +2,13 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.4.1 — 2026-09-06
+
+### Basketball planner fixes
+
+- **A game placed in the Spielplansitzung planner can now be edited from the calendar too.** Tapping the date showed "Edit in the planner" next to it and then did nothing; that row now opens the same editor the planner grid uses (team, opponent, home/guest game, note, remove).
+- **A team that already hosts on a date is no longer offered more slots on it.** The slot generator knew a team could not host while playing away, but not while already hosting — so it kept suggesting the rest of the day. It applies immediately, without re-generating the slot list.
+
 ## v2.4.0 — 2026-09-03
 
 ### Basketball games can be corrected
