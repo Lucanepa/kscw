@@ -196,6 +196,7 @@ export default {
 
   // Finitions grille / editeur
   noDataToDisplay: 'Aucune donnee a afficher',
+  breakExpand: 'Rien de reserve {{from}}–{{to}} — cliquer pour afficher ces heures',
   switchOverlap: 'Alterner le chevauchement',
   labelPlaceholder: 'p.ex. Entrainement d\'essai, Match a domicile vs. TVA',
   sportVolleyball: 'Volleyball',

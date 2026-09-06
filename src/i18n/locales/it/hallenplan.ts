@@ -196,6 +196,7 @@ export default {
 
   // Rifiniture griglia / editor
   noDataToDisplay: 'Nessun dato da mostrare',
+  breakExpand: 'Niente prenotato {{from}}–{{to}} — clicca per mostrare queste ore',
   switchOverlap: 'Alterna sovrapposizione',
   labelPlaceholder: 'es. Allenamento di prova, Partita in casa vs. TVA',
   sportVolleyball: 'Pallavolo',

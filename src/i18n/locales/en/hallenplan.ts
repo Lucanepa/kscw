@@ -196,6 +196,7 @@ export default {
 
   // Grid / editor polish
   noDataToDisplay: 'No data to display',
+  breakExpand: 'Nothing booked {{from}}–{{to}} — click to show these hours',
   switchOverlap: 'Switch overlap',
   labelPlaceholder: 'e.g. Trial training, Home game vs. TVA',
   sportVolleyball: 'Volleyball',

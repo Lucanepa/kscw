@@ -124,3 +124,184 @@ export function getSmartEndHour(daySlots: HallSlot[], dayIndex: number): number 
   }
   return Math.min(Math.ceil(latest / 60), END_HOUR)
 }
+
+// ── Collapsed-gap time axis ──────────────────────────────────────────
+// The grid used to be one linear minute→pixel map, so a week whose halls sit
+// empty from 11:00 to 16:00 rendered five hours of blank rows and pushed the
+// evening — the only part anyone reads — below the fold. The axis below is
+// piecewise: stretches with nothing in them, ON ANY DAY IN ANY HALL, collapse
+// to a single band.
+//
+// ⚠ The inverse (`axisTopToMinutes`) is what click-to-create reads. It has to
+// stay the exact inverse of `axisTimeToTop` or clicking an empty cell prefills
+// the slot editor with the wrong time — silently, since both numbers look
+// plausible. The round-trip is pinned by tests.
+
+/** A gap must be at least this long, AFTER snapping to whole hours, to collapse. */
+export const MIN_COLLAPSIBLE_MINUTES = 120
+/** Rendered height of one collapsed band. */
+export const BREAK_HEIGHT = 22
+
+export interface TimeAxisSegment {
+  startMin: number
+  endMin: number
+  collapsed: boolean
+  top: number
+  height: number
+}
+
+export interface TimeAxisRow {
+  time: string
+  isFullHour: boolean
+  isBreak: boolean
+  top: number
+  height: number
+  /** Break rows only: the end of the skipped range, for the label. */
+  breakEndTime?: string
+  /** Break rows only: stable key for the caller's "expand this one" set. */
+  breakKey?: string
+}
+
+export interface TimeAxis {
+  segments: TimeAxisSegment[]
+  rows: TimeAxisRow[]
+  totalHeight: number
+  startMin: number
+  endMin: number
+}
+
+const hhmm = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+export const breakKeyOf = (startMin: number, endMin: number) => `${startMin}-${endMin}`
+
+/**
+ * Builds the axis for [startHour, endHour), collapsing every whole-hour gap of
+ * at least `minGap` minutes that no busy interval touches.
+ *
+ * `busy` is every interval drawn in the view — across all days and halls, since
+ * one column is enough to keep an hour open.
+ * `forceExpanded` holds break keys the user clicked open.
+ */
+export function buildTimeAxis(
+  busy: { startMin: number; endMin: number }[],
+  startHour: number,
+  endHour: number,
+  forceExpanded: ReadonlySet<string> = new Set(),
+  minGap = MIN_COLLAPSIBLE_MINUTES,
+): TimeAxis {
+  const startMin = startHour * 60
+  const endMin = endHour * 60
+
+  // Merge the busy intervals, clamped to the visible window.
+  const merged: { startMin: number; endMin: number }[] = []
+  for (const b of [...busy].sort((a, b) => a.startMin - b.startMin)) {
+    const s = Math.max(b.startMin, startMin)
+    const e = Math.min(b.endMin, endMin)
+    if (e <= s) continue
+    const last = merged[merged.length - 1]
+    if (last && s <= last.endMin) last.endMin = Math.max(last.endMin, e)
+    else merged.push({ startMin: s, endMin: e })
+  }
+
+  // Gaps between them become collapse candidates. Snapped INWARD to whole
+  // hours so every expanded segment still starts on an hour and the 15-minute
+  // label rows keep lining up with the hour rules.
+  const collapsed: { startMin: number; endMin: number }[] = []
+  let cursor = startMin
+  for (const m of [...merged, { startMin: endMin, endMin }]) {
+    const gapStart = Math.ceil(cursor / 60) * 60
+    const gapEnd = Math.floor(m.startMin / 60) * 60
+    if (gapEnd - gapStart >= minGap && !forceExpanded.has(breakKeyOf(gapStart, gapEnd))) {
+      collapsed.push({ startMin: gapStart, endMin: gapEnd })
+    }
+    cursor = Math.max(cursor, m.endMin)
+  }
+
+  const segments: TimeAxisSegment[] = []
+  const rows: TimeAxisRow[] = []
+  let top = 0
+  let at = startMin
+
+  const pushExpanded = (from: number, to: number) => {
+    if (to <= from) return
+    const height = ((to - from) / SLOT_MINUTES) * SLOT_HEIGHT
+    segments.push({ startMin: from, endMin: to, collapsed: false, top, height })
+    for (let m = from; m < to; m += SLOT_MINUTES) {
+      rows.push({
+        time: hhmm(m),
+        isFullHour: m % 60 === 0,
+        isBreak: false,
+        top: top + ((m - from) / SLOT_MINUTES) * SLOT_HEIGHT,
+        height: SLOT_HEIGHT,
+      })
+    }
+    top += height
+  }
+
+  for (const c of collapsed) {
+    pushExpanded(at, c.startMin)
+    segments.push({ startMin: c.startMin, endMin: c.endMin, collapsed: true, top, height: BREAK_HEIGHT })
+    rows.push({
+      time: hhmm(c.startMin),
+      isFullHour: true,
+      isBreak: true,
+      top,
+      height: BREAK_HEIGHT,
+      breakEndTime: hhmm(c.endMin),
+      breakKey: breakKeyOf(c.startMin, c.endMin),
+    })
+    top += BREAK_HEIGHT
+    at = c.endMin
+  }
+  pushExpanded(at, endMin)
+
+  return { segments, rows, totalHeight: top, startMin, endMin }
+}
+
+/** Minutes since midnight → px from the grid top. */
+export function axisTimeToTop(axis: TimeAxis, minutes: number): number {
+  if (minutes <= axis.startMin) return 0
+  if (minutes >= axis.endMin) return axis.totalHeight
+  for (const seg of axis.segments) {
+    if (minutes < seg.startMin) return seg.top
+    // `<` not `<=`: a segment's end IS the next one's start, and `<=` handed
+    // 16:00 to the collapsed 11:00-16:00 band instead of to the evening
+    // segment that actually begins there — every evening slot would have been
+    // drawn at the break's y.
+    if (minutes < seg.endMin) {
+      if (seg.collapsed) return seg.top
+      return seg.top + ((minutes - seg.startMin) / SLOT_MINUTES) * SLOT_HEIGHT
+    }
+  }
+  return axis.totalHeight
+}
+
+/** px from the grid top → minutes since midnight. Inverse of `axisTimeToTop`. */
+export function axisTopToMinutes(axis: TimeAxis, px: number): number {
+  if (px <= 0) return axis.startMin
+  for (const seg of axis.segments) {
+    if (px < seg.top + seg.height) {
+      if (seg.collapsed) return seg.startMin
+      return seg.startMin + Math.round((px - seg.top) / SLOT_HEIGHT) * SLOT_MINUTES
+    }
+  }
+  return axis.endMin
+}
+
+/** Positions slots on a piecewise axis. Heights follow the axis, so a slot
+ *  never spans a collapsed band (nothing can be in one, by construction). */
+export function positionSlotsOnAxis(slots: HallSlot[], axis: TimeAxis): PositionedSlot[] {
+  return slots.map((slot) => {
+    const top = axisTimeToTop(axis, timeToMinutes(slot.start_time))
+    const bottom = axisTimeToTop(axis, timeToMinutes(slot.end_time))
+    return {
+      slot,
+      top,
+      height: Math.max(bottom - top, SLOT_HEIGHT / 2),
+      left: 0,
+      width: 100,
+      dayIndex: slot.day_of_week,
+    }
+  })
+}

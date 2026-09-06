@@ -196,6 +196,7 @@ export default {
 
   // Raster- / Editor-Feinschliff
   noDataToDisplay: 'Keine Daten vorhanden',
+  breakExpand: 'Nichts gebucht {{from}}–{{to}} — klicken, um diese Stunden anzuzeigen',
   switchOverlap: 'Überlappung wechseln',
   labelPlaceholder: 'z.B. Schnuppertraining, Heimspiel vs. TVA',
   sportVolleyball: 'Volleyball',

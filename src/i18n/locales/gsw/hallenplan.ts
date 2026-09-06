@@ -196,6 +196,7 @@ export default {
 
   // Raster- / Editor-Feischliff
   noDataToDisplay: 'Käni Date verfüegbar',
+  breakExpand: 'Nüt bucht {{from}}–{{to}} — klicke, zum die Stunde zeige',
   switchOverlap: 'Überlappig wächsle',
   labelPlaceholder: 'z.B. Schnuppertraining, Heimspiel vs. TVA',
   sportVolleyball: 'Volleyball',

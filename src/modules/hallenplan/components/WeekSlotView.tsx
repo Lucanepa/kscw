@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { HallSlot, HallClosure, Hall, Team } from '../../../types'
-import { toISODate, minutesToTime } from '../../../utils/dateHelpers'
-import { positionSlotsMultiHall, generateTimeLabels, SLOT_HEIGHT, topToMinutes, SLOT_MINUTES, getDayRange, getSmartStartHour, getSmartEndHour } from '../utils/timeGrid'
+import { toISODate, minutesToTime, timeToMinutes } from '../../../utils/dateHelpers'
+import { SLOT_MINUTES, getDayRange, getSmartStartHour, getSmartEndHour, buildTimeAxis, axisTimeToTop, axisTopToMinutes, positionSlotsOnAxis } from '../utils/timeGrid'
 import { buildConflictSet } from '../utils/conflictDetection'
 import { useOverlapResolution, useTeamResolver } from '../slotViewShared'
 import SlotBlock from './SlotBlock'
@@ -55,11 +55,32 @@ export default function WeekSlotView({
     return best === -Infinity ? 22 : best
   }, [slots])
   const baseMinute = smartStart * 60
-  const totalRows = (smartEnd - smartStart) * (60 / SLOT_MINUTES)
 
-  const timeLabels = useMemo(() => generateTimeLabels(smartStart, smartEnd), [smartStart, smartEnd])
+  // Stretches with nothing in them on ANY day in ANY hall collapse to a band,
+  // so an empty 11:00-16:00 stops pushing the evening below the fold. Clicking
+  // a band re-expands just that range, which is the only way to keep
+  // click-to-create reachable inside a collapsed hour.
+  const [expandedBreaks, setExpandedBreaks] = useState<ReadonlySet<string>>(new Set())
+  const axis = useMemo(
+    () => buildTimeAxis(
+      slots.map((s) => ({ startMin: timeToMinutes(s.start_time), endMin: timeToMinutes(s.end_time) })),
+      smartStart,
+      smartEnd,
+      expandedBreaks,
+    ),
+    [slots, smartStart, smartEnd, expandedBreaks],
+  )
+  const timeLabels = axis.rows
   const conflictSet = useMemo(() => buildConflictSet(slots), [slots])
-  const gridHeight = totalRows * SLOT_HEIGHT
+  const gridHeight = axis.totalHeight
+
+  function toggleBreak(key: string) {
+    setExpandedBreaks((prev) => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+  }
 
   // Determine which halls are visible (selected or all halls that have data)
   const visibleHalls = useMemo(() => {
@@ -86,10 +107,7 @@ export default function WeekSlotView({
   }, [weekDays])
 
   // Position slots using multi-hall grouping when multiple halls visible
-  const positioned = useMemo(
-    () => positionSlotsMultiHall(slots, baseMinute),
-    [slots, baseMinute],
-  )
+  const positioned = useMemo(() => positionSlotsOnAxis(slots, axis), [slots, axis])
 
   // Group positioned slots by (day, hall) for rendering
   const slotsByDayHall = useMemo(() => {
@@ -262,7 +280,7 @@ export default function WeekSlotView({
     if (!isAdmin && !isCoach) return
     const rect = e.currentTarget.getBoundingClientRect()
     const y = e.clientY - rect.top
-    const minutes = topToMinutes(y, baseMinute)
+    const minutes = axisTopToMinutes(axis, y)
     const snapped = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES
     if (snapped < baseMinute) return
     const time = minutesToTime(snapped)
@@ -360,16 +378,29 @@ export default function WeekSlotView({
         >
           {/* Time labels column */}
           <div className="sticky left-0 z-30 border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
-            {timeLabels.map(({ time, isFullHour }) => (
-              <div
-                key={time}
-                className={`flex items-start justify-end pr-2 text-xs ${
-                  isFullHour ? 'font-medium text-gray-500 dark:text-gray-400' : 'text-gray-300'
-                }`}
-                style={{ height: SLOT_HEIGHT }}
-              >
-                {isFullHour ? time : ''}
-              </div>
+            {timeLabels.map((row) => (
+              row.isBreak ? (
+                <button
+                  key={row.time}
+                  type="button"
+                  onClick={() => row.breakKey && toggleBreak(row.breakKey)}
+                  title={t('breakExpand', { from: row.time, to: row.breakEndTime })}
+                  className="flex w-full items-center justify-end gap-1 pr-2 text-[10px] text-gray-400 hover:text-brand-600 dark:text-gray-500 dark:hover:text-brand-400"
+                  style={{ height: row.height }}
+                >
+                  <span className="tabular-nums">{row.time}–{row.breakEndTime}</span>
+                </button>
+              ) : (
+                <div
+                  key={row.time}
+                  className={`flex items-start justify-end pr-2 text-xs ${
+                    row.isFullHour ? 'font-medium text-gray-500 dark:text-gray-400' : 'text-gray-300'
+                  }`}
+                  style={{ height: row.height }}
+                >
+                  {row.isFullHour ? row.time : ''}
+                </div>
+              )
             ))}
           </div>
 
@@ -379,8 +410,8 @@ export default function WeekSlotView({
             if (mergedSkipDays.has(dayIndex)) return null
 
             const { startMin, endMin } = getDayRange(dayIndex)
-            const inactiveTopH = Math.max(0, ((startMin - baseMinute) / SLOT_MINUTES) * SLOT_HEIGHT)
-            const inactiveBottomTop = ((endMin - baseMinute) / SLOT_MINUTES) * SLOT_HEIGHT
+            const inactiveTopH = Math.max(0, axisTimeToTop(axis, startMin))
+            const inactiveBottomTop = axisTimeToTop(axis, endMin)
             const inactiveBottomH = Math.max(0, gridHeight - inactiveBottomTop)
 
             if (multiHall) {
@@ -393,16 +424,24 @@ export default function WeekSlotView({
                     className="relative border-r-2 border-gray-300 dark:border-gray-600"
                     style={{ height: gridHeight }}
                   >
-                    {timeLabels.map(({ time, isFullHour }, rowIndex) => (
-                      <div
-                        key={time}
-                        className={`absolute inset-x-0 ${
-                          isFullHour
-                            ? 'border-b border-gray-200 dark:border-gray-700'
-                            : 'border-b border-dashed border-gray-100 dark:border-gray-800'
-                        }`}
-                        style={{ top: rowIndex * SLOT_HEIGHT }}
-                      />
+                    {timeLabels.map((row) => (
+                      row.isBreak ? (
+                        <div
+                          key={row.time}
+                          className="absolute inset-x-0 z-10 border-y border-dashed border-gray-300 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(148,163,184,0.18)_4px,rgba(148,163,184,0.18)_8px)] dark:border-gray-600"
+                          style={{ top: row.top, height: row.height }}
+                        />
+                      ) : (
+                        <div
+                          key={row.time}
+                          className={`absolute inset-x-0 ${
+                            row.isFullHour
+                              ? 'border-b border-gray-200 dark:border-gray-700'
+                              : 'border-b border-dashed border-gray-100 dark:border-gray-800'
+                          }`}
+                          style={{ top: row.top }}
+                        />
+                      )
                     ))}
                     <ClosureOverlay reason={allClosedClosure.reason} hallName={t('allHalls')} />
                   </div>
@@ -430,16 +469,24 @@ export default function WeekSlotView({
                       <div className="absolute inset-x-0 bottom-0 z-10 bg-gray-100/60 dark:bg-gray-900/40" style={{ height: inactiveBottomH }} />
                     )}
 
-                    {timeLabels.map(({ time, isFullHour }, rowIndex) => (
-                      <div
-                        key={time}
-                        className={`absolute inset-x-0 ${
-                          isFullHour
-                            ? 'border-b border-gray-200 dark:border-gray-700'
-                            : 'border-b border-dashed border-gray-100 dark:border-gray-800'
-                        }`}
-                        style={{ top: rowIndex * SLOT_HEIGHT }}
-                      />
+                    {timeLabels.map((row) => (
+                      row.isBreak ? (
+                        <div
+                          key={row.time}
+                          className="absolute inset-x-0 z-10 border-y border-dashed border-gray-300 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(148,163,184,0.18)_4px,rgba(148,163,184,0.18)_8px)] dark:border-gray-600"
+                          style={{ top: row.top, height: row.height }}
+                        />
+                      ) : (
+                        <div
+                          key={row.time}
+                          className={`absolute inset-x-0 ${
+                            row.isFullHour
+                              ? 'border-b border-gray-200 dark:border-gray-700'
+                              : 'border-b border-dashed border-gray-100 dark:border-gray-800'
+                          }`}
+                          style={{ top: row.top }}
+                        />
+                      )
                     ))}
 
                     {hallClosures.map((closure, idx) => (
@@ -505,16 +552,24 @@ export default function WeekSlotView({
                   <div className="absolute inset-x-0 bottom-0 z-10 bg-gray-100/60 dark:bg-gray-900/40" style={{ height: inactiveBottomH }} />
                 )}
 
-                {timeLabels.map(({ time, isFullHour }, rowIndex) => (
-                  <div
-                    key={time}
-                    className={`absolute inset-x-0 ${
-                      isFullHour
-                        ? 'border-b border-gray-200 dark:border-gray-700'
-                        : 'border-b border-dashed border-gray-100 dark:border-gray-800'
-                    }`}
-                    style={{ top: rowIndex * SLOT_HEIGHT }}
-                  />
+                {timeLabels.map((row) => (
+                  row.isBreak ? (
+                    <div
+                      key={row.time}
+                      className="absolute inset-x-0 z-10 border-y border-dashed border-gray-300 bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(148,163,184,0.18)_4px,rgba(148,163,184,0.18)_8px)] dark:border-gray-600"
+                      style={{ top: row.top, height: row.height }}
+                    />
+                  ) : (
+                    <div
+                      key={row.time}
+                      className={`absolute inset-x-0 ${
+                        row.isFullHour
+                          ? 'border-b border-gray-200 dark:border-gray-700'
+                          : 'border-b border-dashed border-gray-100 dark:border-gray-800'
+                      }`}
+                      style={{ top: row.top }}
+                    />
+                  )
                 ))}
 
                 {dayClos.map((closure, idx) => (
