@@ -123,7 +123,7 @@ See `INFRA.md → Domains & Hosting Overview` for full map.
      (append new dev/deploy entries THERE, not here). User-facing release notes → CHANGELOG.md.
      Keep this list pruned to ~5 entries. -->
 - **2026-09-06** The Hallenplan drew five empty hours at full scale — the time axis is piecewise now (no migration, dev)
-- **2026-09-06** A date box one day early, but only on a device east of Zurich (no migration, dev)
+- **2026-09-06** A date box one day early, but only on a device east of Zurich (no migration, dev+prod)
 - **2026-09-06** Four icon buttons, a nowrap title, and a card that clipped rather than wrapped — plus a hall delete that cascades (migration 353, dev+prod)
 - **2026-09-06** A recurring training could only ever come from a hall slot — and the picker still offered last season's (no migration, dev+prod)
 - **2026-09-06** The sign-up deadline only ever bit the people who answered (migration 352, dev; prod pending approval)
