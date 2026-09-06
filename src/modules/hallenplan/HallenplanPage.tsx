@@ -256,6 +256,7 @@ export default function HallenplanPage() {
             onSelectHalls={setSelectedHallIds}
             isAdmin={effectiveIsAdmin}
             onOpenClosureManager={() => navigate('/admin/hallenplan/closures')}
+            onOpenHallManager={() => navigate('/admin/hallenplan/halls')}
             showSummary={showSummary}
             onToggleSummary={() => setShowSummary((v) => !v)}
             sportFilter={sportFilter}
@@ -295,6 +296,7 @@ export default function HallenplanPage() {
             onSelectHalls={setSelectedHallIds}
             isAdmin={effectiveIsAdmin}
             onOpenClosureManager={() => navigate('/admin/hallenplan/closures')}
+            onOpenHallManager={() => navigate('/admin/hallenplan/halls')}
             sportFilter={sportFilter}
             onSetSportFilter={setSportFilter}
             freedSlots={freedSlotInfos}

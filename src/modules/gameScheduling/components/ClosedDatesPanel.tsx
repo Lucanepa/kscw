@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { CalendarX2, Settings2 } from 'lucide-react'
+import { Building2, CalendarX2, Settings2 } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { useCollection } from '../../../lib/query'
 import type { HallClosure } from '../../../types'
@@ -49,15 +49,28 @@ export default function ClosedDatesPanel() {
         </span>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => navigate('/admin/terminplanung/closures')}
-        className="gap-1.5"
-      >
-        <Settings2 className="h-4 w-4" />{t('closedDatesManage')}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => navigate('/admin/terminplanung/closures')}
+          className="gap-1.5"
+        >
+          <Settings2 className="h-4 w-4" />{t('closedDatesManage')}
+        </Button>
+        {/* The venue register the closures above (and every home slot) point at.
+            A hall has to exist before it can be closed or slotted. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => navigate('/admin/terminplanung/halls')}
+          className="gap-1.5"
+        >
+          <Building2 className="h-4 w-4" />{t('hallsManage')}
+        </Button>
+      </div>
     </div>
   )
 }

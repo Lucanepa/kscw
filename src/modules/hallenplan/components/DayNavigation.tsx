@@ -18,6 +18,7 @@ interface DayNavigationProps {
   onSelectHalls: (hallIds: string[]) => void
   isAdmin: boolean
   onOpenClosureManager: () => void
+  onOpenHallManager: () => void
   showSummary: boolean
   onToggleSummary: () => void
   sportFilter: SportFilter
@@ -38,6 +39,7 @@ export default function DayNavigation({
   onSelectHalls: _onSelectHalls,
   isAdmin,
   onOpenClosureManager,
+  onOpenHallManager,
   showSummary,
   onToggleSummary,
   sportFilter,
@@ -159,13 +161,22 @@ export default function DayNavigation({
         </div>
 
         {isAdmin && (
-          <button
-            data-tour="closures"
-            onClick={onOpenClosureManager}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-          >
-            {t('closures')}
-          </button>
+          <>
+            <button
+              data-tour="closures"
+              onClick={onOpenClosureManager}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              {t('closures')}
+            </button>
+            <button
+              data-tour="halls"
+              onClick={onOpenHallManager}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              {t('hallsNav')}
+            </button>
+          </>
         )}
       </div>
 

@@ -756,6 +756,7 @@ export default {
   closedDatesAuto: '{{count}} automatiques',
   closedDatesManual: '{{count}} manuelles',
   closedDatesManage: 'Gérer les dates de fermeture',
+  hallsManage: 'Gérer les salles',
 
   // Envoi groupé — coller une liste d'adresses
   mailboxPasteOpen: 'Coller une liste d’adresses',

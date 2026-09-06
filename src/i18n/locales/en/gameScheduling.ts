@@ -768,6 +768,7 @@ export default {
   closedDatesAuto: '{{count}} automatic',
   closedDatesManual: '{{count}} manual',
   closedDatesManage: 'Manage closed dates',
+  hallsManage: 'Manage halls',
 
   // Read-only planner view (coaches / team responsibles, v1)
   plannerReadOnly: 'Read-only view — you can browse the schedule but not make changes.',

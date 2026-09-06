@@ -58,6 +58,11 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   // Show team picker when no external team is selected and user manages 2+ teams
   const needsTeamPicker = !selectedTeamId && managedTeams.length >= 2
 
+  // Manual mode needs a concrete team even when the picker never shows — a
+  // coach of exactly one team picks nothing.
+  const soloTeamId = !selectedTeamId && managedTeams.length === 1 ? managedTeams[0].id : null
+  const manualTeamId = activeTeamId ?? soloTeamId
+
   // Team name lookup for slot labels (flattenM2MTeams strips expanded objects to IDs)
   const teamNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -76,10 +81,14 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   // Filter by selected team, or fall back to coach's teams (non-admin)
   // Sort: current/past slots first (by valid_from asc), then future slots (by valid_from asc)
   const slots = useMemo(() => {
-    const filtered = activeTeamId
+    const today = new Date().toISOString().slice(0, 10)
+    const scoped = activeTeamId
       ? allSlots.filter((s) => s.team?.includes(activeTeamId))
       : allSlots.filter((s) => s.team?.some(t => (effectiveIsAdmin && hasAdminAccessToTeam(t)) || coachTeamIds.includes(t)))
-    const today = new Date().toISOString().slice(0, 10)
+    // Expired slots are dead weight: every date they could offer is in the past,
+    // so last season's Monday sat in this list next to the live one, generating
+    // nothing. Indefinite slots and slots with no end date always stay.
+    const filtered = scoped.filter((s) => s.indefinite || !s.valid_until || s.valid_until.slice(0, 10) >= today)
     return [...filtered].sort((a, b) => {
       if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week
       if (a.start_time !== b.start_time) return a.start_time.localeCompare(b.start_time)
@@ -96,6 +105,18 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   const closures = closuresRaw ?? []
 
   const [selectedSlot, setSelectedSlot] = useState('')
+  // 'slot' generates from a recurring `hall_slots` row; 'manual' is a free-form
+  // series for a team that has no slot, or needs one outside its slots.
+  const [mode, setMode] = useState<'slot' | 'manual'>('slot')
+  const [manualDay, setManualDay] = useState(0)
+  const [manualStart, setManualStart] = useState('18:00')
+  const [manualEnd, setManualEnd] = useState('19:30')
+  // Stamped with the team it was fetched for, so a team switch cannot briefly
+  // filter the preview against the previous team's trainings while the new
+  // fetch is still in flight.
+  const [teamTrainings, setTeamTrainings] = useState<
+    { teamId: string; rows: { date: string; start_time: string | null }[] } | null
+  >(null)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [untilSeasonEnd, setUntilSeasonEnd] = useState(false)
@@ -152,6 +173,11 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   function resetModalState() {
     setLocalTeamId(null)
     setSelectedSlot('')
+    setMode('slot')
+    setManualDay(0)
+    setManualStart('18:00')
+    setManualEnd('19:30')
+    setTeamTrainings(null)
     setStartDate('')
     setEndDate('')
     setUntilSeasonEnd(false)
@@ -178,6 +204,14 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
 
   const slot = slots.find((s) => s.id === selectedSlot)
 
+  // The series definition, whichever mode produced it. Everything downstream
+  // (preview, duplicate check, payload) reads these instead of `slot`.
+  const genTeamId = mode === 'slot' ? (slot?.team?.[0] ?? null) : manualTeamId
+  const genDay = mode === 'slot' ? (slot?.day_of_week ?? null) : manualDay
+  const genStart = mode === 'slot' ? (slot?.start_time ?? '') : manualStart
+  const genEnd = mode === 'slot' ? (slot?.end_time ?? '') : manualEnd
+  const genHallSlotId = mode === 'slot' ? (slot?.id ?? null) : null
+
   // No slot selected → no existing dates. React's adjust-state-during-render
   // pattern, replacing the `setExistingDates(new Set())` that used to run
   // synchronously inside the effect below.
@@ -200,6 +234,36 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
     }).catch(() => setExistingDates(new Set()))
   }, [slot?.id, slot?.team]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Manual mode has no `hall_slot` to key duplicates on, so the rule is "same
+  // team, same date, same start time". Matched client-side because a
+  // `start_time` filter would have to guess between the 'HH:MM' an <input
+  // type=time> yields and the 'HH:MM:SS' Postgres stores.
+  useEffect(() => {
+    if (mode !== 'manual' || !manualTeamId) return
+    const teamId = manualTeamId
+    let cancelled = false
+    fetchAllItems<{ date: string; start_time: string }>('trainings', {
+      filter: { _and: [{ team: { _eq: teamId } }, { date: { _gte: toISODate(new Date()) } }] },
+      fields: ['date', 'start_time'],
+    })
+      .then((rows) => { if (!cancelled) setTeamTrainings({ teamId, rows }) })
+      .catch(() => { if (!cancelled) setTeamTrainings({ teamId, rows: [] }) })
+    return () => { cancelled = true }
+  }, [mode, manualTeamId])
+
+  const takenDates = useMemo(() => {
+    if (mode === 'slot') return existingDates
+    // Not loaded yet, or loaded for another team → assume nothing is taken.
+    // `handleGenerate` re-reads before writing, so a duplicate is skipped there.
+    if (!manualTeamId || teamTrainings?.teamId !== manualTeamId) return new Set<string>()
+    const hhmm = manualStart.slice(0, 5)
+    return new Set(
+      teamTrainings.rows
+        .filter((tr) => (tr.start_time ?? '').slice(0, 5) === hhmm)
+        .map((tr) => tr.date.slice(0, 10)),
+    )
+  }, [mode, existingDates, teamTrainings, manualTeamId, manualStart])
+
   // When slot changes, default the hall to the slot's hall
   const slotHallId = relId(slot?.hall)
   const effectiveHallId = hallId || slotHallId || ''
@@ -207,13 +271,15 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   const effectiveEndDate = untilSeasonEnd ? getSeasonEndDate() : endDate
 
   const previewDates = useMemo(() => {
-    if (!slot || !startDate || !effectiveEndDate) return []
+    if (!genTeamId || genDay == null || !genStart || !genEnd) return []
+    if (genEnd <= genStart) return []
+    if (!startDate || !effectiveEndDate) return []
     const dates: string[] = []
     const today = toISODate(new Date())
     const start = new Date(startDate)
     const end = new Date(effectiveEndDate)
     // DB: 0=Mon..6=Sun → convert to JS: 0=Sun..6=Sat
-    const targetJsDay = (slot.day_of_week + 1) % 7
+    const targetJsDay = (genDay + 1) % 7
     const closureHallId = effectiveHallId || slotHallId || ''
 
     const current = new Date(start)
@@ -230,12 +296,12 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
         const isClosed = closures.some(
           (c) => c.hall === closureHallId && c.start_date <= dateStr && c.end_date >= dateStr,
         )
-        if (!isClosed && !existingDates.has(dateStr)) dates.push(dateStr)
+        if (!isClosed && !takenDates.has(dateStr)) dates.push(dateStr)
       }
       current.setDate(current.getDate() + 7)
     }
     return dates
-  }, [slot, startDate, effectiveEndDate, effectiveHallId, closures, existingDates])
+  }, [genTeamId, genDay, genStart, genEnd, startDate, effectiveEndDate, effectiveHallId, slotHallId, closures, takenDates])
 
   function computeRespondBy(trainingDate: string, trainingStartTime: string): string {
     if (!respondByAmount) return ''
@@ -253,42 +319,58 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
     return startUtc.toISOString()
   }
 
+  /** Dates the team already has for this series — re-read right before the
+   *  write so a parallel generation cannot double-book. */
+  async function fetchTakenDates(): Promise<Set<string>> {
+    if (mode === 'slot') {
+      if (!slot) return new Set()
+      const teamIds = Array.isArray(slot.team) ? slot.team : [slot.team]
+      const existing = await fetchAllItems<{ date: string }>('trainings', {
+        filter: { _and: [{ team: { _in: teamIds } }, { hall_slot: { _eq: slot.id } }] },
+        fields: ['date'],
+      })
+      return new Set(existing.map((t) => t.date.slice(0, 10)))
+    }
+    if (!manualTeamId) return new Set()
+    const rows = await fetchAllItems<{ date: string; start_time: string }>('trainings', {
+      filter: { _and: [{ team: { _eq: manualTeamId } }, { date: { _gte: toISODate(new Date()) } }] },
+      fields: ['date', 'start_time'],
+    })
+    const hhmm = manualStart.slice(0, 5)
+    return new Set(
+      rows.filter((r) => (r.start_time ?? '').slice(0, 5) === hhmm).map((r) => r.date.slice(0, 10)),
+    )
+  }
+
   async function handleGenerate() {
-    if (!slot || previewDates.length === 0) return
+    if (!genTeamId || previewDates.length === 0) return
     setLoading(true)
     setError('')
     setGenerated(0)
     setSkipped(0)
 
     try {
-      // Re-fetch existing dates right before creating to prevent race conditions
-      const teamIds = Array.isArray(slot.team) ? slot.team : [slot.team]
-      const existing = await fetchAllItems<{ date: string }>('trainings', {
-        filter: { _and: [{ team: { _in: teamIds } }, { hall_slot: { _eq: slot.id } }] },
-        fields: ['date'],
-      })
-      const existingSet = new Set(existing.map((t) => t.date.slice(0, 10)))
+      const existingSet = await fetchTakenDates()
 
       const skipCount = previewDates.filter((date) => existingSet.has(date)).length
-      const teamId = slot.team?.[0]
-      const datesToCreate = teamId
-        ? previewDates.filter((date) => !existingSet.has(date))
-        : []
+      const datesToCreate = previewDates.filter((date) => !existingSet.has(date))
 
       // Create every occurrence in ONE batch request instead of N parallel POSTs
       // (a full-season generation was ~30 separate calls).
       let count = 0
       if (datesToCreate.length > 0) {
         const payloads = datesToCreate.map((date) => ({
-          team: teamId,
-          hall_slot: slot.id,
+          team: genTeamId,
+          // null in manual mode — the series is not tied to a recurring slot,
+          // so nothing frees it when a training is cancelled.
+          hall_slot: genHallSlotId,
           date,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          hall: effectiveHallId,
+          start_time: genStart,
+          end_time: genEnd,
+          hall: effectiveHallId || null,
           cancelled: false,
           notes,
-          respond_by: computeRespondBy(date, slot.start_time) || null,
+          respond_by: computeRespondBy(date, genStart) || null,
           min_participants: minParticipants ? Number(minParticipants) : null,
           max_participants: maxParticipants ? Number(maxParticipants) : null,
           require_note_if_absent: requireNoteIfAbsent,
@@ -296,7 +378,7 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
         }))
         const created = await createRecords<{ id: string }>('trainings', payloads)
         created.forEach((rec, i) => {
-          logActivity('create', 'trainings', rec.id, { team: teamId, date: datesToCreate[i], hall: effectiveHallId })
+          logActivity('create', 'trainings', rec.id, { team: genTeamId, date: datesToCreate[i], hall: effectiveHallId })
         })
         count = created.length
       }
@@ -317,7 +399,9 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
   const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-300'
 
   if (done) {
-    const teamName = asObj<Team>(slot?.team?.[0])?.name ?? ''
+    // `slot.team` is flattened to bare ids by `flattenM2MTeams`, so this has to
+    // go through the name lookup rather than `asObj`.
+    const teamName = teamNameById.get(genTeamId ?? '') ?? ''
     const hallName = halls.find((h) => h.id === effectiveHallId)?.name ?? ''
     return (
       <Modal open={open} onClose={handleClose} title={t('recurringTitle')} size="sm">
@@ -394,6 +478,74 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
           )
         })()}
 
+        <div className="inline-flex w-full rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+          {([
+            ['slot', t('useSlot')],
+            ['manual', t('enterManually')],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setMode(value)
+                // Manual mode has no slot to seed the range from.
+                if (value === 'manual' && !startDate) setStartDate(toISODate(new Date()))
+              }}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === value
+                  ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'manual' && (
+          <>
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+              {t('manualHint')}
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className={labelCls}>{t('weekday')}</label>
+                <select
+                  value={manualDay}
+                  onChange={(e) => setManualDay(Number(e.target.value))}
+                  className={inputCls}
+                >
+                  {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((key, i) => (
+                    <option key={key} value={i}>{tc(key)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>{t('manualStartTime')}</label>
+                <input
+                  type="time"
+                  value={manualStart}
+                  onChange={(e) => setManualStart(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>{t('manualEndTime')}</label>
+                <input
+                  type="time"
+                  value={manualEnd}
+                  onChange={(e) => setManualEnd(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+            {manualEnd <= manualStart && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">{t('manualEndAfterStart')}</p>
+            )}
+          </>
+        )}
+
+        {mode === 'slot' && (
         <div>
           <label className={labelCls}>{t('selectSlot')}</label>
           <select
@@ -436,12 +588,16 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
               const teamLabel = activeTeamId ? '' : `${teamNameById.get(s.team?.[0] ?? '') ?? '?'} — `
               return (
                 <option key={s.id} value={s.id}>
-                  {teamLabel}{tc(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][s.day_of_week])} {s.start_time}–{s.end_time} ({asObj<Hall>(s.hall)?.name ?? '?'}){dateSuffix}
+                  {teamLabel}{tc(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][s.day_of_week])} {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)} ({asObj<Hall>(s.hall)?.name ?? '?'}){dateSuffix}
                 </option>
               )
             })}
           </select>
+          {slots.length === 0 && (!needsTeamPicker || localTeamId) && (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">{t('noSlotsForTeam')}</p>
+          )}
         </div>
+        )}
 
         <div>
           <label className={labelCls}>{tc('hall')}</label>
@@ -512,7 +668,7 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
         <MeetingTimeSelect
           value={meetingOffset}
           onChange={setMeetingOffset}
-          startClock={slot?.start_time}
+          startClock={genStart || undefined}
         />
 
         {minParticipants && Number(minParticipants) > 0 && (

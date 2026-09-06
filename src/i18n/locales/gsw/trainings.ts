@@ -109,4 +109,12 @@ export default {
   trialBadge: 'Probetraining',
   shortenedBadge: 'Verchürzt',
   shortenedHint: 'Ändet früener — nachane isch es Heimspiel i de Halle',
+
+  // Serie — manuell (ohni Halleslot)
+  weekday: 'Wochetag',
+  manualStartTime: 'Startziit',
+  manualEndTime: 'Ändziit',
+  manualHint: 'Es wird kein Halleslot bruucht. Wochetag, Ziite und Halle sälber wähle — d Serie hanget a kem Slot, es Absage git also kei Hallezit für anderi Teams frei.',
+  manualEndAfterStart: 'D Ändziit mues nach de Startziit sii.',
+  noSlotsForTeam: 'Das Team het kei Halleslots. Uf manuelli Iigab wächsle, zum trotzdem e Serie z mache.',
 } as const

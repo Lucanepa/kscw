@@ -109,4 +109,12 @@ export default {
   trialBadge: 'Essai',
   shortenedBadge: 'Raccourci',
   shortenedHint: 'Se termine plus tôt — match à domicile dans la salle ensuite',
+
+  // Serie — manuelle (sans creneau de salle)
+  weekday: 'Jour de la semaine',
+  manualStartTime: 'Heure de debut',
+  manualEndTime: 'Heure de fin',
+  manualHint: 'Aucun creneau de salle n\'est utilise. Choisissez vous-meme le jour, les horaires et la salle — la serie n\'est liee a aucun creneau, une annulation ne libere donc pas de temps de salle pour les autres equipes.',
+  manualEndAfterStart: 'L\'heure de fin doit etre apres l\'heure de debut.',
+  noSlotsForTeam: 'Cette equipe n\'a aucun creneau de salle. Passez a la saisie manuelle pour generer quand meme une serie.',
 } as const

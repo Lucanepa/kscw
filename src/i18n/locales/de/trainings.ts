@@ -109,4 +109,12 @@ export default {
   trialBadge: 'Probetraining',
   shortenedBadge: 'Verkürzt',
   shortenedHint: 'Endet früher — anschliessend Heimspiel in der Halle',
+
+  // Serie — manuell (ohne Hallenslot)
+  weekday: 'Wochentag',
+  manualStartTime: 'Startzeit',
+  manualEndTime: 'Endzeit',
+  manualHint: 'Es wird kein Hallenslot verwendet. Wochentag, Zeiten und Halle selbst wählen — die Serie hängt an keinem Slot, eine Absage gibt also keine Hallenzeit für andere Teams frei.',
+  manualEndAfterStart: 'Die Endzeit muss nach der Startzeit liegen.',
+  noSlotsForTeam: 'Dieses Team hat keine Hallenslots. Auf manuelle Eingabe wechseln, um trotzdem eine Serie zu erzeugen.',
 } as const

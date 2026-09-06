@@ -109,4 +109,12 @@ export default {
   trialBadge: 'Probetraining',
   shortenedBadge: 'Shortened',
   shortenedHint: 'Ends earlier — home game in this hall afterwards',
+
+  // Recurring — manual (no hall slot)
+  weekday: 'Weekday',
+  manualStartTime: 'Start time',
+  manualEndTime: 'End time',
+  manualHint: 'No hall slot is used. Pick the weekday, times and hall yourself — the series is not tied to a slot, so cancelling a training does not free hall time for other teams.',
+  manualEndAfterStart: 'The end time has to be after the start time.',
+  noSlotsForTeam: 'This team has no hall slots. Switch to manual entry to generate a series anyway.',
 } as const

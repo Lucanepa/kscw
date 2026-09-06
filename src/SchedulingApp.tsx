@@ -35,6 +35,7 @@ import BasketballCalendarPage from './modules/gameScheduling/pages/BasketballCal
 import BasketballSettingsPage from './modules/gameScheduling/pages/BasketballSettingsPage'
 import SpielplanungPage from './modules/spielplanung/SpielplanungPage'
 import ClosuresPage from './modules/hallenplan/ClosuresPage'
+import HallsPage from './modules/hallenplan/HallsPage'
 import SchedulingHome from './modules/gameScheduling/pages/SchedulingHome'
 
 function SchedulingFallback() {
@@ -122,6 +123,12 @@ export default function SchedulingApp() {
                         <Route
                           path="admin/terminplanung/closures"
                           element={<AdminRoute><ClosuresPage /></AdminRoute>}
+                        />
+                        {/* Hall register — same page the member app mounts at
+                            /admin/hallenplan/halls. */}
+                        <Route
+                          path="admin/terminplanung/halls"
+                          element={<AdminRoute><HallsPage /></AdminRoute>}
                         />
                         {/* Mailbox tab — Volleyball/Basketball toggle inside (per-sport gating in the page). */}
                         <Route

@@ -109,4 +109,12 @@ export default {
   trialBadge: 'Prova',
   shortenedBadge: 'Accorciato',
   shortenedHint: 'Termina prima — dopo si gioca una partita in casa in palestra',
+
+  // Serie — manuale (senza fascia palestra)
+  weekday: 'Giorno della settimana',
+  manualStartTime: 'Ora di inizio',
+  manualEndTime: 'Ora di fine',
+  manualHint: 'Non viene usata nessuna fascia palestra. Scegli tu il giorno, gli orari e la palestra — la serie non è legata a una fascia, quindi un annullamento non libera tempo palestra per le altre squadre.',
+  manualEndAfterStart: 'L\'ora di fine deve essere successiva a quella di inizio.',
+  noSlotsForTeam: 'Questa squadra non ha fasce palestra. Passa all\'inserimento manuale per generare comunque una serie.',
 } as const

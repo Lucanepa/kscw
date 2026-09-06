@@ -14,6 +14,7 @@ interface WeekNavigationProps {
   onSelectHalls: (hallIds: string[]) => void
   isAdmin: boolean
   onOpenClosureManager: () => void
+  onOpenHallManager: () => void
   sportFilter?: SportFilter
   onSetSportFilter?: (filter: SportFilter) => void
   freedSlots?: FreedSlotInfo[]
@@ -30,6 +31,7 @@ export default function WeekNavigation({
   onSelectHalls: _onSelectHalls,
   isAdmin,
   onOpenClosureManager,
+  onOpenHallManager,
   sportFilter = 'all',
   onSetSportFilter,
   freedSlots = [],
@@ -94,13 +96,22 @@ export default function WeekNavigation({
           )}
 
           {isAdmin && (
-            <button
-              data-tour="closures"
-              onClick={onOpenClosureManager}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-            >
-              {t('closures')}
-            </button>
+            <>
+              <button
+                data-tour="closures"
+                onClick={onOpenClosureManager}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                {t('closures')}
+              </button>
+              <button
+                data-tour="halls"
+                onClick={onOpenHallManager}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+              >
+                {t('hallsNav')}
+              </button>
+            </>
           )}
         </div>
       </div>

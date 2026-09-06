@@ -757,6 +757,7 @@ export default {
   closedDatesAuto: '{{count}} automatiche',
   closedDatesManual: '{{count}} manuali',
   closedDatesManage: 'Gestisci le date di chiusura',
+  hallsManage: 'Gestisci le palestre',
 
   // Invio di gruppo — incolla un elenco di indirizzi
   mailboxPasteOpen: 'Incolla un elenco di indirizzi',
