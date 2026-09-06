@@ -4054,22 +4054,40 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       // attendance. `trg_participations_clear_auto_marker` strips the marker
       // afterwards, so a bogus flip is indistinguishable from a real one — there
       // is no repair path, only prevention.
+      //
+      // ⚠⚠ The bound is the deadline INSTANT, not its calendar day. Until
+      // 2026-09-06 this read `a.respond_by::date <= CURRENT_DATE`, which is
+      // true from midnight of the deadline day onward — so a 07:00 UTC run
+      // flipped a member's "maybe" to "declined" up to a full day BEFORE their
+      // deadline expired. A team with respond_by at the activity's own start
+      // time (what migration 322 derives, e.g. 20:00) lost the entire day it
+      // had been promised to make up its mind, and the member had no way to
+      // tell: `trg_participations_clear_auto_marker` leaves no marker on this
+      // path, so an early flip is indistinguishable from a real one. 5 teams
+      // had the feature on when this was found.
+      //
+      // `effectiveDeadlineSql` is the same getDeadlineDate() mirror the
+      // no-response sweep uses, and it is needed here for the same reason: a
+      // Europe/Zurich wall time of exactly 00:00:00 is the "no time given"
+      // SENTINEL, which resolves to the activity's own start time (else 23:59),
+      // NOT to midnight. Hence `astart` carried through both UNION branches —
+      // trainings call it start_time, games call it "time".
       await database.raw(`
         UPDATE participations SET status = 'declined'
         WHERE status = 'tentative'
           AND activity_type IN ('game', 'training')
           AND EXISTS (
             SELECT 1 FROM (
-              SELECT 'training' AS atype, id::text AS aid, respond_by, date AS adate, team AS team_id
+              SELECT 'training' AS atype, id::text AS aid, respond_by, start_time AS astart, date AS adate, team AS team_id
                 FROM trainings WHERE respond_by IS NOT NULL
               UNION ALL
-              SELECT 'game' AS atype, id::text AS aid, respond_by, date AS adate, kscw_team AS team_id
+              SELECT 'game' AS atype, id::text AS aid, respond_by, "time" AS astart, date AS adate, kscw_team AS team_id
                 FROM games WHERE respond_by IS NOT NULL
             ) a
             JOIN teams t ON t.id = a.team_id
             WHERE a.atype = participations.activity_type
               AND a.aid = participations.activity_id
-              AND a.respond_by::date <= CURRENT_DATE
+              AND ${effectiveDeadlineSql('a.respond_by', 'a.astart')} < now()
               AND a.adate >= CURRENT_DATE
               AND (t.features_enabled->>'auto_decline_tentative')::boolean = true
           )
