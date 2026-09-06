@@ -80,6 +80,50 @@ export default function EventCard({ event, onClick, onEdit, onDelete, onOpenRost
     ? liveStatus
     : (myParticipation?.status ?? null)
 
+  // Roster / edit / delete. Extracted so the same markup can sit inline in the
+  // header on >=sm and drop to a full-width footer row on a phone: four icon
+  // buttons beside a nowrap title do not fit 375px, and the card's
+  // overflow-hidden clipped the last one clean off rather than wrapping it.
+  // `null` when the viewer manages nothing, so the footer's divider never
+  // renders as a stray line under a plain member's card.
+  const managementActions = (onOpenRoster || onEdit || onDelete) ? (
+    <>
+      {onOpenRoster && (
+        <button
+          onClick={() => onOpenRoster(event)}
+          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+          title={t('viewRoster')}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+          </svg>
+        </button>
+      )}
+      {onEdit && (
+        <button
+          onClick={() => onEdit(event)}
+          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+          title={t('editEvent')}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+          </svg>
+        </button>
+      )}
+      {onDelete && (
+        <button
+          onClick={() => onDelete(event.id)}
+          className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          title={t('deleteEvent')}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+          </svg>
+        </button>
+      )}
+    </>
+  ) : null
+
   return (
     <div
       data-tour="event-card"
@@ -93,7 +137,7 @@ export default function EventCard({ event, onClick, onEdit, onDelete, onOpenRost
       {user && myStatus && (
         <div className={`w-1 shrink-0 ${statusBorderColor[myStatus] ?? ''}`} />
       )}
-      <div className="flex-1 p-3">
+      <div className="min-w-0 flex-1 p-3">
       {/* Top row: badge + title + actions */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -114,42 +158,11 @@ export default function EventCard({ event, onClick, onEdit, onDelete, onOpenRost
             variant="icon"
             onDone={onParticipationSaved}
           />
-          {onOpenRoster && (
-            <button
-              onClick={() => onOpenRoster(event)}
-              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-              title={t('viewRoster')}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-              </svg>
-            </button>
-          )}
-          {onEdit && (
-            <button
-              onClick={() => onEdit(event)}
-              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-              title={t('editEvent')}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-              </svg>
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={() => onDelete(event.id)}
-              className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-              title={t('deleteEvent')}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
+          {managementActions && (
+            <div className="hidden items-center gap-1 sm:flex">{managementActions}</div>
           )}
         </div>
       </div>
-
       {/* Details */}
       <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">
         {formatDate(event.start_date)}
@@ -228,6 +241,17 @@ export default function EventCard({ event, onClick, onEdit, onDelete, onOpenRost
       {!canRSVP && warnings.length > 0 && (
         <div className="mt-2 flex items-center gap-2">
           <ParticipationWarningBadge warnings={warnings} namespace="participation" />
+        </div>
+      )}
+
+      {/* Phone-only action row. The negative margin + padding pair lets the
+          divider span the card's full width from inside the p-3 box. */}
+      {managementActions && (
+        <div
+          className="-mx-3 mt-2.5 flex items-center justify-end gap-1 border-t border-gray-100 px-3 pt-1.5 sm:hidden dark:border-gray-700"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {managementActions}
         </div>
       )}
       </div>

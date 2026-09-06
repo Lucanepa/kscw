@@ -60,7 +60,10 @@ export default function TrainingCard({ training, participations, myParticipation
       {user && myStatus && (
         <div className={`w-1 shrink-0 ${statusBorderColor[myStatus] ?? ''}`} />
       )}
-      <div className="flex-1 p-3">
+      {/* min-w-0: a flex item defaults to min-width:auto and so refuses to shrink
+          below its min-content, which the card's overflow-hidden then clips
+          instead of wrapping. */}
+      <div className="min-w-0 flex-1 p-3">
       {/* Top row: team chip + date + counters */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">

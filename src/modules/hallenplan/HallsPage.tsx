@@ -14,7 +14,7 @@ import { useConfirm } from '../../components/ConfirmProvider'
 import { useCollection } from '../../lib/query'
 import { useReportPageLoading } from '../../hooks/usePageReady'
 import type { Hall } from '../../types'
-import { createRecord, deleteRecord, updateRecord } from '../../lib/api'
+import { createRecord, deleteRecord, updateRecord, countItems } from '../../lib/api'
 
 const EMPTY_HALLS: Hall[] = []
 
@@ -58,6 +58,7 @@ export default function HallsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [countingId, setCountingId] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const formRef = useRef<HTMLDivElement | null>(null)
 
@@ -133,7 +134,37 @@ export default function HallsPage() {
   }
 
   async function handleDelete(hall: Hall) {
-    if (!(await confirm({ message: t('hallDeleteConfirm', { name: hall.name }), danger: true }))) return
+    // Migration 353 made the delete cascade, so the DB no longer refuses. The
+    // guardrail moved here: count what goes and what merely loses its venue,
+    // and put both in the dialog. Deleting a hall silently takes the recurring
+    // training plan of every team that trains in it, and that is not
+    // recoverable from the app.
+    setCountingId(hall.id)
+    let impact = ''
+    try {
+      const [slots, closures, trainings, games] = await Promise.all([
+        countItems('hall_slots', { hall: { _eq: hall.id } }),
+        countItems('hall_closures', { hall: { _eq: hall.id } }),
+        countItems('trainings', { hall: { _eq: hall.id } }),
+        countItems('games', { hall: { _eq: hall.id } }),
+      ])
+      const removed: string[] = []
+      if (slots) removed.push(t('hallImpactSlots', { count: slots }))
+      if (closures) removed.push(t('hallImpactClosures', { count: closures }))
+      const kept: string[] = []
+      if (trainings) kept.push(t('hallImpactTrainings', { count: trainings }))
+      if (games) kept.push(t('hallImpactGames', { count: games }))
+      if (removed.length) impact += `\n\n${t('hallImpactRemoved')} ${removed.join(', ')}.`
+      if (kept.length) impact += `\n${t('hallImpactKept')} ${kept.join(', ')}.`
+    } catch {
+      // A failed count must not block the delete — just confirm without the
+      // detail rather than pretending the hall is unused.
+      impact = `\n\n${t('hallImpactUnknown')}`
+    } finally {
+      setCountingId(null)
+    }
+
+    if (!(await confirm({ message: t('hallDeleteConfirm', { name: hall.name }) + impact, danger: true }))) return
     try {
       await deleteRecord('halls', hall.id)
       logActivity('delete', 'halls', hall.id)
@@ -141,10 +172,7 @@ export default function HallsPage() {
       if (editingId === hall.id) cancelEdit()
       refetch()
     } catch (err: unknown) {
-      // The `halls_prevent_delete_with_slots` trigger refuses a hall that still
-      // has slots — surface that as a plain sentence rather than the raw SQL.
-      const raw = errorMessage(err)
-      toast.error(/hall_slots/i.test(raw) ? t('hallInUse') : raw)
+      toast.error(errorMessage(err))
     }
   }
 
@@ -308,6 +336,8 @@ export default function HallsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={countingId === hall.id}
+                        loading={countingId === hall.id}
                         onClick={() => { void handleDelete(hall) }}
                         className="text-red-600 hover:bg-red-50 hover:text-red-800 dark:hover:bg-gray-800"
                       >

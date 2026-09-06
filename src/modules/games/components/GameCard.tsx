@@ -285,7 +285,10 @@ export default function GameCard({ game, onClick, variant = 'card', participatio
       {user && myStatus && (
         <div className={`w-1 shrink-0 ${statusBorderColor[myStatus] ?? ''}`} />
       )}
-      <div className="flex-1 p-3">
+      {/* min-w-0: a flex item defaults to min-width:auto and so refuses to shrink
+          below its min-content, which the card's overflow-hidden then clips
+          instead of wrapping. */}
+      <div className="min-w-0 flex-1 p-3">
       {/* Top-right action bar: warning + H/A badge + roster/edit/delete */}
       <div className="flex shrink-0 items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
         {game.status === 'scheduled' && warnings && warnings.length > 0 && (
