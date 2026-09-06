@@ -85,9 +85,15 @@ export default function DatePicker({
       ? Math.min(fromYear, selectedDate ? selectedDate.getFullYear() : fromYear)
       : 1900
 
-  const displayValue = selectedDate
-    ? formatDateZurich(selectedDate)
-    : ''
+  // ⚠ Format the STRING, never `selectedDate`. `parseISO('2026-09-20')` builds
+  // LOCAL midnight and `formatDateZurich` then re-reads that instant in
+  // Europe/Zurich — so on a device EAST of Zurich (Riga, +03:00) local midnight
+  // is still 23:00 the day before over here, and the box rendered 19.09.2026 for
+  // a value of `2026-09-20`. The box then disagreed with everything that stayed
+  // on the raw string (the weekday hint, another field's `min`), which reads as
+  // "the End picker refuses the start day". A date-only string has no instant to
+  // convert; passing it through keeps it a date.
+  const displayValue = value ? formatDateZurich(value) : ''
   const text = draft ?? displayValue
   // Only flag what the user can see is wrong. A half-typed "10.05." is not yet a
   // date but is not an error either while the caret is still sitting in it.
