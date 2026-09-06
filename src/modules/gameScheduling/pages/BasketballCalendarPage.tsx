@@ -8,11 +8,12 @@ import { Button } from '../../../components/ui/button'
 import { useConfirm } from '../../../components/ConfirmProvider'
 import { useMutation } from '../../../hooks/useMutation'
 import ManualGameModal from '../../spielplanung/ManualGameModal'
+import PlaceGameModal from '../components/PlaceGameModal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/table'
 import { toDateKey, getSeasonYear } from '../../../utils/dateUtils'
 import { formatDateZurich } from '../../../utils/dateHelpers'
 import { useGameSchedulingSeason } from '../hooks/useGameSchedulingSeason'
-import { useBasketballPlan, type BbFixture } from '../hooks/useBasketballPlan'
+import { useBasketballPlan, type BbFixture, type PlaceGameInput } from '../hooks/useBasketballPlan'
 import { parseYmd } from '../utils/probasketSeason'
 import type { BasketballSlotPlan, Game, Team } from '../../../types'
 
@@ -27,7 +28,7 @@ import type { BasketballSlotPlan, Game, Team } from '../../../types'
 // An AWAY fixture holds no KWI court, so its `hall` is the opponent's venue (often
 // blank) and it must never be styled or counted as an occupied pitch.
 type CalItem =
-  | { id: string; kind: 'bb'; time: string; hall: string; label: string; guest: boolean }
+  | { id: string; kind: 'bb'; time: string; hall: string; label: string; guest: boolean; placement: BasketballSlotPlan }
   | { id: string; kind: 'fixture'; time: string; hall: string; label: string; fixture: BbFixture }
   | { id: string; kind: 'vb'; time: string; hall: string }
 
@@ -47,6 +48,13 @@ export interface BasketballCalendarPanelProps {
   closureEntries: { start: string; end: string; hall: string | null; reason: string }[]
   /** date → "no game may be played" reason (ProBasket blackout / club-wide block). */
   blockedDayReasons?: Map<string, string>
+  /**
+   * Placement writers. When passed, a placed game can be edited and removed from this
+   * panel — without them the day panel only said "Edit in the planner" and did nothing,
+   * reported 06.09.2026 as *"it says edit game in planner but it doesnt let it edit"*.
+   */
+  onPlacePlacement?: (date: string, time: string, hall: string, input: PlaceGameInput) => Promise<void>
+  onRemovePlacement?: (id: string | number) => Promise<void>
 }
 
 /**
@@ -59,6 +67,7 @@ export interface BasketballCalendarPanelProps {
  */
 export function BasketballCalendarPanel({
   seasonName, teams, placements, vbGames, fixtures = [], closureEntries, blockedDayReasons,
+  onPlacePlacement, onRemovePlacement,
 }: BasketballCalendarPanelProps) {
   const { t } = useTranslation('basketballScheduling')
   const confirm = useConfirm()
@@ -98,6 +107,7 @@ export function BasketballCalendarPanel({
         id: `bb-${p.id}`, kind: 'bb', time: p.time, hall: p.hall,
         label: `${teamName(p.kscw_team, p.kscw_team_label)} vs ${p.opponent ?? '?'}`,
         guest: p.game_type === 'guest',
+        placement: p,
       })
     }
     for (const g of fixtures) {
@@ -142,6 +152,8 @@ export function BasketballCalendarPanel({
   const [addAwayOn, setAddAwayOn] = useState<Date | null>(null)
   /** The fixture being corrected — the same modal, in edit mode. */
   const [editingGame, setEditingGame] = useState<Game | null>(null)
+  /** The PLACEMENT being edited — a different table, so a different modal. */
+  const [editingPlacement, setEditingPlacement] = useState<BasketballSlotPlan | null>(null)
   /** id of the fixture whose delete is in flight, so the button cannot be double-fired. */
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -349,6 +361,16 @@ export function BasketballCalendarPanel({
                             <Trash2 className="h-4 w-4" aria-hidden /> {t('deleteFixture')}
                           </Button>
                         </span>
+                      ) : it.kind === 'bb' && onPlacePlacement ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="min-h-11 sm:min-h-9"
+                          onClick={() => { setEditingPlacement(it.placement); setDayDetail(null) }}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden /> {t('editFixture')}
+                        </Button>
                       ) : (
                         <span className="text-xs text-muted-foreground">
                           {it.kind === 'bb' ? t('editInPrepGrid') : '—'}
@@ -386,6 +408,27 @@ export function BasketballCalendarPanel({
         initialSport="basketball"
         initialGameType="away"
       />
+
+      {/* A placement lives in `basketball_slot_plan`, keyed by (date, time, hall) — so this
+          modal edits the team, opponent, type and note, and can remove it. Moving it to
+          another pitch is still remove-then-place, in the prep grid. */}
+      {editingPlacement && onPlacePlacement && (
+        <PlaceGameModal
+          open
+          onClose={() => setEditingPlacement(null)}
+          date={editingPlacement.date}
+          time={editingPlacement.time}
+          hall={editingPlacement.hall}
+          // The panel does not resolve pitch availability, so the A+B toggle is offered
+          // only to a placement that already holds the combined court (PlaceGameModal's
+          // own `canBeCombined` keeps that case alive).
+          canCombineAB={false}
+          teams={teams}
+          existing={editingPlacement}
+          onPlace={(hall, input) => onPlacePlacement(editingPlacement.date, editingPlacement.time, hall, input)}
+          onRemove={onRemovePlacement ? async () => { await onRemovePlacement(editingPlacement.id); setEditingPlacement(null) } : undefined}
+        />
+      )}
     </div>
   )
 }
@@ -401,7 +444,9 @@ export function BasketballCalendarPanel({
 export default function BasketballCalendarPage() {
   const { t } = useTranslation('basketballScheduling')
   const { season, allSeasons, setSeason } = useGameSchedulingSeason()
-  const { teams, placements, vbGames, fixtures, closureEntries, blockedDayReasons } = useBasketballPlan(season)
+  const {
+    teams, placements, vbGames, fixtures, closureEntries, blockedDayReasons, placeGame, removeGame,
+  } = useBasketballPlan(season)
 
   const selectClass = 'rounded-md border border-border bg-transparent px-3 py-2 text-sm dark:bg-gray-800'
 
@@ -431,6 +476,8 @@ export default function BasketballCalendarPage() {
         fixtures={fixtures}
         closureEntries={closureEntries}
         blockedDayReasons={blockedDayReasons}
+        onPlacePlacement={placeGame}
+        onRemovePlacement={removeGame}
       />
     </div>
   )

@@ -61,7 +61,7 @@ export default function BasketballPrepPage() {
   const {
     config, candidateDates, teams, dateInfoByDate, blockers, blockedDayReasons,
     placements, availability, availKey, slotView, highlightFor, vbGames, closureEntries,
-    fixtures, teamBlockedOn, teamRestBlockedOn, setDateUnavailable,
+    fixtures, teamBlockedOn, teamRestBlockedOn, teamHostsOn, setDateUnavailable,
     isLoading, error, placeGame, removeGame,
   } = useBasketballPlan(season, { bbSourceId })
 
@@ -149,13 +149,17 @@ export default function BasketballPrepPage() {
       // The rest gap does not close the date — but the generator would no longer offer it,
       // so a suggestion sitting on one is stale in exactly the same sense.
       if (teamId && teamRestBlockedOn(teamId, s.date)) { n++; continue }
+      // Same for a day the team already hosts: every pitch but its own is gone
+      // (REJECT_CODES.HOME_GAME). Its own pitch is not stale — that IS the placement.
+      const hosts = teamId ? teamHostsOn(teamId, s.date) : null
+      if (hosts && !(hosts.time === s.time && hosts.hall === s.hall)) { n++; continue }
       const { cells } = slotView(s.date, dow, s.time)
       const needed = s.hall === HALL_AB ? [HALL_A, HALL_B] : [s.hall]
       const free = needed.every((h) => cells.find((c) => c.hall === h)?.status === 'free')
       if (!free) n++
     }
     return n
-  }, [mySlots, dowByDate, slotView, teamId, teamBlockedOn, teamRestBlockedOn])
+  }, [mySlots, dowByDate, slotView, teamId, teamBlockedOn, teamRestBlockedOn, teamHostsOn])
 
   /** "Why this score": every soft term that produced it, translated, as a tooltip. */
   const scoreTitle = (slot: BasketballSlot): string => {
@@ -351,6 +355,8 @@ export default function BasketballPrepPage() {
             fixtures={fixtures}
             closureEntries={closureEntries}
             blockedDayReasons={blockedDayReasons}
+            onPlacePlacement={placeGame}
+            onRemovePlacement={removeGame}
           />
         )}
       </section>
@@ -382,6 +388,9 @@ export default function BasketballPrepPage() {
             // and every free pitch stays clickable — only the machine suggestions go
             // (club rule 2026-09-02). Juniors never reach this, the rule exempts them.
             const restGap = !ownBlock && teamId ? teamRestBlockedOn(teamId, cd.date) : null
+            // The team already hosts that day → no more suggestions on it (the placement's
+            // own pitch is a 'game' cell and never reaches the suggestion branch anyway).
+            const hostsToday = !ownBlock && teamId ? teamHostsOn(teamId, cd.date) : null
             /** Toggle the hand-set block. Only offered where it means something. */
             const blockToggle = teamId && !ownBlock?.reason.startsWith('away') ? (
               <Button
@@ -425,6 +434,17 @@ export default function BasketballPrepPage() {
                       className="rounded bg-amber-100 px-2 py-0.5 text-xs font-normal text-amber-900 dark:bg-amber-900/40 dark:text-amber-200"
                     >
                       {t('restGapBadge')}
+                    </span>
+                  )}
+                  {hostsToday && (
+                    <span
+                      title={t('hostsTodayHint', {
+                        time: hostsToday.time || '—',
+                        opponent: hostsToday.opponent || '—',
+                      })}
+                      className="rounded bg-brand-100 px-2 py-0.5 text-xs font-normal text-brand-800 dark:bg-brand-900/40 dark:text-brand-200"
+                    >
+                      {t('hostsTodayBadge')}
                     </span>
                   )}
                   {blockToggle}
@@ -519,7 +539,7 @@ export default function BasketballPrepPage() {
                             // the selected team, the cell carries its rank and the soft
                             // terms behind it — a hand-placed game (brand colour above)
                             // stays visually distinct from a machine suggestion.
-                            const sug = restGap ? null : suggestionAt(cd.date, time, cell.hall)
+                            const sug = restGap || hostsToday ? null : suggestionAt(cd.date, time, cell.hall)
                             return (
                               <button
                                 key={cell.hall}

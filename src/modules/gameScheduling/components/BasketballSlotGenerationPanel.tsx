@@ -59,6 +59,7 @@ const REJECT_ORDER = [
   'volleyball',
   'team_unavailable',
   'away_game',
+  'home_game',
   'adjacent_game',
   'pitch_taken',
   'partner_same_time',

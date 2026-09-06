@@ -399,6 +399,8 @@ export const REJECT_CODES = {
   TEAM_UNAVAILABLE: 'team_unavailable',
   /** The team plays AWAY that day (a `games` row), so it cannot host at KWI. */
   AWAY_GAME: 'away_game',
+  /** The team ALREADY hosts that day — a placement, or a home fixture in `games`. */
+  HOME_GAME: 'home_game',
   /** The day before / after one of this team's own games — not offered, still placeable. */
   ADJACENT_GAME: 'adjacent_game',
   PITCH_TAKEN: 'pitch_taken',
@@ -558,6 +560,29 @@ export function hardReject(cand, team, ctx) {
   //    blocking its own date would fight the own-slot exemption below) or a post-
   //    Spielplansitzung fixture ProBasket owns — neither is this rule's business.
   if (ctx.awayGameTeamDates.has(`${team.team}|${date}`)) return REJECT_CODES.AWAY_GAME
+
+  // ── The team already HOSTS that day. A basketball team plays one game a day, so every
+  //    other pitch on that date is noise — reported 06.09.2026 after the Spielplansitzung:
+  //    "especially for h3 slots kept being suggested during which the team already has a
+  //    home game". 98 live suggestions on prod sat on a date their own team already hosted.
+  //
+  //    ⚠ Its OWN pitch stays offered, exactly as PITCH_TAKEN exempts it below: the
+  //    placement has to stay visible in the grid to remain removable.
+  //
+  //    ⚠ Both roads count — a `basketball_slot_plan` placement AND a `games` home row.
+  //    The old comment here argued a home `games` row was "not this rule's business"
+  //    because it is either our own placement or a ProBasket-owned fixture. Both of those
+  //    are precisely reasons NOT to suggest another slot to the same team that day.
+  //
+  //    ⚠ HARD in generation, not a block in the grid: a planner may still hand-place a
+  //    second game on the date (a junior double-header), the same way the rest gap only
+  //    stops the suggestion.
+  if (
+    ctx.homeGameTeamDates.has(`${team.team}|${date}`) &&
+    !ctx.ownPlacementPitches.has(`${team.team}|${date}|${time}|${hall}`)
+  ) {
+    return REJECT_CODES.HOME_GAME
+  }
 
   // ── Rest gap. The day either side of one of this team's own games (a placed home game
   //    or an away fixture) is not SUGGESTED — see REST_GAP_DAYS for why this is not a block:
@@ -905,35 +930,44 @@ export function registerBasketballSlots(router, { database, logger }) {
     // scheduling season's numeric id means nothing to that table. A season row with no
     // label yields no away blocks rather than an accidental club-wide match.
     const seasonLabel = String(season.season || '').trim()
-    const awayGames = seasonLabel
+    const bbGames = seasonLabel
       ? await database('games as g')
         .join('teams as t', 't.id', 'g.kscw_team')
         .where('t.sport', 'basketball')
         .where('g.season', seasonLabel)
-        .where('g.type', 'away')
+        .whereIn('g.type', ['home', 'away'])
         .whereNotNull('g.date')
-        .select('g.kscw_team', database.raw('g.date::text as date'))
+        .select('g.kscw_team', 'g.type', database.raw('g.date::text as date'))
       : []
-    const awayGameTeamDates = new Set(
-      awayGames.map((g) => `${g.kscw_team}|${String(g.date).slice(0, 10)}`),
-    )
+    const teamDate = (g) => `${g.kscw_team}|${String(g.date).slice(0, 10)}`
+    const awayGameTeamDates = new Set(bbGames.filter((g) => g.type === 'away').map(teamDate))
+    // HOME fixtures are read too since 06.09.2026 — see the HOME_GAME rule in hardReject.
+    const homeFixtureTeamDates = new Set(bbGames.filter((g) => g.type === 'home').map(teamDate))
 
     // ── Every date a team ALREADY has a game — its placed home games plus those away
     //    fixtures. Feeds the rest gap in hardReject.
     //
-    //    ⚠ Deliberately the SAME two sources the prep grid draws from (basketball_slot_plan
-    //    + `games` type='away'), so the live grid and the generated inventory agree about
-    //    which dates sit next to a game. A ProBasket-owned HOME row in `games` is left out
-    //    for the same reason the away block leaves it out: once the Spielplansitzung has
-    //    fixed a home fixture it is not this tool's to re-suggest around.
+    //    ⚠ Deliberately the SAME sources the prep grid draws from (basketball_slot_plan
+    //    + every `games` fixture of either side), so the live grid and the generated
+    //    inventory agree about which dates sit next to a game. Home rows were excluded
+    //    until 06.09.2026 on the argument that a ProBasket-owned fixture "is not this
+    //    tool's to re-suggest around" — which had it backwards: a fixed home fixture is
+    //    the strongest possible reason not to offer that team another pitch.
     //
     //    ⚠ Away fixtures fall on ANY weekday (club rule 2026-09-02) — a Thursday away game
     //    closes Friday's pitches, a Monday one closes Sunday's. Hence dates, not the
     //    Fri/Sat/Sun candidate grid.
-    const teamGameDates = new Set(awayGameTeamDates)
+    const teamGameDates = new Set([...awayGameTeamDates, ...homeFixtureTeamDates])
+    // Dates the team already HOSTS, plus the exact pitch of each of its own placements —
+    // the pair the HOME_GAME rule needs (the date rejects, its own pitch is exempt).
+    const homeGameTeamDates = new Set(homeFixtureTeamDates)
+    const ownPlacementPitches = new Set()
     for (const p of placements) {
       if (p.kscw_team == null) continue
-      teamGameDates.add(`${p.kscw_team}|${String(p.date).slice(0, 10)}`)
+      const d = String(p.date).slice(0, 10)
+      teamGameDates.add(`${p.kscw_team}|${d}`)
+      homeGameTeamDates.add(`${p.kscw_team}|${d}`)
+      ownPlacementPitches.add(`${p.kscw_team}|${d}|${p.time}|${p.hall}`)
     }
 
     // Club-wide weekend cap. `spielsamstage_hard` makes the Spielsamstag list a HARD
@@ -948,7 +982,7 @@ export function registerBasketballSlots(router, { database, logger }) {
       closedHallsByDate, holidayRanges, clubBlockedDates, vbBusyByDate,
       placementsByPitch, bbPlacementCountByDate, exclusivePartners, adjacentPartners,
       unavailableTeamDates,
-      awayGameTeamDates, teamGameDates,
+      awayGameTeamDates, teamGameDates, homeGameTeamDates, ownPlacementPitches,
     }
   }
 

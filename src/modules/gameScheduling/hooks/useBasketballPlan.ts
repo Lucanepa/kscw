@@ -476,6 +476,40 @@ export function useBasketballPlan(season: GameSchedulingSeason | null, opts: Bas
   }, [placements, fixtures])
 
   /**
+   * The home game this team already has on this date — a placement OR a `games` fixture —
+   * or null.
+   *
+   * A basketball team plays one game a day, so every other pitch on that date is noise.
+   * The generator learned this on 06.09.2026 (`REJECT_CODES.HOME_GAME`); this is the live
+   * half of the same rule, applied on top of the STORED inventory so a grid generated
+   * before the placement existed stops advertising the rest of that day. Without it the
+   * planner sees suggestions the generator would no longer make — 98 of them on prod,
+   * reported as "slots kept being suggested during which the team already has a home game".
+   *
+   * ⚠ Suppresses SUGGESTIONS only. The date keeps its card and still takes a hand-placed
+   * game (a junior double-header is legal), exactly like the rest gap.
+   */
+  const homeGameByTeamDate = useMemo(() => {
+    const m = new Map<string, { time: string; hall: string; opponent: string }>()
+    for (const p of placements.values()) {
+      if (p.kscw_team == null) continue
+      m.set(availKey(p.kscw_team, p.date), { time: p.time, hall: p.hall, opponent: p.opponent ?? '' })
+    }
+    // A fixture wins the key: it is the agreed game, the placement is the plan for it.
+    for (const f of fixtures) {
+      if (f.type !== 'home' || !f.team) continue
+      m.set(availKey(f.team, f.date), { time: f.time, hall: f.venue, opponent: f.opponent })
+    }
+    return m
+  }, [placements, fixtures])
+
+  const teamHostsOn = useCallback(
+    (teamId: string | number | null | undefined, date: string) =>
+      teamId == null ? null : homeGameByTeamDate.get(availKey(teamId, date)) ?? null,
+    [homeGameByTeamDate],
+  )
+
+  /**
    * The team's own game one day either side of this date, or null — the club's SOFT block
    * (rule 2026-09-02). Nothing is closed: the date keeps its card and still takes a
    * hand-placed game. It only stops the date being SUGGESTED, which is what the generator
@@ -666,6 +700,7 @@ export function useBasketballPlan(season: GameSchedulingSeason | null, opts: Bas
     awayGames,
     teamBlockedOn,
     teamRestBlockedOn,
+    teamHostsOn,
     slotView,
     vbGames,
     closureEntries,

@@ -52,6 +52,8 @@ function ctx(over = {}) {
     unavailableTeamDates: new Set(),
     awayGameTeamDates: new Set(),
     teamGameDates: new Set(),
+    homeGameTeamDates: new Set(),
+    ownPlacementPitches: new Set(),
     ...over,
   }
 }
@@ -453,6 +455,28 @@ describe('hardReject', () => {
       teamGameDates: new Set([`86|${SAT}`]),
       awayGameTeamDates: new Set([`86|${SAT}`]),
     }))).toBe(REJECT_CODES.AWAY_GAME)
+  })
+
+  it('a team that already HOSTS that day gets no second suggestion — except its own pitch', () => {
+    // Reported 06.09.2026: "slots kept being suggested during which the team already has
+    // a home game". 98 live suggestions on prod sat on such a date.
+    const c = ctx({ homeGameTeamDates: new Set([`86|${SAT}`]) })
+    expect(hardReject(cand, team(), c)).toBe(REJECT_CODES.HOME_GAME)
+    expect(hardReject({ ...cand, time: '18:30' }, team(), c)).toBe(REJECT_CODES.HOME_GAME)
+    // Another team, and another date, are untouched.
+    expect(hardReject(cand, team(), ctx({ homeGameTeamDates: new Set([`99|${SAT}`]) }))).toBeNull()
+    expect(hardReject(cand, team(), ctx({ homeGameTeamDates: new Set(['86|2026-12-25']) }))).toBeNull()
+  })
+
+  it('its OWN placed pitch stays offered, so the placement stays visible and removable', () => {
+    const c = ctx({
+      homeGameTeamDates: new Set([`86|${SAT}`]),
+      ownPlacementPitches: new Set([`86|${SAT}|13:30|${HALL_A}`]),
+    })
+    expect(hardReject({ ...cand, time: '13:30', hall: HALL_A }, team(), c)).toBeNull()
+    // …but only that exact pitch.
+    expect(hardReject({ ...cand, time: '13:30', hall: HALL_B }, team(), c)).toBe(REJECT_CODES.HOME_GAME)
+    expect(hardReject({ ...cand, time: '16:00', hall: HALL_A }, team(), c)).toBe(REJECT_CODES.HOME_GAME)
   })
 
   it('a placed game takes the pitch — including across the A+B / A boundary', () => {
