@@ -82,13 +82,27 @@ export default function FeedbackPage() {
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
 
-  const { data: submissionsRaw, refetch } = useCollection<FeedbackRecord>('feedback', {
+  const {
+    data: submissionsRaw,
+    isLoading: submissionsLoading,
+    isError: submissionsError,
+    isPlaceholderData: submissionsStale,
+    refetch,
+  } = useCollection<FeedbackRecord>('feedback', {
     filter: user ? { user: { _eq: user.id } } : undefined,
     sort: ['-date_created'],
     all: true,
     enabled: !!user,
   })
   const submissions = submissionsRaw ?? []
+  // "Still loading" must not look like "you have never submitted anything".
+  // `isError` is the escape hatch: TanStack clears isLoading on a failed fetch while
+  // `data` stays undefined, so gating on undefined alone would strand the section in a
+  // permanent skeleton. `isPlaceholderData` covers the global keepPreviousData default —
+  // after an acting-member swap the key changes and the previous member's rows would
+  // otherwise be shown as yours.
+  const submissionsPending =
+    !!user && !submissionsError && (submissionsLoading || submissionsStale || submissionsRaw === undefined)
 
   // GitHub issues — cached via react-query so remounting the page doesn't refetch
   // within the stale window, and an error/rate-limit response surfaces an explicit
@@ -395,7 +409,25 @@ export default function FeedbackPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
             {t('mySubmissions')}
           </h2>
-          {submissions.length === 0 ? (
+          {submissionsPending ? (
+            <div className="space-y-2" aria-busy="true">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800"
+                >
+                  <div className="h-5 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="h-4 w-2/5 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-3 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                  <div className="h-5 w-14 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+                </div>
+              ))}
+            </div>
+          ) : submissionsError ? (
+            <p className="text-sm text-red-500 dark:text-red-400">{t('error')}</p>
+          ) : submissions.length === 0 ? (
             <p className="text-sm text-gray-400 dark:text-gray-500">{t('noSubmissions')}</p>
           ) : (
             <div className="space-y-2">

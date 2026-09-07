@@ -143,7 +143,19 @@ export default function TeamIdentityRepair({ teamId, enabled }: { teamId: string
           </p>
         </div>
       </div>
-      {state === 'unlocked' ? (
+      {/*
+        Three-way, not two: `state` starts at 'loading' until GET /identity/keys AND the
+        IndexedDB read in useIdentityKeys() both return, and that races the gaps fetch above
+        that decides whether this banner shows at all. Folding 'loading' into the else-branch
+        told a coach who IS unlocked here to go unlock their key on another page — a definitive
+        instruction, pointing away from the only control that repairs this. 'loading' now owns
+        its own frame, and 'error' still falls through to the link so no state is stranded.
+      */}
+      {state === 'loading' ? (
+        <Button type="button" size="sm" disabled loading>
+          {t('identityRepairAction')}
+        </Button>
+      ) : state === 'unlocked' ? (
         <Button type="button" size="sm" onClick={() => void handleRepair()} loading={busy}>
           {t('identityRepairAction')}
         </Button>

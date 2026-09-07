@@ -15,6 +15,7 @@ import { useConfirm } from '../../components/ConfirmProvider'
 
 const labelCls = 'block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400'
 const inputCls = 'mt-1 w-full rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
+const skelBar = 'animate-pulse bg-gray-200 dark:bg-gray-700'
 const apiErr = (e: unknown, fallback: string) => (e as { body?: { error?: string } })?.body?.error || fallback
 
 /** Per-member row status badge in the preview.
@@ -54,8 +55,25 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
   const { t } = useTranslation('finance')
   const confirm = useConfirm()
   const fyNum = Number(fiscalYearId)
-  const { data: ratesData, refetch: refetchRates } = useDuesRates(fiscalYearId)
-  const { data: runs, refetch: refetchRuns } = useDuesRuns(fiscalYearId)
+  const { data: ratesData, isPending: ratesLoading, isPlaceholderData: ratesStale, isError: ratesFailed, refetch: refetchRates } = useDuesRates(fiscalYearId)
+  const { data: runs, isPending: runsLoading, isPlaceholderData: runsStale, isError: runsFailed, refetch: refetchRuns } = useDuesRuns(fiscalYearId)
+  /** "Not loaded yet" must never read as "the club has none" — this screen's two
+   *  empty states are the financial claims "membership dues have never been billed
+   *  for this year" and "no member has a category", read right before minting ~570
+   *  irreversible invoices.
+   *  `isPending`, not `isLoading`: useDuesRates is disabled while fiscalYearId is ''
+   *  and a disabled query reports isLoading===false.
+   *  `isPlaceholderData`: the global keepPreviousData default (src/lib/query.tsx)
+   *  hands back the PREVIOUS fiscal year's rates/runs on a year switch, which would
+   *  otherwise print last year's schedule under this year's heading.
+   *  `isError` is the escape: on a failed fetch data stays undefined forever, and a
+   *  permanent skeleton is worse than the wrong frame it replaces. */
+  // ⚠ `isPending` is ALSO true for a DISABLED query, for ever — `useDuesRates` is
+  // `enabled` on a non-empty fiscalYearId, so without one this gate would never
+  // release and the add-rate selects and Preview button would stay disabled with
+  // nothing loading. Ask for a fiscal year first, exactly like BudgetTab does.
+  const ratesPending = !!fiscalYearId && !ratesFailed && (ratesLoading || ratesStale)
+  const runsPending = !runsFailed && (runsLoading || runsStale)
   const categories = ratesData?.categories ?? []
   const sektionen = ratesData?.sektionen ?? []
 
@@ -241,7 +259,16 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedRates.map((r) => (
+              {ratesPending ? [0, 1, 2].map((i) => (
+                <TableRow key={`rate-skeleton-${i}`} className="border-gray-200 dark:border-gray-700" aria-hidden="true">
+                  <TableCell><div className={`${skelBar} h-4 w-24 rounded`} /></TableCell>
+                  <TableCell><div className={`${skelBar} h-4 w-20 rounded`} /></TableCell>
+                  <TableCell><div className={`${skelBar} ml-auto h-4 w-16 rounded`} /></TableCell>
+                  <TableCell><div className={`${skelBar} ml-auto h-4 w-12 rounded`} /></TableCell>
+                  <TableCell className="hidden sm:table-cell"><div className={`${skelBar} h-4 w-32 rounded`} /></TableCell>
+                  <TableCell><div className={`${skelBar} ml-auto h-6 w-6 rounded-md`} /></TableCell>
+                </TableRow>
+              )) : sortedRates.map((r) => (
                 <TableRow key={r.id} className="border-gray-200 dark:border-gray-700">
                   <TableCell className="whitespace-normal break-words text-gray-900 dark:text-gray-100">{r.category}</TableCell>
                   <TableCell className="whitespace-normal break-words text-gray-600 dark:text-gray-400">{sektionLabel(r.sektion)}</TableCell>
@@ -268,13 +295,13 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
               {/* Add-rate row */}
               <TableRow className="border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-900/20">
                 <TableCell>
-                  <select value={rCat} onChange={(e) => setRCat(e.target.value)} className={`${inputCls} mt-0`} aria-label={t('duesColCategory')}>
+                  <select value={rCat} onChange={(e) => setRCat(e.target.value)} disabled={ratesPending} className={`${inputCls} mt-0 disabled:opacity-60`} aria-label={t('duesColCategory')}>
                     <option value="">{t('duesPickCategory')}</option>
                     {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </TableCell>
                 <TableCell>
-                  <select value={rSek} onChange={(e) => setRSek(e.target.value)} className={`${inputCls} mt-0`} aria-label={t('duesColSektion')}>
+                  <select value={rSek} onChange={(e) => setRSek(e.target.value)} disabled={ratesPending} className={`${inputCls} mt-0 disabled:opacity-60`} aria-label={t('duesColSektion')}>
                     <option value="">{t('duesSektionDefault')}</option>
                     {sektionen.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -309,7 +336,13 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
         <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
           <div>
             <span id="dues-pick-categories-label" className={labelCls}>{t('duesPickCategories')}</span>
-            {categories.length === 0 ? (
+            {ratesPending ? (
+              <div className="mt-1.5 flex flex-wrap gap-1.5" aria-hidden="true">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={`cat-skeleton-${i}`} className={`${skelBar} h-[26px] w-20 rounded-full`} />
+                ))}
+              </div>
+            ) : categories.length === 0 ? (
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('duesNoActiveCategories')}</p>
             ) : (
               <div role="group" aria-labelledby="dues-pick-categories-label" className="mt-1.5 flex flex-wrap gap-1.5">
@@ -332,7 +365,7 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
             <div>
               <DatePicker id="dues-run-due-date" label={t('duesRunDueDate')} value={dueDate} onChange={setDueDate} />
             </div>
-            <button type="button" disabled={!selected.length || pvBusy} onClick={runPreview}
+            <button type="button" disabled={!selected.length || pvBusy || ratesPending} onClick={runPreview}
               className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
               {pvBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}{t('duesPreviewCta')}
             </button>
@@ -494,10 +527,8 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
       {/* ── Past runs ──────────────────────────────────────────── */}
       <section>
         <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('duesRunsTitle')}</h2>
-        {(runs ?? []).length === 0 ? (
-          <p className="rounded-lg border border-dashed border-gray-300 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('duesNoRuns')}</p>
-        ) : (
-          <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        {runsPending || (runs ?? []).length > 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800" aria-busy={runsPending}>
             <Table>
               <TableHeader>
                 <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
@@ -510,7 +541,16 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(runs ?? []).map((run) => (
+                {runsPending ? [0, 1, 2].map((i) => (
+                  <TableRow key={`run-skeleton-${i}`} className="border-gray-200 dark:border-gray-700" aria-hidden="true">
+                    <TableCell><div className={`${skelBar} h-4 w-32 rounded`} /></TableCell>
+                    <TableCell className="hidden sm:table-cell"><div className={`${skelBar} h-4 w-20 rounded`} /></TableCell>
+                    <TableCell><div className={`${skelBar} ml-auto h-4 w-8 rounded`} /></TableCell>
+                    <TableCell><div className={`${skelBar} ml-auto h-4 w-16 rounded`} /></TableCell>
+                    <TableCell><div className={`${skelBar} h-4 w-16 rounded`} /></TableCell>
+                    <TableCell><div className={`${skelBar} ml-auto h-6 w-24 rounded-md`} /></TableCell>
+                  </TableRow>
+                )) : (runs ?? []).map((run) => (
                   <TableRow key={run.id} className="border-gray-200 dark:border-gray-700">
                     <TableCell className="whitespace-normal break-words text-gray-900 dark:text-gray-100">{run.label || `#${run.id}`}</TableCell>
                     <TableCell className="hidden sm:table-cell whitespace-nowrap text-gray-600 dark:text-gray-400">{run.date_created ? formatDateCompactZurich(run.date_created) : '–'}</TableCell>
@@ -544,6 +584,8 @@ export default function DuesRunManager({ fiscalYearId, fiscalYearLabel }: { fisc
               </TableBody>
             </Table>
           </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-gray-300 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('duesNoRuns')}</p>
         )}
       </section>
 

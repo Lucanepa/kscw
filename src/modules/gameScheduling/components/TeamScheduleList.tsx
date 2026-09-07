@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { House, Plane } from 'lucide-react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/table'
-import { fetchAllItems } from '../../../lib/api'
+import { useCollection } from '../../../lib/query'
 import type { GameSchedulingSeason, GameSchedulingSlot, GameSchedulingOpponent, Team } from '../../../types'
 import type { ExpandedBooking } from '../hooks/useAdminBookings'
 import type { CalendarGame } from './SchedulingCalendar'
@@ -71,7 +71,9 @@ interface ConfirmedRow {
   time: string
   isHome: boolean
   opponent: string
-  venue: string
+  /** `null` = no venue resolved (yet). The dash is decided at render time, so an
+   *  unloaded `halls` never paints as a definitive "no venue". */
+  venue: string | null
 }
 interface ProposedRow {
   id: string
@@ -84,19 +86,24 @@ interface ProposedRow {
 export default function TeamScheduleList({ slots, bookings, team, games = [], confirmedFrom = 'bookings', showHeading = true, hideConfirmed = false }: Props) {
   const { t } = useTranslation('gameScheduling')
 
-  const [halls, setHalls] = useState<{ id: number; name: string }[]>([])
-  useEffect(() => {
-    let cancelled = false
-    fetchAllItems<{ id: number; name: string }>('halls', { fields: ['id', 'name'] })
-      .then((r) => { if (!cancelled) setHalls(r) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [])
+  // Hall names, for the venue column. This used to be a bare fetch-on-mount that
+  // started only once the parent's own skeleton had already cleared, so the first
+  // painted frame of every confirmed HOME fixture said "—" (venue not decided) and
+  // silently swapped to "KWI A" a round-trip later — next to away rows that showed
+  // a real venue, because those travel with the games payload. Now a shared cached
+  // query (one request for all the teams the calendar page mounts) that also
+  // reports whether it has settled, so the dash is only printed once it has.
+  // ⚠ `isError` is part of the gate on purpose: TanStack clears `isLoading` on a
+  // failed fetch while `data` stays undefined, so gating on the data alone would
+  // shimmer forever after a dropped request.
+  const { data: hallRows, isLoading: hallsLoading, isError: hallsError } =
+    useCollection<{ id: number; name: string }>('halls', { fields: ['id', 'name'], all: true })
+  const hallsPending = !hallsError && (hallsLoading || hallRows === undefined)
   const hallName = useMemo(() => {
     const m = new Map<string, string>()
-    for (const h of halls) m.set(String(h.id), h.name)
+    for (const h of hallRows ?? []) m.set(String(h.id), h.name)
     return (id: string | number | null | undefined) => (id == null ? '' : m.get(String(id)) || '')
-  }, [halls])
+  }, [hallRows])
 
   const slotsById = useMemo(() => {
     const m = new Map<string, GameSchedulingSlot>()
@@ -139,7 +146,7 @@ export default function TeamScheduleList({ slots, bookings, team, games = [], co
         time: slotTime(d, s.start_time),
         isHome: true,
         opponent: oppBySlot.get(String(s.id)) || '—',
-        venue: hallName(s.hall) || '—',
+        venue: hallName(s.hall) || null,
       })
     }
 
@@ -191,7 +198,7 @@ export default function TeamScheduleList({ slots, bookings, team, games = [], co
         opponent: shortName(isHome ? g.away_team : g.home_team),
         // Away venues are federation free text; a derby's away leg is the one
         // away game played in a KWI hall, so fall back to the hall FK.
-        venue: (isHome ? hallName(g.hall) : g.away_hall_json?.name || hallName(g.hall)) || '—',
+        venue: (isHome ? hallName(g.hall) : g.away_hall_json?.name || hallName(g.hall)) || null,
       })
     }
 
@@ -244,7 +251,11 @@ export default function TeamScheduleList({ slots, bookings, team, games = [], co
                       <TableCell className="whitespace-nowrap font-medium">{fmtDate(r.date)}</TableCell>
                       <TableCell className="whitespace-nowrap tabular-nums">{r.time || '—'}</TableCell>
                       <TableCell><MatchCell isHome={r.isHome} opponent={r.opponent} /></TableCell>
-                      <TableCell className="hidden sm:table-cell">{r.venue}</TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {r.venue ?? (hallsPending
+                          ? <span className="inline-block h-3 w-20 animate-pulse rounded bg-gray-200 align-middle dark:bg-gray-700" aria-hidden />
+                          : '—')}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

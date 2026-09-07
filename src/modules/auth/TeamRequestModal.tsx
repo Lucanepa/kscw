@@ -60,7 +60,13 @@ export default function TeamRequestModal({
   // list between the Jun-1 cutover and the rollover, and the member then cannot
   // remove themselves from a team (nor can the coach, RosterEditor being blank
   // for the same reason).
-  const { data: myTeamsRaw, refetch: refetchMyTeams } = useCollection<ExpandedMemberTeam>('member_teams', {
+  const {
+    data: myTeamsRaw,
+    isLoading: myTeamsLoading,
+    isError: myTeamsError,
+    isPlaceholderData: myTeamsPlaceholder,
+    refetch: refetchMyTeams,
+  } = useCollection<ExpandedMemberTeam>('member_teams', {
     filter: user
       ? { _and: [{ member: { _eq: user.id } }, { team: { active: { _eq: true } } }] }
       : { id: { _eq: -1 } },
@@ -162,11 +168,47 @@ export default function TeamRequestModal({
     onClose()
   }
 
-  const showLeaveSection = showLeave && myTeams.length > 0
+  // The member_teams fetch only starts when the modal opens, and "not fetched
+  // yet" arrives as the same [] as "on no teams" — so the first frame of
+  // "Manage teams" used to paint the join half alone, reading as "you are on
+  // no teams, nothing to leave", and then one RTT later insert the chip list
+  // ABOVE the join controls, sliding the sport toggles under a finger already
+  // reaching for them. Hold a skeleton for that frame instead.
+  //
+  // ⚠ `isError` is the escape hatch: on a failed fetch TanStack leaves `data`
+  // undefined with `isLoading` false, so a `=== undefined` gate on its own
+  // would never release. On error we fall through to the old behaviour (no
+  // leave section) rather than a permanent skeleton — the query cache's global
+  // handler already reports the failure.
+  // `isPlaceholderData` covers the other direction: `keepPreviousData` is a
+  // global default (lib/query.tsx), so an acting-member swap would otherwise
+  // show the previous member's teams as if they were yours.
+  const myTeamsPending =
+    showLeave && !!user && !myTeamsError &&
+    (myTeamsLoading || myTeamsPlaceholder || myTeamsRaw === undefined)
+  const showLeaveSection = showLeave && !myTeamsPending && myTeams.length > 0
 
   return (
     <Modal open={open} onClose={handleClose} title={t(showLeave ? 'manageTeamsTitle' : 'addTeamTitle')}>
       <div className="space-y-5">
+        {/* Leave a team — skeleton until the membership list has actually loaded,
+            so the join controls start at roughly their final Y. */}
+        {myTeamsPending && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {t('yourTeams')}
+            </p>
+            <div className="divide-y divide-gray-100 rounded-lg border dark:divide-gray-700 dark:border-gray-700">
+              <div className="px-3 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span aria-hidden="true" className="inline-block h-[22px] w-24 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+                  <span aria-hidden="true" className="ml-auto inline-block h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Leave a team */}
         {showLeaveSection && (
           <div className="space-y-2">
@@ -219,7 +261,7 @@ export default function TeamRequestModal({
 
         {/* Join a team */}
         <div className="space-y-3">
-          {showLeaveSection && (
+          {(showLeaveSection || myTeamsPending) && (
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {t('addTeamTitle')}
             </p>

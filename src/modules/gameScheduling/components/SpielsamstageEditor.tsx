@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { parseISO, isSaturday, addDays } from 'date-fns'
@@ -8,8 +8,9 @@ import { Calendar as CalendarIcon, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
-import type { Hall, SpielsamstagConfig } from '../../../types'
-import { fetchAllItems } from '../../../lib/api'
+import type { SpielsamstagConfig } from '../../../types'
+import { useHalls } from '../../../hooks/useData'
+import { useCollection } from '../../../lib/query'
 import { toDateKey, formatDateLocale } from '../../../utils/dateUtils'
 
 // Fixed game-Saturday times (rule C1) — not editable. Juniors may also play on
@@ -26,13 +27,11 @@ interface Props {
 
 export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }: Props) {
   const { t, i18n } = useTranslation('gameScheduling')
-  const [halls, setHalls] = useState<Hall[]>([])
   const [dates, setDates] = useState<string[]>(
     spielsamstage.map(s => s.date).filter(Boolean),
   )
   const [saving, setSaving] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [events, setEvents] = useState<{ start_date: string; end_date: string | null }[]>([])
 
   // Re-seed the local selection whenever the parent hands down a new
   // `spielsamstage` array (same trigger the old effect had — a reference change).
@@ -43,24 +42,29 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
     setDates(spielsamstage.map(s => s.date).filter(Boolean))
   }
 
-  useEffect(() => {
-    fetchAllItems<Hall>('halls', { sort: ['name'] }).then(setHalls).catch(() => {})
-  }, [])
+  // Shared cached query (the sibling admin dashboard warms the same key), so a
+  // navigation usually has the halls already in hand.
+  const { data: hallsData, isLoading: hallsLoading, isError: hallsFailed, error: hallsError } = useHalls()
+  // TanStack flips isLoading to false on ERROR while data stays undefined — the
+  // `isError` escape is what stops this gate latching on forever after a failed read.
+  const hallsPending = !hallsFailed && (hallsLoading || hallsData === undefined)
+  const halls = useMemo(() => hallsData ?? [], [hallsData])
 
   // Saturdays that fall on any event get greyed out in the picker, so a game
   // day isn't booked onto an event. Zurich-local dates (matches the server).
-  useEffect(() => {
-    fetchAllItems<{ start_date: string; end_date: string | null }>('events', {
+  const { data: eventsData, isLoading: eventsLoading, isError: eventsFailed } =
+    useCollection<{ start_date: string; end_date: string | null }>('events', {
       fields: ['id', 'start_date', 'end_date'],
+      all: true,
     })
-      .then(setEvents)
-      .catch(() => {})
-  }, [])
+  // Same escape: if the clash list cannot be read we fall back to the old
+  // behaviour (every Saturday selectable) rather than locking the picker shut.
+  const eventsPending = !eventsFailed && (eventsLoading || eventsData === undefined)
 
   const eventDays = useMemo(() => {
     const set = new Set<string>()
     const zkey = (ts: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date(ts))
-    for (const e of events) {
+    for (const e of eventsData ?? []) {
       if (!e.start_date) continue
       let d = parseISO(zkey(e.start_date))
       const last = parseISO(zkey(e.end_date || e.start_date))
@@ -71,7 +75,7 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
       }
     }
     return set
-  }, [events])
+  }, [eventsData])
 
   const lang = i18n.language
   const locale = lang === 'de' ? de : enUS
@@ -135,18 +139,31 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
       <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
         {t('spielsamstage')}
       </h2>
+      {/* Never state a slot count from an unloaded hall list — "0 slots × KWI" reads
+          as a misconfigured club. Skeleton while pending, the read error when it failed. */}
       <p className="mt-1 mb-4 text-xs text-gray-500 dark:text-gray-400">
-        {t('spielsamstageAutoHint', {
-          count: slotsPerDay,
-          times: DEFAULT_TIMES.join(' / '),
-          halls: hallNames,
-          defaultValue: `Each selected Saturday auto-generates ${slotsPerDay} slots — ${DEFAULT_TIMES.join(' / ')} × ${hallNames}.`,
-        })}
+        {hallsPending ? (
+          <span
+            aria-hidden
+            className="inline-block h-3 w-72 max-w-full animate-pulse rounded bg-gray-200 align-middle dark:bg-gray-700"
+          />
+        ) : hallsFailed ? (
+          <span className="text-amber-600 dark:text-amber-400">
+            {t('common:errorLoading')} {hallsError instanceof Error ? hallsError.message : ''}
+          </span>
+        ) : (
+          t('spielsamstageAutoHint', {
+            count: slotsPerDay,
+            times: DEFAULT_TIMES.join(' / '),
+            halls: hallNames,
+            defaultValue: `Each selected Saturday auto-generates ${slotsPerDay} slots — ${DEFAULT_TIMES.join(' / ')} × ${hallNames}.`,
+          })
+        )}
       </p>
 
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" disabled={eventsPending}>
             <CalendarIcon className="h-4 w-4" />
             {t('pickSaturdays', { defaultValue: 'Pick Saturdays' })}
           </Button>
@@ -161,6 +178,7 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
             showOutsideDays={false}
             captionLayout="dropdown"
             disabled={(date) =>
+              eventsPending ||
               !isSaturday(date) ||
               eventDays.has(toDateKey(date)) ||
               (!!seasonRange && (date < seasonRange.start || date > seasonRange.end))
@@ -199,7 +217,7 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
         </p>
       )}
 
-      {kwiHalls.length === 0 && halls.length > 0 && (
+      {!hallsPending && !hallsFailed && kwiHalls.length === 0 && halls.length > 0 && (
         <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
           {t('noKwiHalls', {
             defaultValue: 'No KWI halls found — add halls named "KWI A/B/C" to enable auto-slot generation.',
@@ -209,7 +227,7 @@ export default function SpielsamstageEditor({ spielsamstage, onUpdate, season }:
 
       <Button
         onClick={handleSave}
-        disabled={saving || kwiHalls.length === 0}
+        disabled={saving || hallsPending || kwiHalls.length === 0}
         size="sm"
         className="mt-4"
       >

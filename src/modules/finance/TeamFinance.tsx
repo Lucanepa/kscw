@@ -18,12 +18,37 @@ const inputCls = 'mt-1 w-full rounded-md border border-gray-200 bg-transparent p
 const apiErr = (e: unknown, fb: string) => (e as { body?: { error?: string } })?.body?.error || fb
 const KINDS: TeamEntryKind[] = ['sponsoring', 'income', 'expense']
 const netCls = (n: number) => (n >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')
+const tableWrapCls = 'rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+const thCls = 'text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400'
+const barCls = 'block h-3 animate-pulse rounded bg-gray-200 dark:bg-gray-700'
+const noticeCls = 'rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400'
+const errNoticeCls = 'rounded-lg border border-dashed border-red-300 py-10 text-center text-sm text-red-600 dark:border-red-800 dark:text-red-400'
+
+/** Placeholder rows while a team's entries are in flight — never a verdict. */
+function TeamEntriesSkeleton() {
+  return (
+    <div className="rounded-md border border-gray-200 dark:border-gray-700" aria-busy="true">
+      <Table>
+        <TableBody>
+          {[0, 1, 2].map((i) => (
+            <TableRow key={i} className="border-gray-200 dark:border-gray-700">
+              <TableCell><span className={`${barCls} w-16`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} w-40 max-w-full`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-7`} aria-hidden="true" /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
 
 /** A team's entries, shown when its summary row is expanded. */
 function TeamEntries({ teamId, fiscalYearId, onChanged }: { teamId: number; fiscalYearId: string; onChanged: () => void }) {
   const { t } = useTranslation('finance')
   const confirm = useConfirm()
-  const { data: entries, refetch } = useTeamEntries(teamId, fiscalYearId)
+  const { data: entries, isLoading, isError, isPlaceholderData: entriesStale, refetch } = useTeamEntries(teamId, fiscalYearId)
   const [busyDel, setBusyDel] = useState<number | null>(null)
   const [delErr, setDelErr] = useState('')
   const kindLabel = (k: string) => ({ sponsoring: t('teamKindSponsoring'), income: t('teamKindIncome'), expense: t('teamKindExpense') }[k] ?? k)
@@ -35,6 +60,16 @@ function TeamEntries({ teamId, fiscalYearId, onChanged }: { teamId: number; fisc
     finally { setBusyDel(null) }
   }
   const rows = entries ?? []
+  // An empty `rows` used to mean both "this team has booked nothing" and "the expand
+  // has not been answered yet" — so every expand asserted "No entries for this team."
+  // for a whole round-trip, and a 403/500 said the same thing forever. The isError
+  // escape matters: TanStack leaves `entries` undefined on a failed fetch too.
+  // isPlaceholderData is load-bearing: the key carries the fiscal year and
+  // placeholderData: keepPreviousData is a global default (src/lib/query.tsx:83),
+  // so a year switch returns LAST year's entries with isLoading already false.
+  const pending = !isError && (isLoading || entriesStale || entries === undefined)
+  if (pending) return <TeamEntriesSkeleton />
+  if (isError) return <p className="py-3 text-center text-xs text-red-600 dark:text-red-400">{t('common:error')}</p>
   if (rows.length === 0) return <p className="py-3 text-center text-xs text-gray-400">{t('teamNoEntries')}</p>
   return (
     <>
@@ -150,12 +185,59 @@ function AddTeamEntryModal({ open, onClose, fiscalYearId, presetTeam, onDone }: 
   )
 }
 
+/** Shared header so the loading placeholder has the exact shape of the real table. */
+function TeamsHead() {
+  const { t } = useTranslation('finance')
+  return (
+    <TableHeader>
+      <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
+        <TableHead className={thCls}>{t('teamLabel')}</TableHead>
+        <TableHead className={`text-right ${thCls}`}>{t('teamColIncome')}</TableHead>
+        <TableHead className={`hidden sm:table-cell text-right ${thCls}`}>{t('teamColExpense')}</TableHead>
+        <TableHead className={`text-right ${thCls}`}>{t('teamColNet')}</TableHead>
+        <TableHead className={`hidden sm:table-cell text-right ${thCls}`}>{t('teamColOpenBills')}</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+/** Placeholder rows while the per-team summary is in flight — no totals, no verdict. */
+function TeamsSkeleton() {
+  return (
+    <div className={tableWrapCls} aria-busy="true">
+      <Table>
+        <TeamsHead />
+        <TableBody>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <TableRow key={i} className="border-gray-200 dark:border-gray-700">
+              <TableCell><span className={`${barCls} w-28 max-w-full`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+              <TableCell className="hidden sm:table-cell"><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+              <TableCell className="hidden sm:table-cell"><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 export default function TeamFinance({ fiscalYearId, fiscalYearLabel }: { fiscalYearId: string; fiscalYearLabel: string }) {
   const { t } = useTranslation('finance')
-  const { data: rows, refetch } = useTeamsSummary(fiscalYearId, !!fiscalYearId)
+  const { data: rows, isLoading, isError, isPlaceholderData: rowsStale, refetch } = useTeamsSummary(fiscalYearId, !!fiscalYearId)
   const [showAdd, setShowAdd] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const teams = rows ?? []
+  // An empty `teams` used to mean both "no team has booked anything" and "the summary
+  // has not arrived yet" — the tab printed the definitive dashed empty box for both,
+  // for a full round-trip, on every first visit. `rows === undefined` also covers the
+  // window where fiscalYearId is still '' (query disabled ⇒ isLoading false, same
+  // gotcha as FinancePage's boot flag), and the isError escape stops a failed request
+  // from parking on the skeleton forever.
+  // Same year-keyed staleness as above; and gate on having a fiscal year at all,
+  // since a disabled query never leaves 'pending'.
+  const pending = !!fiscalYearId && !isError && (isLoading || rowsStale || rows === undefined)
   const totals = teams.reduce((a, r) => ({ income: a.income + r.income, expense: a.expense + r.expense, net: a.net + r.net, open: a.open + r.invoice_open }), { income: 0, expense: 0, net: 0, open: 0 })
 
   return (
@@ -168,20 +250,16 @@ export default function TeamFinance({ fiscalYearId, fiscalYearLabel }: { fiscalY
         </button>
       </div>
 
-      {teams.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('teamNoData')}</p>
+      {pending ? (
+        <TeamsSkeleton />
+      ) : isError ? (
+        <p className={errNoticeCls}>{t('common:error')}</p>
+      ) : teams.length === 0 ? (
+        <p className={noticeCls}>{t('teamNoData')}</p>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div className={tableWrapCls}>
           <Table>
-            <TableHeader>
-              <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
-                <TableHead className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('teamLabel')}</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('teamColIncome')}</TableHead>
-                <TableHead className="hidden sm:table-cell text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('teamColExpense')}</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('teamColNet')}</TableHead>
-                <TableHead className="hidden sm:table-cell text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('teamColOpenBills')}</TableHead>
-              </TableRow>
-            </TableHeader>
+            <TeamsHead />
             <TableBody>
               {teams.map((r) => (
                 <Fragment key={r.team}>

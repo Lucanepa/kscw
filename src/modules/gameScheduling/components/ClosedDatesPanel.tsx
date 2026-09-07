@@ -20,13 +20,17 @@ export default function ClosedDatesPanel() {
   const navigate = useNavigate()
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
-  const { data: closuresRaw } = useCollection<HallClosure>('hall_closures', {
+  const { data: closuresRaw, isLoading, isError } = useCollection<HallClosure>('hall_closures', {
     filter: { end_date: { _gte: today } },
     sort: ['start_date'],
     fields: ['id', 'source'],
     limit: 1000,
   })
   const closures = closuresRaw ?? EMPTY
+  // "0 automatic · 0 manual" is a real answer on this page, so don't say it before
+  // the rows land. A failed fetch still releases the gate — a permanent skeleton
+  // over the counts would be worse than the stale zeros.
+  const countsPending = !isError && (isLoading || closuresRaw === undefined)
 
   // Auto = synced (school holidays + calendar); manual = everything a person set.
   const autoCount = closures.filter((c) => c.source === 'school_holidays' || c.source === 'gcal' || c.source === 'auto').length
@@ -41,12 +45,21 @@ export default function ClosedDatesPanel() {
       <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">{t('closedDatesDescription')}</p>
 
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-          {t('closedDatesAuto', { count: autoCount })}
-        </span>
-        <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-          {t('closedDatesManual', { count: manualCount })}
-        </span>
+        {countsPending ? (
+          <>
+            <span aria-hidden="true" className="inline-block h-6 w-24 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+            <span aria-hidden="true" className="inline-block h-6 w-20 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />
+          </>
+        ) : (
+          <>
+            <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              {t('closedDatesAuto', { count: autoCount })}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              {t('closedDatesManual', { count: manualCount })}
+            </span>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
