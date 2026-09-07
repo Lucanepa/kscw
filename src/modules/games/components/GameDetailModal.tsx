@@ -14,6 +14,7 @@ import RosterModal from '../../scorer/components/RosterModal'
 import PreGameRosterModal from './PreGameRosterModal'
 import ShowIdsModal from './ShowIdsModal'
 import { useAuth } from '../../../hooks/useAuth'
+import { useAdminMode } from '../../../hooks/useAdminMode'
 import { useIsCalledUpToGame } from '../../../hooks/useUserVisibleGameIds'
 import { useParticipation } from '../../../hooks/useParticipation'
 import { useMyCoveringAbsence } from '../../../hooks/useMyCoveringAbsence'
@@ -112,7 +113,8 @@ const NOMINATION_STATUS_TONE: Record<NominationStatus, string> = {
 export default function GameDetailModal({ game, onClose, readOnly, participations }: GameDetailModalProps) {
   const { t } = useTranslation('games')
   const { t: tc } = useTranslation('common')
-  const { user, isCoachOf, isStaffOnly, canParticipateIn, isGuestIn, coachTeamIds, teamResponsibleIds, hasAdminAccessToTeam, teamsLoading } = useAuth()
+  const { user, isStaffOnly, canParticipateIn, isGuestIn, coachTeamIds, teamResponsibleIds, hasAdminAccessToTeam, teamsLoading } = useAuth()
+  const { effectiveIsAdmin } = useAdminMode()
   const confirm = useConfirm()
   const [rosterOpen, setRosterOpen] = useState(false)
   const [participationListOpen, setParticipationListOpen] = useState(false)
@@ -312,10 +314,20 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   // Contact reveal: admins (sport/global) still see it anytime via the items
   // API. Coaches/TRs no longer see it automatically — it's kept out of sight and
   // revealed only behind the per-role "duty is late" alarm (handled per row).
-  const adminSeesContact = hasAdminAccessToTeam(kscwTeamId)
-  // Staff of the playing team — coach, team-responsible, or admin. Gates the
-  // referee-expenses panel (hidden from everyone else).
-  const isTeamStaff = adminSeesContact || isCoachOf(kscwTeamId) || teamResponsibleIds.includes(kscwTeamId)
+  //
+  // Admin power in this modal follows the app-wide admin-mode contract: it
+  // applies only while the toggle is ON. Both useAuth helpers are mode-BLIND —
+  // `isCoachOf` folds `hasAdminAccessToTeam` in — so calling them raw handed an
+  // admin full coach powers with admin mode off. This modal was the only one of
+  // six `hasAdminAccessToTeam` call sites that did not pair it with useAdminMode.
+  const isTeamAdmin = effectiveIsAdmin && hasAdminAccessToTeam(kscwTeamId)
+  const adminSeesContact = isTeamAdmin
+  // Coach-or-admin, the way `isCoachOf` means it, but mode-aware. Team
+  // responsibles are deliberately NOT included — that matches `isCoachOf`.
+  const canEditAsCoach = isTeamAdmin || coachTeamIds.includes(kscwTeamId)
+  // Staff of the playing team — coach, team-responsible, or admin-in-admin-mode.
+  // Gates the referee-expenses panel (hidden from everyone else).
+  const isTeamStaff = isTeamAdmin || coachTeamIds.includes(kscwTeamId) || teamResponsibleIds.includes(kscwTeamId)
   // Show IDs is NARROWER than isTeamStaff, and must mirror the server: mayRead()
   // in identity-document.js has no admin branch and refuses an admin outright —
   // they hold no envelope, so they could not decrypt a thing. Offering them the
@@ -369,7 +381,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   const nominationCount = (fullGame ?? game).vm_nomination_count
   const nominationError = (fullGame ?? game).vm_nomination_error
   const nominationPushedAt = (fullGame ?? game).vm_nomination_pushed_at
-  const showNomination = kscwSport === 'volleyball' && isCoachOf(kscwTeamId)
+  const showNomination = kscwSport === 'volleyball' && canEditAsCoach
 
   async function saveNominationOverride(value: boolean | null) {
     const previous = autoNomination
@@ -766,7 +778,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             <RefereeExpenseSection
               gameId={game.id}
               teamId={kscwTeamId}
-              canEdit={!readOnly && isCoachOf(kscwTeamId)}
+              canEdit={!readOnly && canEditAsCoach}
             />
           </div>
         )}
@@ -936,12 +948,12 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             button moved up beneath the RSVP tallies; this section now renders
             only when it has content (a deadline to show, or a coach who can
             set one) so it never leaves an empty bordered strip. */}
-        {game.status === 'scheduled' && (game.respond_by || (!readOnly && isCoachOf(kscwTeamId))) && (
+        {game.status === 'scheduled' && (game.respond_by || (!readOnly && canEditAsCoach)) && (
           <div className="space-y-3 border-t dark:border-gray-700 px-6 py-4">
             {/* Besammlung (migration 340). Stored as minutes before kickoff, so
                 it stays right when Swiss Volley moves the fixture — the coach
                 picks the gap once and never revisits it after a reschedule. */}
-            {!readOnly && isCoachOf(kscwTeamId) && (
+            {!readOnly && canEditAsCoach && (
               <MeetingTimeSelect
                 value={game.meeting_offset_minutes ?? null}
                 onChange={(v) => { void updateGame(game.id, { meeting_offset_minutes: v }) }}
@@ -951,7 +963,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             {game.respond_by && !editingDeadline && (
               <DetailRow label={t('respondBy')} value={`${formatDate(game.respond_by)}${(() => { const p = parseRespondByTime(game.respond_by, game.time); return p?.time ? `, ${p.time}` : '' })()}`} />
             )}
-            {!readOnly && isCoachOf(kscwTeamId) && (
+            {!readOnly && canEditAsCoach && (
               editingDeadline ? (
                 <div className="flex items-center gap-2">
                   <DatePicker
