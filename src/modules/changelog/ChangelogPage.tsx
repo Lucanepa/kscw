@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.5.0'
+const APP_VERSION = '2.6.0'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,33 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.6.0',
+    date: '07.09.2026',
+    sections: [
+      {
+        title: "The SQL console suggests the right thing",
+        items: [
+          "Superuser tool \u2014 Admin \u2192 SQL workspace.",
+          "Typing a table\u2019s name or its alias now suggests only that table\u2019s columns. `mt.` after `FROM member_teams mt` offers member_teams and nothing else; before, it offered every column in the database and let you pick one that did not exist on that table. The abbreviation works even before the FROM line is written.",
+          "Values are suggested too. After `sport = ` the console offers 'volleyball' and 'basketball' \u2014 the values the column actually holds, read from the database rather than guessed.",
+          "A suggestion says which table it comes from: columns are offered, and inserted, already qualified.",
+          "The explanation panel no longer covers the suggestions on a phone. It sat on top of the list it was explaining.",
+          "A failed query now offers \"Did you mean\u2026\". A mistyped column is matched against the tables that query actually joined, and one tap corrects it.",
+          "Ask AI writes the values correctly and remembers the conversation. It is given the real values each column holds, so it writes 'volleyball' and not an invented 'vb', and it knows today\u2019s date, so \"this season\" means the current one. Your last few questions stay in context, so a follow-up refines the query instead of starting over.",
+          "The console works on a phone. The three controls share one bar, write mode is a switch, and the schema browser \u2014 which was desktop-only \u2014 opens in a panel showing each column\u2019s type, keys and values.",
+        ],
+      },
+      {
+        title: "Fixes",
+        items: [
+          "The officials on a game no longer read as \"nobody assigned\" while the screen is still loading. The heading appeared over an empty list, and if the second request failed it stayed that way.",
+          "A team that is full is now refused by the contact form as full. The website already hid a full team\u2019s contact button, but a bookmarked or cached page could still reach the form; only closed basketball youth teams were being turned away.",
+          "Date of birth sits left of the shirt number on the scorer\u2019s match sheet, matching the coach\u2019s roster and the order a scorer reads it in.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.5.0',
     date: '07.09.2026',
