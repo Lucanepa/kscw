@@ -1,28 +1,15 @@
 import { useRef, useEffect, useMemo } from 'react'
-import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view'
+import { EditorView, keymap, placeholder as cmPlaceholder, tooltips } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { sql, PostgreSQL } from '@codemirror/lang-sql'
-import {
-  autocompletion,
-  startCompletion,
-  type Completion,
-  type CompletionContext,
-  type CompletionResult,
-  type CompletionSource,
-} from '@codemirror/autocomplete'
+import { autocompletion, startCompletion, type CompletionSource } from '@codemirror/autocomplete'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { useTheme } from '@/hooks/useTheme'
+import { makeCompletionSource } from '../utils/sqlCompletion'
+import type { SqlSchemaColumn, SqlSchemaTable } from '../utils/sqlSchema'
 
-export interface SqlSchemaColumn {
-  name: string
-  /** Postgres type, surfaced in the completion popup's detail line. */
-  dataType?: string
-}
-export interface SqlSchemaTable {
-  name: string
-  columns: readonly SqlSchemaColumn[]
-}
+export type { SqlSchemaColumn, SqlSchemaTable }
 
 interface CodeMirrorEditorProps {
   value: string
@@ -32,108 +19,22 @@ interface CodeMirrorEditorProps {
   placeholder?: string
 }
 
-const SQL_KEYWORDS = [
-  'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'ILIKE', 'IS', 'NULL',
-  'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS', 'ON', 'USING',
-  'GROUP', 'BY', 'HAVING', 'ORDER', 'ASC', 'DESC', 'LIMIT', 'OFFSET', 'DISTINCT',
-  'AS', 'WITH', 'RECURSIVE',
-  'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
-  'UNION', 'INTERSECT', 'EXCEPT', 'ALL', 'EXISTS', 'ANY', 'BETWEEN', 'COALESCE', 'CAST',
-  'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'ARRAY_AGG', 'JSONB_AGG', 'JSON_AGG', 'STRING_AGG',
-  'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', 'RETURNING',
-  'TRUE', 'FALSE',
-]
-
-/** Build a schema-aware autocomplete source.
- *  - `<table>.<partial>` → only that table's columns (with type)
- *  - bare word in any other position → table names, deduped column names
- *    (with `from <table>` hint), and SQL keywords */
-function makeCompletionSource(tables: readonly SqlSchemaTable[]): CompletionSource {
-  // Pre-compute completion arrays for performance
-  const tableCompletions: Completion[] = tables.map((t) => ({
-    label: t.name,
-    type: 'type',
-    detail: 'table',
-    boost: 5,
-  }))
-
-  // Columns keyed by name. If a name is in multiple tables, surface them all
-  // as separate entries so users see e.g. "id (members)" + "id (teams)".
-  const columnCompletions: Completion[] = []
-  for (const t of tables) {
-    for (const c of t.columns) {
-      columnCompletions.push({
-        label: c.name,
-        apply: c.name,
-        type: 'property',
-        detail: c.dataType ? `${c.dataType} · ${t.name}` : t.name,
-        info: c.dataType ? `${t.name}.${c.name} :: ${c.dataType}` : `${t.name}.${c.name}`,
-        boost: 2,
-      })
-    }
-  }
-
-  // Per-table column lookup (for `tableName.` completion)
-  const columnsByTable = new Map<string, Completion[]>()
-  for (const t of tables) {
-    columnsByTable.set(
-      t.name.toLowerCase(),
-      t.columns.map((c) => ({
-        label: c.name,
-        type: 'property',
-        detail: c.dataType,
-        info: c.dataType ? `${t.name}.${c.name} :: ${c.dataType}` : undefined,
-        boost: 10,
-      })),
-    )
-  }
-
-  const keywordCompletions: Completion[] = SQL_KEYWORDS.map((k) => ({
-    label: k,
-    type: 'keyword',
-    boost: -1,
-  }))
-
-  return (context: CompletionContext): CompletionResult | null => {
-    // Case 1: `tableName.<cursor>` or `tableName.partial`
-    // Look BEFORE the dot — find a `<word>.` sequence.
-    const dotMatch = context.matchBefore(/\b([A-Za-z_][\w]*)\.([\w]*)$/)
-    if (dotMatch) {
-      const m = dotMatch.text.match(/^([A-Za-z_][\w]*)\.([\w]*)$/)
-      if (m) {
-        const [, tableName, partial] = m
-        const cols = columnsByTable.get(tableName.toLowerCase())
-        if (cols) {
-          return {
-            // Replace only the part AFTER the dot
-            from: dotMatch.from + tableName.length + 1,
-            to: dotMatch.from + tableName.length + 1 + partial.length,
-            options: cols,
-            validFor: /^\w*$/,
-          }
-        }
-      }
-    }
-
-    // Case 2: bare word — suggest tables + columns + keywords
-    const word = context.matchBefore(/[A-Za-z_]\w*/)
-    if (!word) {
-      if (!context.explicit) return null
-      // Empty position, explicit (Ctrl-Space): still offer suggestions
-      return {
-        from: context.pos,
-        options: [...tableCompletions, ...columnCompletions, ...keywordCompletions],
-        validFor: /^\w*$/,
-      }
-    }
-    if (word.from === word.to && !context.explicit) return null
-
-    return {
-      from: word.from,
-      options: [...tableCompletions, ...columnCompletions, ...keywordCompletions],
-      validFor: /^\w*$/,
-    }
-  }
+function completionExtension(source: CompletionSource) {
+  return autocompletion({
+    activateOnTyping: true,
+    defaultKeymap: true,
+    maxRenderedOptions: 60,
+    // The type glyphs render as an empty box under the one-dark theme and eat
+    // a tab stop's worth of width on a phone; the detail line already says
+    // what each option is.
+    icons: false,
+    // The info panel is what covers the list on a phone: it is rendered beside
+    // the options on a wide screen and on top of them on a narrow one. Below
+    // `md` it is hidden entirely (see the theme) and every fact it carried is
+    // in the option's own detail line instead.
+    closeOnBlur: true,
+    override: [source],
+  })
 }
 
 export default function CodeMirrorEditor({
@@ -195,14 +96,11 @@ export default function CodeMirrorEditor({
         // lang-sql for syntax highlighting only — we override completion
         // entirely below so column suggestions work at every position.
         sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
-        completionCompartment.current.of(
-          autocompletion({
-            activateOnTyping: true,
-            defaultKeymap: true,
-            maxRenderedOptions: 50,
-            override: [completionSource],
-          }),
-        ),
+        // Fixed positioning keeps the completion popup out of the wrapper's
+        // `overflow-hidden` box — otherwise the list is clipped at the bottom
+        // edge of the editor, which on a phone is most of the list.
+        tooltips({ position: 'fixed' }),
+        completionCompartment.current.of(completionExtension(completionSource)),
         themeCompartment.current.of(theme === 'dark' ? oneDark : []),
         cmPlaceholder(placeholder || ''),
         EditorView.updateListener.of((update) => {
@@ -219,8 +117,39 @@ export default function CodeMirrorEditor({
           '.cm-content': { fontFamily: 'ui-monospace, "JetBrains Mono", monospace' },
           '.cm-gutters': { borderRight: 'none' },
           '.cm-scroller': { overflow: 'auto' },
-          '.cm-tooltip-autocomplete': { fontFamily: 'ui-monospace, "JetBrains Mono", monospace' },
-          '.cm-completionDetail': { color: '#94a3b8', fontStyle: 'normal', marginLeft: '0.75rem' },
+          '.cm-tooltip-autocomplete': {
+            fontFamily: 'ui-monospace, "JetBrains Mono", monospace',
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 30px -10px rgb(0 0 0 / 0.45)',
+          },
+          '.cm-tooltip-autocomplete > ul': { maxHeight: '16rem' },
+          '.cm-tooltip-autocomplete > ul > li': {
+            padding: '3px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+          },
+          '.cm-completionLabel': { flex: '0 1 auto', minWidth: 0 },
+          '.cm-completionDetail': {
+            color: '#94a3b8',
+            fontStyle: 'normal',
+            marginLeft: 'auto',
+            paddingLeft: '0.75rem',
+            fontSize: '0.85em',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            flex: '0 1 auto',
+          },
+          // Touch: taller rows, a list that is allowed to be tall, and no info
+          // panel — on a narrow viewport it lands on top of the options it is
+          // supposed to explain.
+          '@media (max-width: 767px)': {
+            '.cm-tooltip-autocomplete': { maxWidth: 'calc(100vw - 1.5rem)' },
+            '.cm-tooltip-autocomplete > ul': { maxHeight: '45vh' },
+            '.cm-tooltip-autocomplete > ul > li': { padding: '9px 10px', lineHeight: '1.25' },
+            '.cm-completionInfo': { display: 'none' },
+          },
         }),
       ],
     })
@@ -254,14 +183,7 @@ export default function CodeMirrorEditor({
     const view = viewRef.current
     if (!view) return
     view.dispatch({
-      effects: completionCompartment.current.reconfigure(
-        autocompletion({
-          activateOnTyping: true,
-          defaultKeymap: true,
-          maxRenderedOptions: 50,
-          override: [completionSource],
-        }),
-      ),
+      effects: completionCompartment.current.reconfigure(completionExtension(completionSource)),
     })
   }, [completionSource])
 
@@ -288,7 +210,7 @@ export default function CodeMirrorEditor({
     // a query taller than the box scrolls instead of being clipped.
     <div
       ref={containerRef}
-      className="resize-y overflow-hidden rounded-lg border border-border bg-card min-h-[160px] h-[260px] max-h-[70vh] [&_.cm-editor]:h-full"
+      className="resize-y overflow-hidden rounded-lg border border-border bg-card min-h-[160px] h-[220px] max-h-[70vh] md:h-[260px] [&_.cm-editor]:h-full"
     />
   )
 }

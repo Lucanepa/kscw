@@ -576,6 +576,13 @@ export default {
   sqlWorkspaceAskAiPlaceholder: 'p. ex. "Membres actifs avec licence de marqueur en H1 ou H2, triés par nom de famille"',
   sqlWorkspaceAskAiSubmitHint: 'Cmd/Ctrl-Entrée pour générer',
   sqlWorkspaceAskAiGenerate: 'Générer le SQL',
+  sqlWorkspaceTables_one: 'Table ({{count}})',
+  sqlWorkspaceTables_other: 'Tables ({{count}})',
+  sqlWorkspaceDidYouMean: 'Vouliez-vous dire…',
+  sqlWorkspaceDidYouMeanHint: '"{{name}}" n\'existe pas dans le schéma. Touchez une suggestion pour le remplacer dans la requête.',
+  sqlWorkspaceAiMemory: 'Mémoire',
+  sqlWorkspaceAiClearMemory: 'Vider',
+  sqlWorkspaceAiMemoryHint: 'Vos dernières questions restent dans le contexte — une question de suivi affine la même requête.',
 
   // Volley Feedback dashboard
   vfOverview: 'Aperçu',

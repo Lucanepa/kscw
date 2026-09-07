@@ -802,6 +802,13 @@ export default {
   sqlWorkspaceAskAiPlaceholder: 'z. B. "Aktivi Mitglieder mit Schriiberlizänz im H1 oder H2, sortiert nach Nachname"',
   sqlWorkspaceAskAiSubmitHint: 'Cmd/Ctrl-Enter zum Generiere',
   sqlWorkspaceAskAiGenerate: 'SQL generiere',
+  sqlWorkspaceTables_one: 'Tabälle ({{count}})',
+  sqlWorkspaceTables_other: 'Tabälle ({{count}})',
+  sqlWorkspaceDidYouMean: 'Hesch das gmeint…',
+  sqlWorkspaceDidYouMeanHint: '"{{name}}" gits im Schema nöd. Tipp uf en Vorschlag, zum es i de Abfrog z ersetze.',
+  sqlWorkspaceAiMemory: 'Gedächtnis',
+  sqlWorkspaceAiClearMemory: 'Leere',
+  sqlWorkspaceAiMemoryHint: 'Dini letzte Frooge blibed im Kontext — e Nochfrog verfeineret die glich Abfrog.',
 
   // Volley Feedback dashboard
   vfOverview: 'Übersicht',

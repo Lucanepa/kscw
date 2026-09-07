@@ -249,7 +249,7 @@ function TrainingParticipation({ training, isStaff, isStaffParticipant }: { trai
     ? getDeadlineDate(training.respond_by, training.start_time) < new Date()
     : false
 
-  const { participation, effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed } = useParticipation(
+  const { participation, effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed, isLoading: rsvpLoading } = useParticipation(
     'training',
     training.id,
     training.date,
@@ -325,17 +325,23 @@ function TrainingParticipation({ training, isStaff, isStaffParticipant }: { trai
       )}
       <div className="relative flex items-center gap-2">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('yourStatus')}:</span>
-        <div className="flex items-center gap-1.5">
+        <div
+          className={`flex items-center gap-1.5 ${rsvpLoading ? 'pointer-events-none opacity-50' : ''}`}
+          aria-busy={rsvpLoading}
+        >
           {(['confirmed', 'tentative', 'declined'] as const)
+            // ⚠ While loading, effectiveStatus is null — so with isLocked the filter
+            // below would render NO buttons at all, then pop one in. Keep all three
+            // (dimmed) until the saved answer is known.
+            .filter((s) => rsvpLoading || !isLocked || effectiveStatus === s)
             // When deadline has passed: only render the user's selected choice (if any) in its color.
-            .filter((s) => !isLocked || effectiveStatus === s)
             .map((status) => {
             const labels = { confirmed: t('yes'), tentative: t('maybe'), declined: t('no') }
             const active = effectiveStatus === status
             return (
               <button
                 key={status}
-                disabled={isLocked}
+                disabled={isLocked || rsvpLoading}
                 onClick={() => {
                   if (isLocked) return
                   if (requireNote && (status === 'declined' || status === 'tentative') && !noteText.trim()) {

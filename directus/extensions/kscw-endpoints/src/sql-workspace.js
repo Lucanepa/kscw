@@ -2,7 +2,8 @@
  * KSCW SQL Workspace endpoints — Superuser-only read-mostly Postgres console.
  *
  * Routes (mounted under /kscw):
- *   GET  /admin/sql/schema  — public schema tables + columns for sidebar/autocomplete
+ *   GET  /admin/sql/schema  — public schema tables, columns, keys and value hints
+ *                             for the sidebar + editor autocomplete
  *   POST /admin/sql         — execute SQL: { sql, write_mode? } → { columns, rows, ... }
  *
  * Safety guarantees:
@@ -17,6 +18,7 @@
  */
 
 import { writeErrorLog } from './error-log.js'
+import { loadSchemaModel, invalidateSchemaCache } from './sql-schema.js'
 
 const STATEMENT_TIMEOUT_MS = 15000
 const DEFAULT_ROW_CAP = 1000
@@ -180,28 +182,14 @@ export function registerSqlWorkspace(router, ctx) {
   }
 
   // ── GET /admin/sql/schema ────────────────────────────────────
+  // Columns, keys and value hints (see sql-schema.js). `?refresh=1` bypasses
+  // the 60s cache — that's what the sidebar's refresh button sends.
   router.get('/admin/sql/schema', async (req, res) => {
     try {
       await requireSuperuser(req)
-      const rows = await database.raw(`
-        SELECT c.table_name, c.column_name, c.data_type, c.is_nullable, c.ordinal_position
-        FROM information_schema.columns c
-        JOIN information_schema.tables t
-          ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-        WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-        ORDER BY c.table_name, c.ordinal_position
-      `)
-      const byTable = new Map()
-      for (const r of rows.rows) {
-        let entry = byTable.get(r.table_name)
-        if (!entry) { entry = { name: r.table_name, columns: [] }; byTable.set(r.table_name, entry) }
-        entry.columns.push({
-          name: r.column_name,
-          data_type: r.data_type,
-          nullable: r.is_nullable === 'YES',
-        })
-      }
-      res.json({ tables: Array.from(byTable.values()) })
+      const force = req.query?.refresh === '1' || req.query?.refresh === 'true'
+      const model = await loadSchemaModel(database, log, force)
+      res.json(model)
     } catch (err) {
       log.error({ msg: 'admin/sql/schema failed', error: err.message, status: err.status })
       res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal error' })
@@ -300,6 +288,9 @@ export function registerSqlWorkspace(router, ctx) {
           }
         }
       })
+
+      // Write mode may have been DDL — the cached schema model is stale now.
+      if (writeMode) invalidateSchemaCache()
 
       const durationMs = Date.now() - started
       writeErrorLog({

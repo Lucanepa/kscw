@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDateTimeCompactZurich } from '@/utils/dateHelpers'
 
 interface ResultsTableProps {
   columns: string[]
@@ -10,10 +12,10 @@ interface ResultsTableProps {
 
 function formatCell(value: unknown, labelMap?: Record<string, string>): React.ReactNode {
   if (value === null || value === undefined)
-    return <span className="text-gray-400 italic">NULL</span>
+    return <span className="italic text-muted-foreground">NULL</span>
   if (typeof value === 'boolean')
     return (
-      <span className={value ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+      <span className={value ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
         {String(value)}
       </span>
     )
@@ -22,8 +24,8 @@ function formatCell(value: unknown, labelMap?: Record<string, string>): React.Re
     const d = new Date(value)
     if (!isNaN(d.getTime())) {
       return (
-        <span className="text-gray-500 dark:text-gray-400" title={value}>
-          {d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+        <span className="text-muted-foreground" title={value}>
+          {formatDateTimeCompactZurich(d)}
         </span>
       )
     }
@@ -52,59 +54,54 @@ export default function ResultsTable({ columns, rows, maxHeight = 'max-h-[60vh]'
   const { t } = useTranslation('admin')
 
   if (columns.length === 0)
-    return <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">{t('noResults')}</p>
+    return <p className="py-4 text-center text-sm text-muted-foreground">{t('noResults')}</p>
 
   return (
-    <div>
-      <div className={`overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 ${maxHeight}`}>
-        {/* Header bar with row/column counts */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-          <span>{t('resultsSummary', { rows: rows.length, cols: columns.length })}</span>
-        </div>
-        <table className="w-full text-left text-xs">
-          <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800">
-            <tr>
-              {/* Row-number gutter — sticky left so it stays visible on horizontal scroll */}
-              <th
-                className="sticky left-0 z-20 whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-right font-semibold text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500"
-                aria-label="#"
-              >
-                #
-              </th>
-              {columns.map((col) => (
-                <th
-                  key={col}
-                  className="whitespace-nowrap border-b border-gray-200 px-3 py-2 font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-300"
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={i}
-                className={`${
-                  i % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''
-                } hover:bg-gray-100 dark:hover:bg-gray-700/50`}
-              >
-                {/* Row number (1-indexed) */}
-                <td className="sticky left-0 z-10 whitespace-nowrap border-r border-gray-200 bg-gray-50 px-2 py-1.5 text-right font-mono tabular-nums text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500">
-                  {i + 1}
-                </td>
-                {row.map((cell, j) => (
-                  <td
-                    key={j}
-                    className="whitespace-nowrap px-3 py-1.5 font-mono text-gray-900 dark:text-gray-100"
-                  >
-                    {formatCell(cell, relationLabels?.[j])}
-                  </td>
-                ))}
-              </tr>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="border-b border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+        {t('resultsSummary', { rows: rows.length, cols: columns.length })}
+      </div>
+      {/* This div is the single scroll container for both axes. shadcn's
+          <Table> wraps the <table> in its own overflow-x-auto div; left as-is
+          that inner wrapper becomes the scroll context and the sticky header
+          sticks to it instead of here. Neutralise it with
+          [&>div]:overflow-visible — same pattern as ExplorerGrid. */}
+      <div className={`overflow-auto [&>div]:overflow-visible ${maxHeight}`}>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead
+              className="sticky left-0 top-0 z-30 w-10 whitespace-nowrap border-r border-border bg-muted text-right font-semibold text-muted-foreground"
+              aria-label="#"
+            >
+              #
+            </TableHead>
+            {columns.map((col) => (
+              // Sticky lives on the th cells, not thead — cross-browser
+              // reliability, per ExplorerGrid.
+              <TableHead key={col} className="sticky top-0 z-20 whitespace-nowrap bg-muted font-semibold">
+                {col}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, i) => (
+            <TableRow key={i} className={i % 2 === 1 ? 'bg-muted/30' : undefined}>
+              {/* Row number (1-indexed). `bg-card` is opaque on purpose — a
+                  translucent gutter shows the cells sliding under it. */}
+              <TableCell className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card text-right font-mono tabular-nums text-muted-foreground">
+                {i + 1}
+              </TableCell>
+              {row.map((cell, j) => (
+                <TableCell key={j} className="whitespace-nowrap font-mono text-xs text-foreground">
+                  {formatCell(cell, relationLabels?.[j])}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
       </div>
     </div>
   )

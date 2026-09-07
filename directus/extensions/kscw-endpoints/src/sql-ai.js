@@ -1,22 +1,29 @@
 /**
  * KSCW SQL Workspace — natural-language → SQL via Anthropic API.
  *
- * POST /admin/sql/ask  body { prompt, write_mode? }  → { sql, model, ... }
+ * POST /admin/sql/ask  body { prompt, history?: [{prompt, sql}] }  → { sql, model, ... }
  *
  * Superuser-only (accountability.admin === true). Loads the live public
- * schema from information_schema, sends it as a cached system block so
- * subsequent calls hit the prompt cache (90% discount). Returns just the
- * SQL string — the frontend drops it into the editor for the user to
+ * schema from information_schema — including keys and the values each
+ * low-cardinality column actually holds, so the model writes 'volleyball'
+ * rather than an invented 'vb' — and sends it as a cached system block so
+ * subsequent calls hit the prompt cache (90% discount). The client may replay
+ * previous prompt/SQL pairs as `history`, which is what makes follow-up
+ * refinements ("now only H1") work. Returns just the SQL string — the frontend drops it into the editor for the user to
  * review and run; nothing is executed automatically.
  */
 
 import { writeErrorLog } from './error-log.js'
+import { loadSchemaModel, formatSchemaForPrompt } from './sql-schema.js'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
 const DEFAULT_MODEL = process.env.SQL_AI_MODEL || 'claude-sonnet-4-6'
 const MAX_TOKENS = 1024
 const PROMPT_MAX_LEN = 2000
 const SQL_PREVIEW_MAX = 1500
+/** How many previous prompt/SQL pairs the client may replay as context. Keeps
+ *  follow-ups like "now only H1" working without unbounded prompt growth. */
+const MAX_HISTORY_TURNS = 6
 
 const SYSTEM_INSTRUCTIONS = `You are a PostgreSQL 15.8 SQL expert assisting a club administrator querying the KSC Wiedikon volleyball/basketball platform database. The user describes what they want in natural language; you respond with exactly one PostgreSQL SQL statement that answers it.
 
@@ -37,32 +44,49 @@ Rules:
 - Use \`members\`, \`teams\`, \`member_teams\`, \`teams_coaches\`, \`teams_responsibles\`, \`games\`, \`trainings\`, \`events\`, \`participations\`, \`absences\` for the obvious entities.
 - Dates: \`date\` columns are bare YYYY-MM-DD; \`*_at\` / \`date_created\` / \`date_updated\` are timestamptz. Format display dates with \`to_char(d, 'DD.MM.YYYY')\` for Swiss output.
 - If the request is ambiguous, pick the most useful reasonable interpretation rather than asking — the user will iterate.
-- If the request is impossible against this schema, output a SELECT that returns one row explaining the issue: \`SELECT 'cannot answer: <reason>' AS note;\`.`
+- If the request is impossible against this schema, output a SELECT that returns one row explaining the issue: \`SELECT 'cannot answer: <reason>' AS note;\`.
 
-/** Serialize information_schema into a compact `table(col type, col type, ...)`
- *  representation — small enough to fit in the cached system block without
- *  burning tokens, structured enough that the model can reason about joins. */
-async function loadSchemaText(database) {
-  const result = await database.raw(`
-    SELECT c.table_name, c.column_name, c.data_type, c.is_nullable, c.ordinal_position
-    FROM information_schema.columns c
-    JOIN information_schema.tables t
-      ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-    WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-    ORDER BY c.table_name, c.ordinal_position
-  `)
-  const byTable = new Map()
-  for (const r of result.rows) {
-    let entry = byTable.get(r.table_name)
-    if (!entry) { entry = []; byTable.set(r.table_name, entry) }
-    const nullMark = r.is_nullable === 'YES' ? '?' : ''
-    entry.push(`${r.column_name} ${r.data_type}${nullMark}`)
+Reading the schema block:
+- \`col type\` — a trailing \`?\` means nullable, \`*\` marks a primary key, \`→other.col\` is a foreign key (use it for joins instead of guessing).
+- \`in{'a','b'}\` lists the values that column actually holds, read from the live database.
+
+Literal values — the single most common source of a query that runs and returns nothing:
+- NEVER invent, abbreviate or translate a stored value. Use the exact string from the column's \`in{...}\` list, character for character.
+- In particular \`sport\` is \`'volleyball'\` / \`'basketball'\` — never \`'vb'\`, \`'bb'\`, \`'VB'\` or \`'Volleyball'\`. The same goes for every other status/type/role column: match the listed casing.
+- If a column has no \`in{...}\` list and you are unsure of the stored spelling, compare case-insensitively (\`lower(col) = lower('x')\` or \`col ILIKE 'x'\`) rather than guessing an exact literal.
+- A season is the short label \`'2026/27'\`, never \`'2026/2027'\` or \`'2026-27'\`.
+- When the user writes a value in German or an abbreviation ("Schreiber", "Trainer", "VB"), map it to the stored value before using it.`
+
+/** Today in Zurich, as `YYYY-MM-DD`. */
+function todayZurich() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date())
+}
+
+/** The season label the database uses for "now" — short form (`2026/27`), the
+ *  club year running August to July. Without this the model reads the season
+ *  column's value list and picks whichever comes first, which is how "teams
+ *  this season" came back filtered to the season before last. */
+function currentSeasonLabel(isoDate) {
+  const [y, m] = isoDate.split('-').map(Number)
+  const start = m >= 7 ? y : y - 1
+  return `${start}/${String((start + 1) % 100).padStart(2, '0')}`
+}
+
+/** Normalize the client-supplied conversation history into Anthropic messages.
+ *  Each turn is a previous natural-language prompt and the SQL that was
+ *  generated for it, so a follow-up ("now only H1", "same but count them")
+ *  resolves against what the user already has in the editor. */
+function historyMessages(raw) {
+  if (!Array.isArray(raw)) return []
+  const turns = []
+  for (const item of raw.slice(-MAX_HISTORY_TURNS)) {
+    const prompt = String(item?.prompt ?? '').trim().slice(0, PROMPT_MAX_LEN)
+    const sql = String(item?.sql ?? '').trim().slice(0, SQL_PREVIEW_MAX)
+    if (!prompt || !sql) continue
+    turns.push({ role: 'user', content: prompt })
+    turns.push({ role: 'assistant', content: sql })
   }
-  const lines = []
-  for (const [tname, cols] of byTable) {
-    lines.push(`${tname}(${cols.join(', ')})`)
-  }
-  return lines.join('\n')
+  return turns
 }
 
 /** Strip any markdown fences and leading/trailing whitespace. */
@@ -113,8 +137,11 @@ export function registerSqlAi(router, { database, logger }) {
         return res.status(400).json({ error: `prompt too long (max ${PROMPT_MAX_LEN} chars)` })
       }
 
-      const schemaText = await loadSchemaText(database)
+      const schemaText = formatSchemaForPrompt(await loadSchemaModel(database, log))
       const model = DEFAULT_MODEL
+      const history = historyMessages(req.body?.history)
+      const today = todayZurich()
+      const season = currentSeasonLabel(today)
 
       const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -135,8 +162,15 @@ export function registerSqlAi(router, { database, logger }) {
               text: `# Database schema (PostgreSQL 15.8, public)\n${schemaText}`,
               cache_control: { type: 'ephemeral' },
             },
+            // After the cache breakpoint on purpose: this block changes every
+            // day, and putting it inside the cached prefix would invalidate the
+            // schema dump with it.
+            {
+              type: 'text',
+              text: `# Today\nCurrent date: ${today} (Europe/Zurich). "This season" / "the current season" means '${season}'; the previous one is the label one year lower. Seasons run August to July and are always written in the short form '2026/27'.`,
+            },
           ],
-          messages: [{ role: 'user', content: promptText }],
+          messages: [...history, { role: 'user', content: promptText }],
         }),
       })
 
@@ -171,6 +205,7 @@ export function registerSqlAi(router, { database, logger }) {
         durationMs,
         model,
         promptLen: promptText.length,
+        historyTurns: history.length / 2,
         sqlPreview: sql.slice(0, SQL_PREVIEW_MAX),
         tokensIn: usage.input_tokens ?? null,
         tokensCached: usage.cache_read_input_tokens ?? null,

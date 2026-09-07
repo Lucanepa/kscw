@@ -451,7 +451,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
 
 function EventParticipation({ event, isStaff, isStaffParticipant }: { event: Event; isStaff: boolean; isStaffParticipant: boolean }) {
   const { t } = useTranslation('participation')
-  const { participation, effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed } = useParticipation(
+  const { participation, effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed, isLoading: rsvpLoading } = useParticipation(
     'event',
     event.id,
     event.start_date?.split('T')[0],
@@ -575,7 +575,8 @@ function EventParticipation({ event, isStaff, isStaffParticipant }: { event: Eve
                   setPositionsRequiredError(false)
                   setStatus(status, noteText, guestCount, showPositions ? { position_1: pos1 || null, position_2: pos2 || null, position_3: pos3 || null } : undefined)
                 }}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition ${rsvpButtonClass(status, effectiveStatus === status)}`}
+                disabled={rsvpLoading}
+                className={`rounded-full px-3 py-1 text-sm font-medium transition ${rsvpLoading ? 'opacity-50' : ''} ${rsvpButtonClass(status, effectiveStatus === status)}`}
               >
                 {labels[status]}
               </button>

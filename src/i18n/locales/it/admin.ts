@@ -576,6 +576,13 @@ export default {
   sqlWorkspaceAskAiPlaceholder: 'es. "Membri attivi con licenza segnapunti in H1 o H2, ordinati per cognome"',
   sqlWorkspaceAskAiSubmitHint: 'Cmd/Ctrl-Invio per generare',
   sqlWorkspaceAskAiGenerate: 'Genera SQL',
+  sqlWorkspaceTables_one: 'Tabella ({{count}})',
+  sqlWorkspaceTables_other: 'Tabelle ({{count}})',
+  sqlWorkspaceDidYouMean: 'Intendevi…',
+  sqlWorkspaceDidYouMeanHint: '"{{name}}" non esiste nello schema. Tocca un suggerimento per sostituirlo nella query.',
+  sqlWorkspaceAiMemory: 'Memoria',
+  sqlWorkspaceAiClearMemory: 'Svuota',
+  sqlWorkspaceAiMemoryHint: 'Le tue ultime domande restano nel contesto — una domanda di follow-up affina la stessa query.',
 
   // Volley Feedback dashboard
   vfOverview: 'Panoramica',

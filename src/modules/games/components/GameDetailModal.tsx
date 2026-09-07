@@ -188,7 +188,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   const isCalledUp = useIsCalledUpToGame(user?.id, game?.id)
   const canParticipate = !!user && !!game?.kscw_team && (canParticipateIn(relId(game.kscw_team)) || isCalledUp)
   const isStaffParticipant = !!game?.kscw_team && isStaffOnly(relId(game.kscw_team))
-  const { effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed } = useParticipation(
+  const { effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed, isLoading: rsvpLoading } = useParticipation(
     'game',
     game?.id ?? '',
     game?.date,
@@ -633,21 +633,27 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             )}
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('participation:attending')}</span>
-                <div className="relative flex gap-2">
+                <div
+                  className={`relative flex gap-2 ${rsvpLoading ? 'pointer-events-none opacity-50' : ''}`}
+                  aria-busy={rsvpLoading}
+                >
                   <button
                     onClick={() => setStatus('confirmed', noteText)}
+                    disabled={rsvpLoading}
                     className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${rsvpButtonClass('confirmed', effectiveStatus === 'confirmed')}`}
                   >
                     {t('participation:yes')}
                   </button>
                   <button
                     onClick={() => setStatus('tentative', noteText)}
+                    disabled={rsvpLoading}
                     className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${rsvpButtonClass('tentative', effectiveStatus === 'tentative')}`}
                   >
                     {t('participation:maybe')}
                   </button>
                   <button
                     onClick={() => setStatus('declined', noteText)}
+                    disabled={rsvpLoading}
                     className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${rsvpButtonClass('declined', effectiveStatus === 'declined')}`}
                   >
                     {t('participation:no')}
