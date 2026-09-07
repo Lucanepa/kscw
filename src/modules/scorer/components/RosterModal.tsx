@@ -125,7 +125,7 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                     {data.source === 'vm' && (
                       <TableHead className="w-8" title={tg('rsvpCheckLegend')}>{tg('rsvpCheckHeader')}</TableHead>
                     )}
-                    <TableHead className="w-24">{t('rosterColDob')}</TableHead>
+                    <TableHead className="whitespace-nowrap"><span className="hidden sm:inline">{t('rosterColDob')}</span><span className="sm:hidden">{t('rosterColDobShort')}</span></TableHead>
                     <TableHead className="w-12">{t('rosterColNumber')}</TableHead>
                     <TableHead>{t('rosterColName')}</TableHead>
                     {showLicence && <TableHead className="w-16 text-right">{t('rosterColLicence')}</TableHead>}
@@ -137,7 +137,7 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                       {data.source === 'vm' && (
                         <TableCell className="text-center"><RsvpCheck state={r.rsvp ?? null} /></TableCell>
                       )}
-                      <TableCell className="w-24 whitespace-normal tabular-nums text-xs text-muted-foreground">
+                      <TableCell className="whitespace-nowrap tabular-nums text-xs text-muted-foreground">
                         {r.birthdate ? formatDateZurich(r.birthdate) : '—'}
                       </TableCell>
                       <TableCell className="font-semibold tabular-nums">{r.number ?? '—'}</TableCell>
@@ -181,14 +181,14 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-24">{t('rosterColDob')}</TableHead>
+                      <TableHead className="whitespace-nowrap"><span className="hidden sm:inline">{t('rosterColDob')}</span><span className="sm:hidden">{t('rosterColDobShort')}</span></TableHead>
                       <TableHead>{t('rosterColName')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {coaches.map((c, i) => (
                       <TableRow key={`c-${c.last_name}-${i}`}>
-                        <TableCell className="w-24 whitespace-normal tabular-nums text-xs text-muted-foreground">
+                        <TableCell className="whitespace-nowrap tabular-nums text-xs text-muted-foreground">
                           {c.birthdate ? formatDateZurich(c.birthdate) : '—'}
                         </TableCell>
                         <TableCell className="whitespace-normal break-words">
