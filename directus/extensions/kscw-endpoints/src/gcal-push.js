@@ -144,7 +144,10 @@ function addMinutes(hhmm, minutes) {
 export function buildEvent(game) {
   const prefix = game.sport === 'basketball' || game.source === 'basketplan' ? 'BB' : 'VB'
   const team = game.team_name || game.home_team || '?'
-  const hall = `Halle ${game.hall_letter}`
+  // "A" for one floor, "A+B" for a game that takes the divider out. The hall
+  // administration schedules by floor, so a double-floor fixture that reads
+  // "(Halle A)" tells them B is free when it is not.
+  const hall = `Halle ${game.hall_label}`
   const startTime = String(game.time).slice(0, 5)
   const day = String(game.date).slice(0, 10)
 
@@ -159,12 +162,28 @@ export function buildEvent(game) {
   }
 }
 
+// A `basketball_slot_plan` row in the shape buildEvent() expects. The grid
+// stores a hall LABEL ("KWI A+B"), not a hall id, so the floor part is a string
+// trim rather than the vb_slot_floors projection the `games` side needs.
+export function placementFixture(p) {
+  return {
+    game_id: `bbplan_${p.id}`,
+    sport: 'basketball',
+    team_name: p.team_name,
+    home_team: p.kscw_team_label,
+    away_team: p.opponent,
+    hall_label: String(p.hall ?? '').replace(/^kwi\s*/i, '').trim(),
+    date: p.date,
+    time: String(p.time).slice(0, 5),
+  }
+}
+
 // The exact shape buildEvent() emits. The pull half uses it as a backstop for
 // "this event is ours" when the event-id set is unavailable (push disabled), so
 // it must stay narrow: the hall administration hand-types its own basketball
 // entries ("BB - Freundschaftsspiel", "BB DU16E …") which are NOT ours and must
 // keep importing as hall_events.
-const OWN_GAME_TITLE = /^(?:VB|BB) .+ vs\. .+ \(Halle [A-Z]\)$/
+const OWN_GAME_TITLE = /^(?:VB|BB) .+ vs\. .+ \(Halle [A-Z](?:\+[A-Z])*\)$/
 
 export function isOwnGameTitle(title) {
   return OWN_GAME_TITLE.test(String(title ?? '').trim())
@@ -184,7 +203,8 @@ function needsUpdate(existing, desired) {
 // ── sync ──────────────────────────────────────────────────────────────────────
 
 /**
- * Reconcile KWI home games onto the calendar.
+ * Reconcile KWI home fixtures onto the calendar — `games` rows plus accepted
+ * basketball placements that have no `games` row yet.
  * Returns { created, updated, deleted, skipped, eventIds } — eventIds is every
  * event we own, so the pull half can skip its own output instead of re-importing
  * our games as hall_events.
@@ -210,18 +230,67 @@ export async function pushHomeGames(db, log) {
       'g.source',
       db.raw('g.date::text as date'),
       db.raw("to_char(g.time, 'HH24:MI') as time"),
-      db.raw("right(h.name, 1) as hall_letter"),
+      // Same floor projection the Hallenplan and bb_floor_claims_all use, so a
+      // game booked across the divider says so. NULLIF guards a hall whose name
+      // vb_slot_floors cannot map, which falls back to the trailing letter.
+      db.raw("COALESCE(NULLIF(array_to_string(vb_slot_floors(g.hall, g.additional_halls::jsonb), '+'), ''), right(h.name, 1)) as hall_label"),
+      'g.kscw_team',
       't.name as team_name',
       't.sport as sport',
     )
 
+  // Basketball home fixtures reach the DB by two independent roads and only one
+  // of them is a `games` row: the prep grid at /admin/terminplanung/basketball
+  // writes `basketball_slot_plan` placements, which hold the KWI floor from the
+  // moment the opponent agrees but may not become a `games` row until Basketplan
+  // publishes the fixture — months later, or never for a friendly. Publishing
+  // only `games` left 8 agreed KWI fixtures off the hall administration's
+  // calendar (reported 07.09.2026 alongside the VB/BB mislabelling).
+  //
+  // ⚠ ACCEPTED ONLY. A draft placement is a negotiating position — 44 of the 52
+  // upcoming ones were drafts — and republishing every counter-proposal onto a
+  // calendar the school owns would be worse than publishing nothing.
+  const placements = await db('basketball_slot_plan as p')
+    .leftJoin('teams as t', 't.id', 'p.kscw_team')
+    .where('p.game_type', 'home')
+    .andWhere('p.proposal_status', 'accepted')
+    .andWhere('p.date', '>=', today)
+    .whereRaw("p.hall ~* '^kwi'")
+    .select(
+      'p.id',
+      'p.kscw_team',
+      'p.time',
+      'p.hall',
+      'p.opponent',
+      'p.kscw_team_label',
+      db.raw('p.date::text as date'),
+      't.name as team_name',
+    )
+
   const desired = new Map()
   let skipped = 0
+  // "This team already has a home fixture that day", so a placement that has
+  // since been promoted to a `games` row is published once, not twice. Keyed on
+  // date+team rather than date+floor because a promotion routinely corrects the
+  // time or moves the game between floors, and rather than on the opponent
+  // because the two roads spell club names differently (the grid's free-text
+  // name vs. Basketplan's).
+  const fixtureDays = new Set()
   for (const game of games) {
     // No kick-off time means we cannot place it in a hall slot honestly. Leave it
     // off the calendar rather than invent an hour.
     if (!game.time || !game.away_team) { skipped++; continue }
     desired.set(game.game_id, buildEvent(game))
+    if (game.kscw_team) fixtureDays.add(`${game.date}|${game.kscw_team}`)
+  }
+
+  let superseded = 0
+  for (const p of placements) {
+    // Migration 346's fail-safe stores '' for a fixture with no tip-off yet. It
+    // blocks the floor all day internally; on the calendar it would be a lie.
+    if (!p.time || !p.opponent) { skipped++; continue }
+    if (p.kscw_team && fixtureDays.has(`${p.date}|${p.kscw_team}`)) { superseded++; continue }
+    desired.set(`bbplan_${p.id}`, buildEvent(placementFixture(p)))
   }
 
   // Everything we own, from today forward. Two sources: the private marker
@@ -295,9 +364,13 @@ export async function pushHomeGames(db, log) {
     deleted++
   }
 
-  if (skipped) log.warn({ msg: `gcal-push: ${skipped} home game(s) skipped (no kick-off time or opponent)`, endpoint: 'gcal-sync' })
-  log.info({ msg: `gcal-push${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted}`, endpoint: 'gcal-sync' })
-  return { created, updated, deleted, skipped, dryRun, eventIds }
+  if (skipped) log.warn({ msg: `gcal-push: ${skipped} home fixture(s) skipped (no kick-off time or opponent)`, endpoint: 'gcal-sync' })
+  log.info({
+    msg: `gcal-push${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted}`
+      + ` (${games.length} games, ${placements.length} accepted placements, ${superseded} superseded)`,
+    endpoint: 'gcal-sync',
+  })
+  return { created, updated, deleted, skipped, superseded, dryRun, eventIds }
 }
 
 // ── club closures → their calendar ────────────────────────────────────────────
