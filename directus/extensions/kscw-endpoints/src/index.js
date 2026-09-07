@@ -694,8 +694,11 @@ export default {
           // `team_id` (e.g. bb_1348) is the season-stable external id — the public
           // website matches teams on it so its hardcoded defs survive the June-1
           // rollover (numeric `id` is reassigned every season). See /public/team/:id.
+          // open_for_players rides along so the website's team cards can show a
+          // "Team voll" badge without a second, differently-permissioned read of
+          // /items/teams (public on prod, restricted on dev).
           .select('id', 'team_id', 'name', 'full_name', 'sport', 'league', 'season', 'color',
-            'team_picture', 'team_picture_pos', 'social_url')
+            'team_picture', 'team_picture_pos', 'social_url', 'open_for_players')
           .orderBy('name')
 
         // Attach a weekly training summary per team so the website team cards can
