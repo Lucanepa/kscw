@@ -438,7 +438,7 @@ function EventCardSessionParticipation({ event, onSaved, onStatusChange }: { eve
   const [savingAll, setSavingAll] = useState(false)
   const [optimisticAll, setOptimisticAll] = useState<Participation['status'] | null>(null)
 
-  const { data: sessionsRaw } = useCollection<EventSession>('event_sessions', {
+  const { data: sessionsRaw, isError: sessionsError } = useCollection<EventSession>('event_sessions', {
     filter: { event: { _eq: event.id } },
     sort: ['sort_order', 'date', 'start_time'],
     limit: 100,
@@ -446,7 +446,7 @@ function EventCardSessionParticipation({ event, onSaved, onStatusChange }: { eve
   })
   const sessions = useMemo(() => sessionsRaw ?? [], [sessionsRaw])
 
-  const { data: myRowsRaw, refetch } = useCollection<Participation>('participations', {
+  const { data: myRowsRaw, refetch, isError: myRowsError } = useCollection<Participation>('participations', {
     filter: user
       ? { _and: [
           { member: { _eq: user.id } },
@@ -492,13 +492,22 @@ function EventCardSessionParticipation({ event, onSaved, onStatusChange }: { eve
   // "I have nothing to say yet", so the banner keeps showing the batch-fetched
   // server row instead of blinking off and back on — which is the very lag this
   // change is here to remove.
-  const sessionDataReady = sessionsRaw !== undefined && myRowsRaw !== undefined
+  // ⚠ `isLoading` goes false on ERROR while `data` stays undefined, so a bare
+  // `data === undefined` gate never releases after a failed fetch — a permanent
+  // skeleton is worse than the wrong frame it replaced. Errors fall through.
+  const sessionDataReady =
+    (sessionsRaw !== undefined && myRowsRaw !== undefined) || sessionsError || myRowsError
   useEffect(() => {
     onStatusChange?.(sessionDataReady ? (aggregate ?? (mixed ? 'mixed' : null)) : undefined)
   }, [sessionDataReady, aggregate, mixed, onStatusChange])
 
   const setAll = useCallback(async (status: Participation['status']) => {
-    if (!user || savingAll || total === 0) return
+    // `myBySession` is empty until BOTH queries land, so a click in that window
+    // would take the create() branch for every session — including the ones that
+    // already have a row — and migration 246's partial unique index rejects those
+    // mid-`Promise.all`, leaving the RSVP half-written with no toast. The render
+    // gate below means no button exists to click yet; this is the belt.
+    if (!user || savingAll || total === 0 || !sessionDataReady) return
     setOptimisticAll(status)
     setSavingAll(true)
     try {
@@ -523,7 +532,23 @@ function EventCardSessionParticipation({ event, onSaved, onStatusChange }: { eve
     } finally {
       setSavingAll(false)
     }
-  }, [user, savingAll, total, sessions, myBySession, update, create, event.id, isStaff, onSaved])
+  }, [user, savingAll, total, sessionDataReady, sessions, myBySession, update, create, event.id, isStaff, onSaved])
+
+  // Until both queries land, `statuses` is all-null and `aggregate` is therefore
+  // null — which the pill row below renders as three unselected buttons, i.e. a
+  // definitive "you have not answered this event" for a member who did answer.
+  // (Past the respond-by deadline it is worse: the `aggregate === s` filter strips
+  // every pill and only "Deadline passed" remains.) Show the row's shape as
+  // skeletons instead — same footprint, so nothing shifts when the real pills
+  // arrive, and nothing claims an answer that has not been fetched yet.
+  if (!sessionDataReady) return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-busy="true">
+      {['w-10', 'w-14', 'w-9'].map((w) => (
+        <span key={w} className={`h-5 ${w} animate-pulse rounded-full bg-gray-200 dark:bg-gray-700`} />
+      ))}
+      {!isLocked && <span className="h-5 w-16 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" />}
+    </div>
+  )
 
   if (total === 0) return null
 

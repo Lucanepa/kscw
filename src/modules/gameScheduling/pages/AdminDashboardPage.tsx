@@ -303,16 +303,27 @@ function VolleyballDashboardBody() {
   // the page only knows opponents+bookings). Drives the top cards and the
   // per-team header counter so a multi-game pairing (2H+1A etc.) counts every
   // leg instead of assuming one home + one away per opponent. Re-fetched on
-  // bookings change (a confirm flips a leg). Falls back to the booking-based
-  // client counts until it lands. Keyed by team id.
+  // bookings change (a confirm flips a leg). Keyed by team id.
+  // ⚠ The state is TAGGED with the season it answers for, because a bare `null`
+  // conflated three different things — "still in flight", "fetch failed" and
+  // "no season" — and the render then silently substituted the booking-based
+  // client counts for all three. Those counts assume one home + one away leg
+  // per opponent, so for a multi-game pairing they are wrong in numerator AND
+  // denominator (they have printed self-contradictory tallies like away 75/74).
+  // `season !== the current one` = no answer yet (render a skeleton);
+  // `data === null` = the fetch settled without one (fall back, marked `~`).
   type SideTally = { homeConfirmed: number; homeTotal: number; awayConfirmed: number; awayTotal: number }
-  const [fixtureSummary, setFixtureSummary] = useState<{ totals: SideTally; byTeam: Record<string, SideTally> } | null>(null)
+  type FixtureSummary = { totals: SideTally; byTeam: Record<string, SideTally> }
+  const [fixtureSummary, setFixtureSummary] = useState<{ season: string; data: FixtureSummary | null } | null>(null)
   useEffect(() => {
-    if (!season?.id) { return }
+    const sid = season?.id
+    if (!sid) { return }
     let cancelled = false
-    kscwApi<{ totals: SideTally; byTeam: Record<string, SideTally> }>(`/admin/terminplanung/season-summary?season=${season.id}`)
-      .then((r) => { if (!cancelled) setFixtureSummary(r) })
-      .catch(() => { if (!cancelled) setFixtureSummary(null) })
+    kscwApi<FixtureSummary>(`/admin/terminplanung/season-summary?season=${sid}`)
+      .then((r) => { if (!cancelled) setFixtureSummary({ season: String(sid), data: r }) })
+      // A failed REfetch keeps the tally we already have (it is still the best
+      // answer we got); only a first failure for this season degrades to `~`.
+      .catch(() => { if (!cancelled) setFixtureSummary((prev) => (prev?.season === String(sid) ? prev : { season: String(sid), data: null })) })
     return () => { cancelled = true }
   }, [season?.id, bookings])
 
@@ -340,6 +351,14 @@ function VolleyballDashboardBody() {
       setFixtureSummary(null)
     }
   }
+
+  // The fixture-aware tally is deliberately NOT part of `isInitialLoading` below
+  // — its endpoint walks every opponent's SVRZ fixtures sequentially, so gating
+  // the whole page on it would hold the app spinner for seconds. The cost is
+  // that the page paints while it is still in flight, which is exactly when the
+  // booking-based fallback must stay hidden rather than pose as the answer.
+  const summaryLoading = fixtureSummary?.season !== seasonIdKey
+  const summaryTally = summaryLoading ? null : (fixtureSummary?.data ?? null)
 
   // Open an opponent's email thread in the Mailbox tab (the mailbox UI moved off
   // the dashboard into its own tab; the per-opponent "N emails" button deep-links).
@@ -786,20 +805,32 @@ function VolleyballDashboardBody() {
 
       {/* Season summary — confirmed home/away vs total, plus what's outstanding.
           Home/away totals are fixture-aware (server) so multi-game pairings count
-          every leg; until that lands we fall back to the booking-based client
-          counts (one leg per opponent). */}
+          every leg. Until that lands the number line is a skeleton: the
+          booking-based client counts (one leg per opponent) look identical to
+          the real tally but read three legs short on a multi-game pairing, so a
+          planner would take "5/6" for "one date left to place". Once the fetch
+          has settled without an answer we do fall back — prefixed `~` so the
+          estimate is never mistaken for the fixture-aware count. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('summaryHome')}</p>
-          <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
-            {fixtureSummary?.totals.homeConfirmed ?? summary.homeConfirmed}<span className="text-base font-medium text-gray-400 dark:text-gray-500">/{fixtureSummary?.totals.homeTotal ?? summary.gamesTotal}</span>
-          </p>
+          {summaryLoading ? (
+            <span className="mt-1 block h-8 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden />
+          ) : (
+            <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
+              {summaryTally ? '' : '~'}{summaryTally?.totals.homeConfirmed ?? summary.homeConfirmed}<span className="text-base font-medium text-gray-400 dark:text-gray-500">/{summaryTally?.totals.homeTotal ?? summary.gamesTotal}</span>
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('summaryAway')}</p>
-          <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
-            {fixtureSummary?.totals.awayConfirmed ?? summary.awayConfirmed}<span className="text-base font-medium text-gray-400 dark:text-gray-500">/{fixtureSummary?.totals.awayTotal ?? summary.gamesTotal}</span>
-          </p>
+          {summaryLoading ? (
+            <span className="mt-1 block h-8 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden />
+          ) : (
+            <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
+              {summaryTally ? '' : '~'}{summaryTally?.totals.awayConfirmed ?? summary.awayConfirmed}<span className="text-base font-medium text-gray-400 dark:text-gray-500">/{summaryTally?.totals.awayTotal ?? summary.gamesTotal}</span>
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('summaryToConfirm')}</p>
@@ -954,13 +985,19 @@ function VolleyballDashboardBody() {
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-3 text-xs text-gray-600 sm:text-sm dark:text-gray-400">
                   {stats.gamesTotal > 0 && (() => {
-                    // Fixture-aware per-side totals (multi-game pairings); fall
-                    // back to the booking-based client counts until the server
-                    // tally lands.
-                    const tally = fixtureSummary?.byTeam[String(team.id)]
+                    // Fixture-aware per-side totals (multi-game pairings). A
+                    // skeleton holds the slot until the server tally lands —
+                    // same trap as the summary tiles: the booking-based client
+                    // counts assume one leg per side and would read as a
+                    // finished "H 5/6 · A 4/6". `~` marks the fallback once the
+                    // fetch has settled without an answer for this team.
+                    const tally = summaryTally?.byTeam[String(team.id)]
+                    if (summaryLoading) {
+                      return <span className="hidden h-4 w-28 animate-pulse rounded bg-gray-200 sm:inline-block dark:bg-gray-700" aria-hidden />
+                    }
                     return (
                       <span className="hidden whitespace-nowrap sm:inline" title={t('homeAwayCounterHint')}>
-                        {t('homeAwayCounter', {
+                        {tally ? '' : '~'}{t('homeAwayCounter', {
                           hc: tally?.homeConfirmed ?? stats.homeConfirmed,
                           ht: tally?.homeTotal ?? stats.gamesTotal,
                           ac: tally?.awayConfirmed ?? stats.awayConfirmed,
@@ -1194,6 +1231,12 @@ function TeamBookingsContent({
   // True only after the fixtures fetch succeeded — guards the orphan-fixture flag
   // below from firing on every opponent while the map is still empty (mid-load).
   const [fixturesLoaded, setFixturesLoaded] = useState(false)
+  // True once the fetch is no longer in flight, success OR failure. Separate
+  // from `fixturesLoaded` on purpose: the card tint and the per-leg bodies are
+  // fixture-shaped, so they must stay neutral while the map is empty — but a
+  // failed fetch has to release them back to the booking-only rendering instead
+  // of leaving every card greyed out forever.
+  const [fixturesSettled, setFixturesSettled] = useState(false)
   const [gamesFor, setGamesFor] = useState<{ label: string; games: OpponentGame[] } | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -1209,6 +1252,7 @@ function TeamBookingsContent({
         setGamesByName(map)
         setFixturesLoaded(true)
       } catch { /* games disclosure just won't show */ }
+      finally { if (!cancelled) setFixturesSettled(true) }
     })()
     return () => { cancelled = true }
   }, [kscwTeamId, seasonId])
@@ -1332,10 +1376,17 @@ function TeamBookingsContent({
 
         // Colour the card by how far this matchup's scheduling has got: ALL
         // games confirmed → green, some → yellow, none → red. Subtle tints.
+        // ⚠ The denominator is fixture-shaped, so before `gamesByName` lands the
+        // legs are built from bookings alone and the ratio means something else:
+        // a pairing played 2-3× shows 2/2 → GREEN ("done, skip it") and then
+        // 2/4 → yellow, and a single-round pairing paints its phantom empty leg
+        // yellow before flipping to green. Both frames are the inverse of the
+        // truth, so hold a neutral tint until the fetch settles (success or not).
         const allLegs = [...homeLegs, ...awayLegs]
         const confirmedCount = allLegs.filter(l => l.booking?.status === 'confirmed').length
-        const cardClass =
-          confirmedCount === allLegs.length
+        const cardClass = !fixturesSettled
+          ? 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/30'
+          : confirmedCount === allLegs.length
             ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-900/20'
             : confirmedCount >= 1
               ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-900/20'
@@ -1522,6 +1573,12 @@ function TeamBookingsContent({
                         <span className="text-sm text-amber-600 dark:text-amber-400">
                           {t('awaitingNewProposals', { date: formatDateCompactZurich(opp.new_slots_requested_at) })}
                         </span>
+                      ) : !fixturesSettled ? (
+                        // "Pending" asserts a game exists on this side and is
+                        // awaiting a proposal — but until the fixtures land the
+                        // leg under it is synthetic, and a single-round pairing
+                        // resolves to "No game this side" instead.
+                        <span className="inline-block h-5 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden />
                       ) : (
                         <span className="text-sm text-gray-400">{t('pending')}</span>
                       )}
@@ -1569,6 +1626,12 @@ function TeamBookingsContent({
                             {vmSyncing === `u:${opp.id}:${leg.svrzGameId}` ? '…' : t('syncWithVm')}
                           </button>
                         </div>
+                      ) : !fixturesSettled ? (
+                        // "Pending" asserts a game exists on this side and is
+                        // awaiting a proposal — but until the fixtures land the
+                        // leg under it is synthetic, and a single-round pairing
+                        // resolves to "No game this side" instead.
+                        <span className="inline-block h-5 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden />
                       ) : (
                         <span className="text-sm text-gray-400">{t('pending')}</span>
                       )}

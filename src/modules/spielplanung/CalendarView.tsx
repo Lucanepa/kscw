@@ -24,9 +24,15 @@ interface CalendarViewProps {
   absencesByDate?: Map<string, AbsentMember[]>
   /** date key (yyyy-MM-dd) -> roster-sharing teams playing that day. */
   crossTeamByDate?: Map<string, CrossTeamConflict[]>
+  /** True while the absence overlay is still fetching: `absencesByDate` is empty
+   *  because the answer is unknown, NOT because nobody is away. Render a pending
+   *  pill instead of the day's real count. */
+  absencesPending?: boolean
+  /** Same, for the cross-team overlay. */
+  crossTeamPending?: boolean
 }
 
-export default function CalendarView({ entries, closedDates, blockedDates, month, onMonthChange, onGameClick, onEmptyDayClick, absencesByDate, crossTeamByDate }: CalendarViewProps) {
+export default function CalendarView({ entries, closedDates, blockedDates, month, onMonthChange, onGameClick, onEmptyDayClick, absencesByDate, crossTeamByDate, absencesPending = false, crossTeamPending = false }: CalendarViewProps) {
   const { t } = useTranslation('spielplanung')
   // seasonMonths drives the season-month pill strip below. We intentionally
   // stopped passing min/maxMonth to CalendarGrid so the prev/next arrows can
@@ -94,10 +100,25 @@ export default function CalendarView({ entries, closedDates, blockedDates, month
 
           return (
             <>
-              {(absent.length > 0 || crossTeam.length > 0) && (
+              {/* Keep the badge row mounted while an overlay is pending, so an
+                  unknown count reads as a pending pill rather than as "none" —
+                  and so the game chips below don't shift down when it lands. */}
+              {(absent.length > 0 || crossTeam.length > 0 || absencesPending || crossTeamPending) && (
                 <div className="flex justify-end gap-1">
-                  {crossTeam.length > 0 && <CrossTeamBadge conflicts={crossTeam} />}
-                  {absent.length > 0 && <AbsenceBadge absent={absent} />}
+                  {crossTeamPending ? (
+                    <span
+                      role="img"
+                      aria-label={t('common:loading')}
+                      className="h-3 w-5 animate-pulse rounded-full bg-sky-100 dark:bg-sky-900/40"
+                    />
+                  ) : crossTeam.length > 0 && <CrossTeamBadge conflicts={crossTeam} />}
+                  {absencesPending ? (
+                    <span
+                      role="img"
+                      aria-label={t('common:loading')}
+                      className="h-3 w-5 animate-pulse rounded-full bg-amber-100 dark:bg-amber-900/40"
+                    />
+                  ) : absent.length > 0 && <AbsenceBadge absent={absent} />}
                 </div>
               )}
               {visible.map((entry) => (

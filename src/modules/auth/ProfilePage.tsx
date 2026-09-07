@@ -295,7 +295,7 @@ export default function ProfilePage() {
 
   const today = toISODate(new Date())
 
-  const { data: activeAbsencesRaw } = useCollection<Absence>('absences', {
+  const { data: activeAbsencesRaw, isLoading: absencesLoading } = useCollection<Absence>('absences', {
     filter: user ? { _and: [{ member: { _eq: user.id } }, { end_date: { _gte: today } }] } : undefined,
     sort: ['start_date'],
     limit: 20,
@@ -304,7 +304,7 @@ export default function ProfilePage() {
   const activeAbsences = activeAbsencesRaw ?? []
 
   // Open fines summary (visible to the member themselves).
-  const { data: openFinesRaw } = useCollection<Fine>('fines', {
+  const { data: openFinesRaw, isLoading: openFinesLoading } = useCollection<Fine>('fines', {
     filter: user ? { _and: [{ member: { _eq: user.id } }, { status: { _eq: 'open' } }] } : undefined,
     fields: ['id', 'amount', 'currency'],
     enabled: !!user,
@@ -315,7 +315,12 @@ export default function ProfilePage() {
 
   // Report to the app boot gate — see usePageReady.tsx. Must run on every render,
   // so it sits BEFORE the <Navigate> guard below (rules-of-hooks / React #310).
-  useReportPageLoading(memberTeamsLoading)
+  // The absences + fines queries belong here alongside member_teams: they are
+  // separate round-trips, and `?? []` makes "still in flight" indistinguishable
+  // from "genuinely none", so gating on member_teams alone revealed the page
+  // with a definitive "No active absences" (and no outstanding-fines strip)
+  // that a moment later filled in.
+  useReportPageLoading(memberTeamsLoading || absencesLoading || openFinesLoading)
 
   if (!user) return <Navigate to="/login" replace />
 
@@ -674,7 +679,12 @@ export default function ProfilePage() {
             {t('showAll')}
           </Link>
         </div>
-        {activeAbsences.length > 0 ? (
+        {absencesLoading ? (
+          // `activeAbsences` is `?? []` while the query is in flight, so without
+          // this the empty-state paragraph below asserts "nothing on file" before
+          // the answer has arrived.
+          <div className="mt-3 h-16 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />
+        ) : activeAbsences.length > 0 ? (
           <div className="mt-3 space-y-2">
             {activeAbsences.slice(0, 5).map((a) => (
               <div key={a.id} className="rounded-lg border bg-white dark:border-gray-700 dark:bg-gray-800">

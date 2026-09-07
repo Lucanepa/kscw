@@ -76,20 +76,40 @@ export default function TeamScheduleCalendar({ team, hideWhenEmpty = true, varia
   // against), plus cup and manually placed games — and goes stale the moment
   // the federation re-dates a game after we booked it. `games` read is
   // club-wide for members, so the plain items API is enough here.
-  const [games, setGames] = useState<CalendarGame[]>([])
+  // `games === null` means "not loaded yet"; `[]` means "loaded, and this team
+  // really has no fixtures". They used to be the same value, and the difference
+  // is the whole bug: `data` arriving is what makes this block paint at all, and
+  // the `games` round-trip only STARTS on that commit — so the first painted
+  // frame handed the list an empty fixture set and it stated "No games scheduled
+  // yet." for every team, mid-season, until the second request landed.
+  const [games, setGames] = useState<CalendarGame[] | null>(null)
+  const [gamesError, setGamesError] = useState(false)
+  // What `games` / `gamesError` were last loaded FOR, latched next to every
+  // write rather than reset at the top of the effect (a synchronous setState in
+  // an effect body cascades — see below). A team or season change therefore
+  // reads as "not loaded yet" in the same render, not one render later.
+  const [gamesKey, setGamesKey] = useState<string | null>(null)
+  const [gamesReload, setGamesReload] = useState(0)
   const seasonLabel = data?.season?.season
   useEffect(() => {
     // No reset here: nothing renders without a season anyway (the guard below
     // returns null), and a synchronous setState in an effect body cascades.
     if (!showsFixtures || !seasonLabel || variant === 'proposals') return
     let cancelled = false
+    const key = `${team.id}|${seasonLabel}`
     fetchAllItems<CalendarGame>('games', {
       filter: { season: { _eq: seasonLabel }, kscw_team: { _eq: team.id } },
       fields: ['id', 'game_id', 'date', 'time', 'home_team', 'away_team', 'kscw_team', 'type', 'hall', 'away_hall_json'],
-    }).then((g) => { if (!cancelled) setGames(g) })
-      .catch(() => { if (!cancelled) setGames([]) })
+    }).then((g) => { if (!cancelled) { setGames(g); setGamesError(false); setGamesKey(key) } })
+      // A failed fetch must never be reported as "this team plays no games":
+      // it used to `setGames([])`, which said exactly that, permanently.
+      .catch(() => { if (!cancelled) { setGames(null); setGamesError(true); setGamesKey(key) } })
     return () => { cancelled = true }
-  }, [showsFixtures, seasonLabel, team.id, variant])
+  }, [showsFixtures, seasonLabel, team.id, variant, gamesReload])
+
+  /** Fixtures are on the wire for the team/season currently being rendered. */
+  const gamesPending = showsFixtures && variant !== 'proposals' && !!seasonLabel
+    && gamesKey !== `${team.id}|${seasonLabel}`
 
   if (!showsFixtures || !data?.season) return null
   // 'proposals' renders nothing at all once every fixture is agreed — which, mid
@@ -103,8 +123,53 @@ export default function TeamScheduleCalendar({ team, hideWhenEmpty = true, varia
       (b) => b.status === 'pending' && (b.type === 'away_proposal' || b.type === 'home_slot_pick'),
     )
     if (!hasPending) return null
-  } else if (hideWhenEmpty && data.slots.length === 0 && data.bookings.length === 0 && games.length === 0) {
+  } else if (hideWhenEmpty && data.slots.length === 0 && data.bookings.length === 0 && (games?.length ?? 0) === 0) {
+    // Deliberately still evaluated while the fixtures load: hideWhenEmpty means
+    // "own no space until there is something to say", so a skeleton that then
+    // vanishes would be worse than the pop-in this already had.
     return null
+  }
+
+  // Fixtures still in flight. Everything below reads `games`, so painting now
+  // would show a team with an empty schedule — which the list states outright
+  // ("No games scheduled yet.") on the one tab a member opens to see fixtures.
+  // Hold the block's shape instead; the h-11 rows keep the ≥44px mobile row
+  // height so nothing resizes when the real rows land.
+  if (gamesPending) {
+    return (
+      <div className="mt-8">
+        <div
+          className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+          aria-hidden="true"
+        >
+          <div className="h-6 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="mt-3 space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-11 animate-pulse rounded bg-gray-100 dark:bg-gray-700/50" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Same rule after the request fails: say the schedule could not be read and
+  // offer another go, rather than falling through to the empty-schedule copy.
+  if (gamesError) {
+    return (
+      <div className="mt-8">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('common:error')}</p>
+          <button
+            type="button"
+            onClick={() => { setGamesError(false); setGamesKey(null); setGamesReload((n) => n + 1) }}
+            className="mt-1 min-h-[44px] text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
+            {t('admin:retry')}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -120,14 +185,14 @@ export default function TeamScheduleCalendar({ team, hideWhenEmpty = true, varia
           showHeading={false}
         />
       ) : variant === 'list' ? (
-        <TeamScheduleList slots={data.slots} bookings={data.bookings} team={team} season={data.season} games={games} confirmedFrom="games" />
+        <TeamScheduleList slots={data.slots} bookings={data.bookings} team={team} season={data.season} games={games ?? []} confirmedFrom="games" />
       ) : (
         <SchedulingCalendar
           slots={data.slots}
           bookings={data.bookings}
           teams={[team]}
           season={data.season}
-          games={games}
+          games={games ?? []}
           confirmedFrom="games"
           // A basketball game at KWI is a hall fact the volleyball PLANNER needs
           // (that court is gone); on a volleyball team's own page it is another

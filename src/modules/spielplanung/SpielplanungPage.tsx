@@ -154,7 +154,19 @@ export default function SpielplanungPage() {
     return scoped.map((t) => String(t.id))
   }, [filters.showAbsences, filters.selectedTeamIds, filters.sport, teams])
 
-  const { absences, memberTeams } = useTeamAbsences(absenceTeamIds, seasonStart, seasonEnd)
+  const { absences, memberTeams, isLoading: absencesLoading } = useTeamAbsences(absenceTeamIds, seasonStart, seasonEnd)
+
+  // An empty `absencesByDate` used to mean three different things — overlay off,
+  // still fetching, and genuinely nobody away — and the day cells render the last
+  // two identically (no badge at all). Flipping the switch changes no games query
+  // key, so the page-level `isLoading` above never fires and the calendar keeps
+  // painting a definitively clean month while the absence fetch (up to four
+  // sequential round trips, over every team of the sport when no chip is picked)
+  // runs. AND with the toggle deliberately: `useTeamAbsences` reports isLoading
+  // for one tick even on an empty id list (loadedKey starts undefined while
+  // requestedKey is null), which would flash a pending pill on every day cell in
+  // the default off state.
+  const absencesPending = filters.showAbsences && absencesLoading
 
   const absencesByDate = useMemo(
     () =>
@@ -172,7 +184,19 @@ export default function SpielplanungPage() {
     () => (filters.showCrossTeam ? filters.selectedTeamIds : []),
     [filters.showCrossTeam, filters.selectedTeamIds],
   )
-  const { byDate: crossTeamByDate } = useCrossTeamConflicts(crossTeamTeamIds)
+  const { byDate: crossTeamByDate, isLoading: crossTeamLoading } = useCrossTeamConflicts(crossTeamTeamIds)
+  // Same "empty map means unknown, not none" trap as the absence overlay above.
+  // The hook reports isLoading false on an empty id list, so the AND also keeps
+  // the pill away from the "toggle on, no team picked" state (which is a real
+  // empty, not a pending one).
+  const crossTeamPending = filters.showCrossTeam && crossTeamLoading
+
+  // While either overlay is still unknown, withhold the empty-day quick-add "+":
+  // booking a home game onto a day whose absence / cross-team answer hasn't
+  // landed is exactly the mistake the badges exist to prevent, and nothing
+  // downstream (ManualGameModal) re-checks either overlay. The "+" is
+  // absolute-positioned and opacity-0 until hover, so dropping it shifts nothing.
+  const overlaysPending = absencesPending || crossTeamPending
 
   function canEditGame(game: Game | null): boolean {
     if (!game) return false
@@ -342,9 +366,11 @@ export default function SpielplanungPage() {
               month={month}
               onMonthChange={setMonth}
               onGameClick={setSelectedGame}
-              onEmptyDayClick={canCreateManualGames ? setCreateFor : undefined}
+              onEmptyDayClick={canCreateManualGames && !overlaysPending ? setCreateFor : undefined}
               absencesByDate={absencesByDate}
               crossTeamByDate={crossTeamByDate}
+              absencesPending={absencesPending}
+              crossTeamPending={crossTeamPending}
             />
           )}
           {viewMode === 'week' && (
@@ -357,6 +383,8 @@ export default function SpielplanungPage() {
               onMove={handleWeekMove}
               absencesByDate={absencesByDate}
               crossTeamByDate={crossTeamByDate}
+              absencesPending={absencesPending}
+              crossTeamPending={crossTeamPending}
             />
           )}
           {viewMode === 'list-date' && (

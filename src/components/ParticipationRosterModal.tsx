@@ -240,7 +240,16 @@ export default function ParticipationRosterModal({
   // They have no `member_teams` row on this team, so `useMultiTeamMembers` above
   // cannot see them — yet they RSVP to this game and must show up in the same list
   // as everyone else, because the coach reads this list to pick a squad.
-  const { data: gameGuestRows } = useCollection<{
+  //
+  // Only a game can have them, so for a training/event the query stays disabled.
+  // Hoisted so the loading flag below reads the exact same condition as
+  // `enabled` and the two can't drift apart.
+  const guestQueryEnabled = open && activityType === 'game' && !!activityId
+  const {
+    data: gameGuestRowsRaw,
+    isLoading: gameGuestsFetching,
+    isPlaceholderData: gameGuestRowsArePrevious,
+  } = useCollection<{
     id: string
     member: Member | string
     via_team: { id: string | number; name?: string } | string | null
@@ -248,11 +257,28 @@ export default function ParticipationRosterModal({
     filter: { game: { _eq: activityId ?? '' } },
     fields: ['id', 'member.*', 'via_team.id', 'via_team.name'],
     all: true,
-    enabled: open && activityType === 'game' && !!activityId,
+    enabled: guestQueryEnabled,
   })
 
+  /** The called-up rows that belong to THIS game. `keepPreviousData` is a global
+   *  query default (lib/query.tsx) and this modal is not remounted between
+   *  activities — it just takes a new `activityId` — so the raw data can still be
+   *  the PREVIOUS fixture's rows while the new fetch is in flight. That, and the
+   *  disabled training/event case, count as "not known yet", never as rows. */
+  const gameGuestRows = useMemo(
+    () => (guestQueryEnabled && !gameGuestRowsArePrevious ? (gameGuestRowsRaw ?? []) : []),
+    [guestQueryEnabled, gameGuestRowsArePrevious, gameGuestRowsRaw],
+  )
+
+  /** True while it is still unknown who was called up for this game. This used to
+   *  be ignored: an unresolved query left `gameGuestRows` empty, which reads
+   *  exactly like "nobody was called up", so the list and every count in the
+   *  summary header painted as final while the guests were still on the wire —
+   *  and then silently grew. It now holds the skeleton up instead. */
+  const gameGuestsLoading = guestQueryEnabled && (gameGuestsFetching || gameGuestRowsArePrevious)
+
   const gameGuests: Member[] = useMemo(
-    () => (gameGuestRows ?? [])
+    () => gameGuestRows
       .map((r) => asObj<Member>(r.member))
       .filter((m): m is Member => m !== null)
       .map((m) => ({ ...m, id: String(m.id) })),
@@ -262,7 +288,7 @@ export default function ParticipationRosterModal({
   /** memberId → the team they were borrowed from ('' when invited individually). */
   const gameGuestOrigin = useMemo(() => {
     const map = new Map<string, string>()
-    for (const r of gameGuestRows ?? []) {
+    for (const r of gameGuestRows) {
       const mid = String(asObj<Member>(r.member)?.id ?? '')
       if (!mid) continue
       const team = asObj<{ id: string | number; name?: string }>(r.via_team)
@@ -628,7 +654,11 @@ export default function ParticipationRosterModal({
     : hasSessionMode && activeSessionTab === null
       ? allLoading
       : regularLoading
-  const isLoading = (isClubWide ? clubWideLoading || clubWidePartsLoading : membersLoading) || participationsLoading
+  // `gameGuestsLoading` belongs in here: without it the modal lifted its spinner
+  // as soon as members + participations were in (both are prefetched while the
+  // modal is still closed — see GameDetailModal's always-mounted instance), and
+  // painted the base squad as if it were the whole roster.
+  const isLoading = (isClubWide ? clubWideLoading || clubWidePartsLoading : membersLoading || gameGuestsLoading) || participationsLoading
 
   // O(1) participation lookups per member — avoids the O(members × participations)
   // linear scans in getMemberStatus / statusLabelText / the per-row render.
@@ -1655,7 +1685,31 @@ export default function ParticipationRosterModal({
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center text-gray-500 dark:text-gray-400">...</div>
+        /* Skeleton rather than a bare "..." (and rather than the roster itself):
+           this modal is opened to be scanned, so a summary counted from half a
+           roster reads as the final squad. Same shapes as the real rows below,
+           so nothing jumps when the data lands. */
+        <div aria-busy="true">
+          <div className="mb-4 flex flex-wrap gap-3" aria-hidden="true">
+            {['w-20', 'w-16', 'w-14', 'w-24'].map((w, i) => (
+              <span key={i} className={`h-4 ${w} animate-pulse rounded bg-gray-100 dark:bg-gray-800`} />
+            ))}
+          </div>
+          <div className="rounded-lg border dark:border-gray-700" aria-hidden="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex min-h-[44px] items-center gap-3 border-b border-b-gray-200 border-l-4 border-l-gray-300 px-3 py-2 last:border-b-0 dark:border-b-gray-700 dark:border-l-gray-600 sm:min-h-0"
+              >
+                <span className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-gray-100 dark:bg-gray-800" />
+                <div className="min-w-0 flex-1">
+                  <span className="block h-4 w-32 max-w-full animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+                </div>
+                <span className="h-6 w-6 shrink-0 animate-pulse rounded-full bg-gray-100 dark:bg-gray-800" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (<>
       {/* Summary header */}
       <div className="mb-4 flex flex-wrap gap-3 text-sm">

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useAuth } from './useAuth'
 import { useCollection } from '../lib/query'
 import type { FormDef, AnswerValue } from '../modules/forms/types'
@@ -31,9 +31,9 @@ export interface FillableForm {
  * the /forms nav item is author-only.
  */
 export function useFillableForms() {
-  const { user, memberTeamIds } = useAuth()
+  const { user, memberTeamIds, teamsLoading } = useAuth()
 
-  const { data: formsRaw, isLoading, refetch } = useCollection<FormDef>('forms', {
+  const { data: formsRaw, isLoading: formsLoading, refetch: refetchForms } = useCollection<FormDef>('forms', {
     filter: { status: { _eq: 'open' } },
     fields: ['*', 'teams.teams_id.id'],
     sort: ['-date_created'],
@@ -41,7 +41,13 @@ export function useFillableForms() {
     enabled: !!user,
   })
 
-  const { data: subsRaw } = useCollection<SubRef>('form_submissions', {
+  // ⚠ Both of this query's flags are load-bearing. While it is in flight
+  // `subByForm` is empty — and an empty map used to be indistinguishable from
+  // "the member has answered nothing": every form painted as unanswered with a
+  // primary "Fill in" button, and tapping one opened FormFillModal with
+  // `existing = null`, i.e. a blank create. The member retyped the whole form
+  // and the BEFORE INSERT trigger then rejected it with "already submitted".
+  const { data: subsRaw, isLoading: subsLoading, refetch: refetchSubs } = useCollection<SubRef>('form_submissions', {
     filter: { member: { _eq: user?.id } },
     fields: ['id', 'form', 'answers'],
     limit: 1000,
@@ -75,5 +81,24 @@ export function useFillableForms() {
   // Count of forms still needing a first answer (drives the Home badge / visibility).
   const todoCount = useMemo(() => items.filter((i) => !i.submission).length, [items])
 
-  return { items, todoCount, isLoading, refetch }
+  // Refetch BOTH queries. `submission` is derived from form_submissions, and
+  // FormFillModal writes through the raw createRecord/updateRecord helpers,
+  // which invalidate nothing — so a forms-only refetch left a just-answered
+  // form sitting there with a "Fill in" button until the 30s staleTime expired.
+  const refetch = useCallback(
+    () => Promise.all([refetchForms(), refetchSubs()]),
+    [refetchForms, refetchSubs],
+  )
+
+  return {
+    items,
+    todoCount,
+    // Covers every input `items` is derived from — the open forms, the member's
+    // existing submissions, and the team context `memberTeamIds` comes from —
+    // so consumers that gate on it can never paint "not loaded" as "not
+    // answered". (Layout already holds routed pages until teams are ready; the
+    // term is here so the hook's own contract does not depend on that.)
+    isLoading: formsLoading || subsLoading || teamsLoading,
+    refetch,
+  }
 }

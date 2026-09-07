@@ -36,8 +36,7 @@ interface FinesSettingsProps {
 export default function FinesSettings({ teamId }: FinesSettingsProps) {
   const { t } = useTranslation(['fines'])
   const [open, setOpen] = useState(false)
-  const { data: rulesRaw, refetch } = useFineRules(teamId, { enabled: open })
-  const rules = rulesRaw ?? []
+  const { data: rulesRaw, isLoading, isError, refetch } = useFineRules(teamId, { enabled: open })
 
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700">
@@ -55,15 +54,38 @@ export default function FinesSettings({ teamId }: FinesSettingsProps) {
           <p className="px-4 py-3 text-xs italic text-gray-500 dark:text-gray-400">
             {t('fines:settingsDescription')}
           </p>
-          {CATEGORIES.map((cat) => (
-            <CategoryEditor
-              key={cat}
-              teamId={teamId}
-              category={cat}
-              rule={rules.find((r) => r.category === cat) ?? null}
-              onChange={refetch}
-            />
-          ))}
+          {/* The query is deferred until the accordion opens, so the first frame
+              after a click never has the rules yet. It used to fall back to an
+              empty list, which handed every CategoryEditor rule={null} — four
+              unticked "Enabled" boxes that read as "no fines configured for this
+              team" and then ticked themselves on a round trip later (and a tap
+              landing in that window routed save() down the create branch). Show
+              skeleton rows instead: same four labels, no checkbox to misread or
+              mis-tap. `!rulesRaw` is checked next to isLoading because isLoading
+              is still false on the render where `open` flips true — the query's
+              fetchStatus is idle for that one tick. */}
+          {!isError && (isLoading || !rulesRaw) ? (
+            CATEGORIES.map((cat) => (
+              <div key={cat} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t(`fines:${categoryLabelKey(cat)}`)}
+                  </div>
+                  <div className="h-4 w-24 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+                </div>
+              </div>
+            ))
+          ) : (
+            CATEGORIES.map((cat) => (
+              <CategoryEditor
+                key={cat}
+                teamId={teamId}
+                category={cat}
+                rule={rulesRaw?.find((r) => r.category === cat) ?? null}
+                onChange={refetch}
+              />
+            ))
+          )}
         </div>
       )}
     </div>

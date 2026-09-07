@@ -33,7 +33,7 @@ export default function RankingsTable({ league, rankings, compact }: RankingsTab
   // rankings tab) never fires this 500-row query.
   // Scope to the season of the table being shown so old-season games don't leak in.
   const tableSeason = rankings[0]?.season
-  const { data: leagueGamesRaw } = useCollection<Game>('games', {
+  const { data: leagueGamesRaw, isLoading: leagueGamesLoading } = useCollection<Game>('games', {
     filter: tableSeason
       ? { _and: [{ league: { _eq: league } }, { season: { _eq: tableSeason } }] }
       : { league: { _eq: league } },
@@ -228,7 +228,17 @@ export default function RankingsTable({ league, rankings, compact }: RankingsTab
                       <tr key={`${row.id}-games`}>
                         <td colSpan={colCount} className="p-0">
                           <div className="bg-gray-50 dark:bg-gray-900/50 px-3 py-2">
-                            {rowGames.length === 0 ? (
+                            {/* `rowGames` is empty both while the deferred games query is
+                                in flight and when the team really has no fixtures. The query
+                                only starts on this tap (`enabled` above), so without this gate
+                                the first expansion of every league table claims "No data". */}
+                            {leagueGamesLoading ? (
+                              <div className="space-y-1" aria-busy="true">
+                                {[0, 1, 2].map((i) => (
+                                  <div key={i} className="h-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                                ))}
+                              </div>
+                            ) : rowGames.length === 0 ? (
                               <p className="py-2 text-center text-xs text-gray-400">{t('common:noData')}</p>
                             ) : (
                               <div className="space-y-1">
