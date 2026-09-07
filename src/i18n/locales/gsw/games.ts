@@ -232,6 +232,15 @@ export default {
   pregameDivergesTitle: 'S\'Ufgebot wiicht vo de Einsatzliste ab',
   pregameDivergesCount: '{{added}} dezuegnoh, {{dropped}} gstriche. Im Volleymanager staht wiiterhin s\'Original.',
   pregameDivergesMust: 'Jedi Ergänzig und jedi Striichig mues zuesätzlich vo Hand im Volleymanager erfasst werde.',
+  // Match-sheet RSVP cross-check (Einsatzliste vs who actually answered)
+  rsvpCheckHeader: '✓',
+  rsvpCheckLegend: 'Abgliche mit de Zuesäge. D Einsatzliste entscheidet, wer spielt.',
+  rsvpCheckConfirmed: 'Für das Spiel zuegseit',
+  rsvpCheckTentative: 'Het vilicht gantwortet',
+  rsvpCheckNone: 'No kei Antwort',
+  rsvpCheckDeclined: 'Abgseit — ufboten, chunt aber nöd',
+  rsvpCheckNotApplicable: 'Nüt zum Abgliche',
+
   idsTitle: 'Uswiis zeige',
   idsWindow: 'D Uswiis chönd ab {{time}} bis zum Spielaafang zeigt werde. Sie werdet uf dem Grät entschlüsslet — de Verein cha sie nöd läse.',
   idsNoKickoff: 'Das Spiel het kei Aafangszit, drum chönd kei Uswiis zeigt werde.',

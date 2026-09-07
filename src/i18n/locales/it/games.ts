@@ -229,6 +229,15 @@ export default {
   pregameDivergesTitle: 'La lista dei giocatori differisce dall\'Einsatzliste',
   pregameDivergesCount: '{{added}} aggiunti, {{dropped}} rimossi qui. Volleymanager mostra ancora l\'originale.',
   pregameDivergesMust: 'Ogni aggiunta e ogni cancellazione deve essere inserita anche a mano in Volleymanager.',
+  // Match-sheet RSVP cross-check (Einsatzliste vs who actually answered)
+  rsvpCheckHeader: '✓',
+  rsvpCheckLegend: 'Confrontato con le adesioni. La lista di gara decide chi gioca.',
+  rsvpCheckConfirmed: 'Ha confermato per questa partita',
+  rsvpCheckTentative: 'Ha risposto forse',
+  rsvpCheckNone: 'Nessuna risposta',
+  rsvpCheckDeclined: 'Ha rifiutato — convocato ma assente',
+  rsvpCheckNotApplicable: 'Niente da confrontare',
+
   idsTitle: 'Mostra i documenti d\'identità',
   idsWindow: 'I documenti d\'identità possono essere mostrati dalle {{time}} fino all\'inizio della partita. Vengono decifrati su questo dispositivo — il club non può leggerli.',
   idsNoKickoff: 'Questa partita non ha un orario d\'inizio, quindi non è possibile mostrare i documenti d\'identità.',

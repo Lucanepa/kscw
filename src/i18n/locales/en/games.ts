@@ -234,6 +234,15 @@ export default {
   pregameDivergesCount: '{{added}} added, {{dropped}} removed here. Volleymanager still shows the original.',
   pregameDivergesMust: 'Every addition or deletion must also be entered manually in Volleymanager.',
 
+  // Match-sheet RSVP cross-check (Einsatzliste vs who actually answered)
+  rsvpCheckHeader: '✓',
+  rsvpCheckLegend: 'Checked against the RSVPs. The Einsatzliste decides who plays.',
+  rsvpCheckConfirmed: 'Confirmed for this game',
+  rsvpCheckTentative: 'Answered maybe',
+  rsvpCheckNone: 'No answer yet',
+  rsvpCheckDeclined: 'Declined — nominated but not coming',
+  rsvpCheckNotApplicable: 'Nothing to check against',
+
   // Show IDs (end-to-end encrypted identity documents)
   idsTitle: 'Show IDs',
   idsWindow: 'Identity documents can be shown from {{time}} until kickoff. They are decrypted on this device — the club cannot read them.',

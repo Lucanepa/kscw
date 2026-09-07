@@ -202,6 +202,22 @@ async function loadVmRoster(database, log, game, captainId) {
   return { source: 'vm', roster, coaches: nl.coaches, closed_at: nl.closed_at }
 }
 
+/**
+ * Every RSVP for this game, member -> status. Feeds the match sheet's check column.
+ *
+ * The Einsatzliste WINS — it is the legal list, and nothing here can add or remove a
+ * player. This is a read-only reconciliation: for each nominated player, did they
+ * actually say they are coming? The actionable case is `declined` — nominated in
+ * Volleymanager, and they told us they are not turning up.
+ */
+async function rsvpByMember(database, gameId) {
+  const rows = await database('participations')
+    .where('activity_type', 'game')
+    .where('activity_id', String(gameId))
+    .select('member', 'status')
+  return new Map(rows.map((r) => [Number(r.member), String(r.status)]))
+}
+
 /** Fallback: members who RSVP'd "confirmed" (confirmed guests included). */
 async function loadRsvpRoster(database, game, gameId, season, captainId) {
   const confirmedRows = await database('participations')
@@ -458,6 +474,26 @@ export function registerScorerRoster(router, { database, logger }) {
           }))
           .sort(byJersey)
       }
+
+      // The check column. Attached here rather than inside a loader so it covers ALL
+      // three sheet paths (vm / rsvp fallback / saved game_rosters snapshot) alike.
+      //
+      // ⚠ Only meaningful against a VM Einsatzliste. When source === 'rsvp' the sheet
+      // IS the confirmed RSVPs, so every row would read green and the tick would assert
+      // a cross-check that never happened. Left null there, and the UI hides the column.
+      //
+      // ⚠ `member: null` (VM named a licence we hold no member for) stays null, NOT
+      // "no answer" — there is no RSVP to look up, and rendering it as a warning would
+      // flag every unlinked player as a problem.
+      const rsvps = sheet.source === 'vm' ? await rsvpByMember(database, gameId) : null
+      const withRsvp = (r) => ({
+        ...r,
+        rsvp: rsvps && r.member != null ? (rsvps.get(Number(r.member)) ?? 'none') : null,
+      })
+      sheet.roster = sheet.roster.map(withRsvp)
+      // The inverse check, for whoever may act on it: someone who confirmed but was
+      // never nominated. `bench` is exactly that pool, and is coach/admin-only already.
+      bench = bench.map(withRsvp)
 
       await writeUserLog(database, log, {
         accountability: req.accountability,

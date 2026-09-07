@@ -4,6 +4,7 @@ import Modal from '@/components/Modal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import { kscwApi } from '../../../lib/api'
+import RsvpCheck, { type RsvpState } from '../../../components/RsvpCheck'
 import { formatDateZurich } from '../../../utils/dateHelpers'
 
 interface RosterRow {
@@ -16,6 +17,8 @@ interface RosterRow {
   licence?: string | null
   /** Volleymanager's eligibility verdict; false → flag it at the table. */
   eligible?: boolean
+  /** RSVP cross-check. null → nothing to check (see RsvpCheck). */
+  rsvp?: RsvpState
 }
 
 interface CoachRow {
@@ -55,6 +58,9 @@ interface RosterModalProps {
  */
 export default function RosterModal({ gameId, onClose }: RosterModalProps) {
   const { t } = useTranslation('scorer')
+  // The check column owns its labels in the `games` namespace so the coach's
+  // match sheet and this one cannot drift apart.
+  const { t: tg } = useTranslation('games')
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<RosterResponse['data'] | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
@@ -116,6 +122,9 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {data.source === 'vm' && (
+                      <TableHead className="w-8" title={tg('rsvpCheckLegend')}>{tg('rsvpCheckHeader')}</TableHead>
+                    )}
                     <TableHead className="w-12">{t('rosterColNumber')}</TableHead>
                     <TableHead>{t('rosterColName')}</TableHead>
                     {showLicence && <TableHead className="w-16">{t('rosterColLicence')}</TableHead>}
@@ -125,6 +134,9 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                 <TableBody>
                   {data.roster.map((r, i) => (
                     <TableRow key={`p-${r.last_name}-${r.number ?? 'x'}-${i}`}>
+                      {data.source === 'vm' && (
+                        <TableCell className="text-center"><RsvpCheck state={r.rsvp ?? null} /></TableCell>
+                      )}
                       <TableCell className="font-semibold tabular-nums">{r.number ?? '—'}</TableCell>
                       <TableCell className="whitespace-normal break-words">
                         {r.last_name}{r.first_initial ? `, ${r.first_initial}` : ''}

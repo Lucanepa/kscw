@@ -234,6 +234,15 @@ export default {
   pregameDivergesMust: 'Jede Ergänzung oder Streichung muss zusätzlich von Hand im Volleymanager erfasst werden.',
 
   // Ausweise zeigen (Ende-zu-Ende-verschlüsselt)
+  // Match-sheet RSVP cross-check (Einsatzliste vs who actually answered)
+  rsvpCheckHeader: '✓',
+  rsvpCheckLegend: 'Abgeglichen mit den Zusagen. Die Einsatzliste entscheidet, wer spielt.',
+  rsvpCheckConfirmed: 'Für dieses Spiel zugesagt',
+  rsvpCheckTentative: 'Hat vielleicht geantwortet',
+  rsvpCheckNone: 'Noch keine Antwort',
+  rsvpCheckDeclined: 'Abgesagt — aufgeboten, kommt aber nicht',
+  rsvpCheckNotApplicable: 'Nichts zum Abgleichen',
+
   idsTitle: 'Ausweise zeigen',
   idsWindow: 'Die Ausweise können ab {{time}} bis zum Spielbeginn gezeigt werden. Sie werden auf diesem Gerät entschlüsselt — der Verein kann sie nicht lesen.',
   idsNoKickoff: 'Dieses Spiel hat keine Anspielzeit, daher können keine Ausweise gezeigt werden.',

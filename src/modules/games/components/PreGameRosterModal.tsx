@@ -4,6 +4,7 @@ import { AlertTriangle } from 'lucide-react'
 import Modal from '@/components/Modal'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import RsvpCheck, { type RsvpState } from '../../../components/RsvpCheck'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import { kscwApi } from '../../../lib/api'
 import { formatDateZurich } from '../../../utils/dateHelpers'
@@ -11,6 +12,8 @@ import { formatDateZurich } from '../../../utils/dateHelpers'
 interface SheetRow {
   /** null when the Einsatzliste names a licence we hold no member for — not editable. */
   member: number | null
+  /** RSVP cross-check. null → nothing to check (see RsvpCheck). */
+  rsvp?: RsvpState
   number: number | null
   last_name: string
   first_initial: string
@@ -25,6 +28,8 @@ interface SheetRow {
 
 interface BenchRow {
   member: number
+  /** RSVP cross-check — here it surfaces the inverse: confirmed but NOT nominated. */
+  rsvp?: RsvpState
   number: number | null
   last_name: string
   first_initial: string
@@ -246,10 +251,17 @@ export default function PreGameRosterModal({ gameId, onClose }: PreGameRosterMod
     </span>
   )
 
+  // Only against a real Einsatzliste. On the RSVP fallback the sheet IS the confirmed
+  // RSVPs, so every row would read green and assert a cross-check that never happened.
+  const showCheck = data?.source === 'vm'
+
   const playerTable = (list: SheetRow[], withControls: boolean) => (
     <Table>
       <TableHeader>
         <TableRow>
+          {showCheck && (
+            <TableHead className="w-8" title={t('rsvpCheckLegend')}>{t('rsvpCheckHeader')}</TableHead>
+          )}
           <TableHead className="w-24">{t('pregameColDob')}</TableHead>
           <TableHead className="w-14 text-center">{t('pregameColNumber')}</TableHead>
           <TableHead>{t('pregameColName')}</TableHead>
@@ -262,6 +274,9 @@ export default function PreGameRosterModal({ gameId, onClose }: PreGameRosterMod
             key={`${r.member ?? 'x'}-${i}`}
             className={r.dropped ? 'opacity-40 line-through' : undefined}
           >
+            {showCheck && (
+              <TableCell className="text-center"><RsvpCheck state={r.rsvp ?? null} /></TableCell>
+            )}
             <TableCell className="min-h-[44px] whitespace-normal tabular-nums text-xs text-muted-foreground">
               {r.birthdate ? formatDateZurich(r.birthdate) : '—'}
             </TableCell>
@@ -422,6 +437,9 @@ export default function PreGameRosterModal({ gameId, onClose }: PreGameRosterMod
                 <TableBody>
                   {bench.map((b) => (
                     <TableRow key={`b-${b.member}`} className="opacity-70">
+                      {showCheck && (
+                        <TableCell className="w-8 text-center"><RsvpCheck state={b.rsvp ?? null} /></TableCell>
+                      )}
                       <TableCell className="w-24 whitespace-normal tabular-nums text-xs text-muted-foreground">
                         {b.birthdate ? formatDateZurich(b.birthdate) : '—'}
                       </TableCell>
