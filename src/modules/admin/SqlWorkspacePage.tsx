@@ -494,7 +494,7 @@ export default function SqlWorkspacePage() {
 
         {/* Toolbar: the three controls get equal thirds on a phone, and sit
             right-aligned next to the title from md up. */}
-        <div className="grid grid-cols-3 items-stretch gap-2 px-3 py-2 md:flex md:items-center md:px-4">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 px-3 py-2 md:flex md:items-center md:px-4">
           <h1 className="hidden text-sm font-bold text-primary md:block">{t('sqlWorkspaceTitle')}</h1>
           <span
             className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground md:inline"
@@ -591,7 +591,7 @@ export default function SqlWorkspacePage() {
 
           <label
             htmlFor="sql-write-mode"
-            className={`inline-flex min-h-11 w-full cursor-pointer select-none items-center justify-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors md:min-h-9 md:w-auto ${
+            className={`inline-flex min-h-11 w-full cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors md:min-h-9 md:w-auto md:gap-2 md:px-2.5 ${
               writeMode
                 ? 'border-destructive bg-destructive/10 text-destructive'
                 : 'border-border bg-background text-muted-foreground'
@@ -604,7 +604,7 @@ export default function SqlWorkspacePage() {
               onCheckedChange={setWriteMode}
               aria-label={t('sqlWorkspaceWriteMode')}
             />
-            <span className="truncate">{t('sqlWorkspaceWriteMode')}</span>
+            <span>{t('sqlWorkspaceWriteMode')}</span>
           </label>
 
           <button
@@ -623,10 +623,10 @@ export default function SqlWorkspacePage() {
       {/* Mobile schema browser */}
       <Sheet open={schemaSheetOpen} onOpenChange={setSchemaSheetOpen}>
         <SheetContent side="left" className="flex w-[88vw] max-w-sm flex-col p-3 md:hidden">
-          <SheetHeader className="p-0">
-            <SheetTitle className="text-sm">{t('sqlWorkspaceSchema')}</SheetTitle>
+          <SheetHeader className="sr-only">
+            <SheetTitle>{t('sqlWorkspaceSchema')}</SheetTitle>
           </SheetHeader>
-          <div className="min-h-0 flex-1">{schemaBrowser}</div>
+          <div className="min-h-0 flex-1 pt-6">{schemaBrowser}</div>
         </SheetContent>
       </Sheet>
 
@@ -748,7 +748,7 @@ export default function SqlWorkspacePage() {
                           key={s}
                           type="button"
                           onClick={() => applyFix(s)}
-                          className="inline-flex min-h-9 items-center rounded-md border border-primary/50 bg-primary/5 px-2.5 font-mono text-[11px] text-primary hover:bg-primary/10"
+                          className="inline-flex min-h-9 items-center rounded-md border border-primary/60 bg-primary/15 px-2.5 font-mono text-[11px] font-semibold text-foreground hover:bg-primary/25"
                         >
                           {s}
                         </button>
