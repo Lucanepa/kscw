@@ -2,6 +2,14 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.4.2 — 2026-09-07
+
+### The school’s hall calendar
+
+- **Basketball home games are no longer announced to the school as volleyball.** The Kantonsschule Wiedikon hall calendar took the sport from where a fixture came from rather than from the team playing it, so every hand-entered basketball game was published as "VB" — all five upcoming home games at KWI.
+- **A basketball home date agreed with the opponent now reaches the school’s hall calendar.** Until now only fixtures already published by Basketplan did, so eight agreed dates held the court in wiedisync while the hall administration’s calendar showed it free. Dates still being negotiated stay off it.
+- **A game that takes both halves of the hall now says so.** Four upcoming fixtures use the full hall and were listed under one half only, which read as though the other were free.
+
 ## v2.4.1 — 2026-09-06
 
 ### Basketball planner fixes

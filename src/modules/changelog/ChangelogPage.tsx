@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.4.1'
+const APP_VERSION = '2.4.2'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,20 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.4.2',
+    date: '07.09.2026',
+    sections: [
+      {
+        title: 'The school\u2019s hall calendar',
+        items: [
+          'Basketball home games are no longer announced to the school as volleyball. The Kantonsschule Wiedikon hall calendar took the sport from where a fixture came from rather than from the team playing it, so every hand-entered basketball game was published as "VB" — all five upcoming home games at KWI.',
+          'A basketball home date agreed with the opponent now reaches the school’s hall calendar. Until now only fixtures already published by Basketplan did, so eight agreed dates held the court in wiedisync while the hall administration’s calendar showed it free. Dates still being negotiated stay off it.',
+          'A game that takes both halves of the hall now says so. Four upcoming fixtures use the full hall and were listed under one half only, which read as though the other were free.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.4.1',
     date: '06.09.2026',
