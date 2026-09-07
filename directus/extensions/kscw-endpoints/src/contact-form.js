@@ -182,31 +182,41 @@ export function registerContactForm(router, { database, logger, services, getSch
         ])
         if (teamRow) teamName = teamRow.full_name || teamRow.name || null
 
-        // A CLOSED BASKETBALL YOUTH team runs the club-wide waiting list, so a
-        // contact submission must NOT fan out to the coaches / basketball youth
-        // coordinator (that turned closed youth teams into a steady stream of
-        // join inquiries). The website already hides submit for these, but
-        // /contact is public, so a cached / bookmarked / direct POST must be
-        // rejected here too — point the sender at the waiting list instead.
+        // A FULL team must not receive contact mail it can only answer with no.
+        // The website hides the team's contact button and drops the team from the
+        // form's dropdown entirely, but /contact is public: a cached page, a
+        // bookmark or a direct POST all still arrive here, so the rejection has to
+        // live on this side too.
         //
         // "Full" is open_for_players === false, NOT a non-empty waitlist_url as
         // before. That column doubled as the flag and outranked open_for_players,
         // so a coach who reopened a team stayed blocked here (DU12, 2026-08-18);
         // every value in it was the same club-wide form, and it has been cleared.
         //
-        // Youth-only on purpose: 13 active senior and volleyball teams sit at
-        // open_for_players=false and must stay contactable, and a volleyball
-        // enquiry must never be pointed at a basketball youth waiting list.
-        const isClosedYouth = !!teamRow
+        // Two rejections, because only one of them has somewhere to send the
+        // sender next:
+        //   • closed BASKETBALL YOUTH → 'team_full' + the club-wide waiting list,
+        //     which is the real next step for a family whose age group is full.
+        //   • any other full team → 'team_closed', with no waiting list named: a
+        //     volleyball enquiry pointed at a basketball youth form is nonsense.
+        //
+        // This widened on 2026-09-07. It was youth-only before, on the grounds
+        // that senior and volleyball teams at open_for_players=false were merely
+        // "not recruiting" and had to stay contactable — the website now treats
+        // that flag as full everywhere, so the two sides agree again.
+        const isFull = !!teamRow && teamRow.open_for_players === false
+        const isClosedYouth = isFull
           && teamRow.sport === 'basketball'
           && isYouthTeam(teamRow.name)
-          && teamRow.open_for_players === false
         if (isClosedYouth) {
           return res.status(409).json({
             error: 'team_full',
             waitlist_url: DEFAULT_WAITLIST_URL,
             waitlist_label: null,
           })
+        }
+        if (isFull) {
+          return res.status(409).json({ error: 'team_closed' })
         }
 
         if (teamRow && teamRow.sport === 'basketball' && isYouthTeam(teamRow.name)) {
