@@ -1368,6 +1368,13 @@ export default {
   sqlWorkspaceAskAiPlaceholder: 'e.g. "Active members with a Schreiber licence in H1 or H2, sorted by last name"',
   sqlWorkspaceAskAiSubmitHint: 'Cmd/Ctrl-Enter to generate',
   sqlWorkspaceAskAiGenerate: 'Generate SQL',
+  sqlWorkspaceTables_one: 'Table ({{count}})',
+  sqlWorkspaceTables_other: 'Tables ({{count}})',
+  sqlWorkspaceDidYouMean: 'Did you mean…',
+  sqlWorkspaceDidYouMeanHint: '"{{name}}" is not in the schema. Tap a suggestion to replace it in the query.',
+  sqlWorkspaceAiMemory: 'Memory',
+  sqlWorkspaceAiClearMemory: 'Clear',
+  sqlWorkspaceAiMemoryHint: 'Your last questions stay in context, so a follow-up refines the same query.',
 
   // Volley Feedback dashboard
   vfOverview: 'Overview',

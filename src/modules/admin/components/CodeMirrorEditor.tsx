@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from 'react'
-import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view'
+import { EditorView, keymap, placeholder as cmPlaceholder, tooltips } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { sql, PostgreSQL } from '@codemirror/lang-sql'
@@ -13,16 +13,14 @@ import {
 } from '@codemirror/autocomplete'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { useTheme } from '@/hooks/useTheme'
+import {
+  parseQueryScope,
+  resolveTableRef,
+  type SqlSchemaColumn,
+  type SqlSchemaTable,
+} from '../utils/sqlSchema'
 
-export interface SqlSchemaColumn {
-  name: string
-  /** Postgres type, surfaced in the completion popup's detail line. */
-  dataType?: string
-}
-export interface SqlSchemaTable {
-  name: string
-  columns: readonly SqlSchemaColumn[]
-}
+export type { SqlSchemaColumn, SqlSchemaTable }
 
 interface CodeMirrorEditorProps {
   value: string
@@ -44,48 +42,89 @@ const SQL_KEYWORDS = [
   'TRUE', 'FALSE',
 ]
 
-/** Build a schema-aware autocomplete source.
- *  - `<table>.<partial>` → only that table's columns (with type)
- *  - bare word in any other position → table names, deduped column names
- *    (with `from <table>` hint), and SQL keywords */
+/** Positions where a table name is the only sensible completion. */
+const AFTER_TABLE_CLAUSE = /\b(?:FROM|JOIN|UPDATE|INTO)\s+[\w$]*$/i
+
+/** Comparison operators after which a *value* is expected, not an identifier. */
+const VALUE_OPERATOR =
+  /(?:<>|!=|<=|>=|=|<|>|\bLIKE\b|\bILIKE\b|\bNOT\s+LIKE\b|\bNOT\s+ILIKE\b|\bIN\b\s*\(|\bANY\b\s*\(|\bALL\b\s*\()\s*$/i
+
+/** The column reference immediately left of an operator: `mt.guest_level` or
+ *  a bare `sport`. */
+const COLUMN_REF = /(?:([A-Za-z_][\w$]*)\s*\.\s*)?([A-Za-z_][\w$]*)\s*$/
+
+/** Short marker appended to a column's detail line. */
+function columnDetail(c: SqlSchemaColumn): string {
+  const bits = [c.dataType ?? '']
+  if (c.pk) bits.push('PK')
+  if (c.ref) bits.push(`→ ${c.ref}`)
+  return bits.filter(Boolean).join(' · ')
+}
+
+/**
+ * Walk back over a completed `IN ('a', 'b', ` list so the operator match sees
+ * the `IN (` rather than the trailing comma.
+ */
+function stripValueList(text: string): string {
+  let h = text.trimEnd()
+  for (;;) {
+    if (!h.endsWith(',')) return h
+    const withoutComma = h.slice(0, -1).trimEnd()
+    const literal = /'(?:[^']|'')*'$/.exec(withoutComma)
+    h = literal ? withoutComma.slice(0, literal.index).trimEnd() : withoutComma
+  }
+}
+
+/**
+ * Build a schema-aware autocomplete source.
+ *
+ * Four positions, each answered with only what is valid there — the point is
+ * that a suggestion list which contains the wrong table's columns is how a
+ * query ends up referencing a column that does not exist:
+ *   - `alias.` / `table.` -> ONLY that table's columns, with aliases resolved
+ *     against the query's own FROM/JOIN clauses (`mt.` -> member_teams)
+ *   - after `FROM` / `JOIN` -> table names only
+ *   - after `=`, `IN (`, `LIKE` -> the values that column actually holds
+ *     (`sport = 'volleyball'`, never `'vb'`)
+ *   - anywhere else -> table-qualified columns, tables and keywords; the
+ *     qualifier is part of the inserted text, so the reference is unambiguous
+ *     from the first keystroke
+ */
 function makeCompletionSource(tables: readonly SqlSchemaTable[]): CompletionSource {
-  // Pre-compute completion arrays for performance
   const tableCompletions: Completion[] = tables.map((t) => ({
     label: t.name,
     type: 'type',
-    detail: 'table',
+    detail: `${t.columns.length} cols`,
     boost: 5,
   }))
 
-  // Columns keyed by name. If a name is in multiple tables, surface them all
-  // as separate entries so users see e.g. "id (members)" + "id (teams)".
-  const columnCompletions: Completion[] = []
-  for (const t of tables) {
-    for (const c of t.columns) {
-      columnCompletions.push({
-        label: c.name,
-        apply: c.name,
-        type: 'property',
-        detail: c.dataType ? `${c.dataType} · ${t.name}` : t.name,
-        info: c.dataType ? `${t.name}.${c.name} :: ${c.dataType}` : `${t.name}.${c.name}`,
-        boost: 2,
-      })
-    }
-  }
-
-  // Per-table column lookup (for `tableName.` completion)
+  // Per-table column lists, for the `alias.` / `table.` case.
   const columnsByTable = new Map<string, Completion[]>()
   for (const t of tables) {
     columnsByTable.set(
-      t.name.toLowerCase(),
+      t.name,
       t.columns.map((c) => ({
         label: c.name,
-        type: 'property',
-        detail: c.dataType,
-        info: c.dataType ? `${t.name}.${c.name} :: ${c.dataType}` : undefined,
+        type: c.pk ? 'constant' : 'property',
+        detail: columnDetail(c),
+        info: `${t.name}.${c.name} :: ${c.dataType ?? '?'}${c.values ? `\nin ${c.values.join(', ')}` : ''}`,
         boost: 10,
       })),
     )
+  }
+
+  // Every column in the schema, labelled `table.column` so an out-of-context
+  // suggestion still says which table it came from.
+  const qualifiedColumns: Completion[] = []
+  for (const t of tables) {
+    for (const c of t.columns) {
+      qualifiedColumns.push({
+        label: `${t.name}.${c.name}`,
+        type: 'property',
+        detail: columnDetail(c),
+        boost: 0,
+      })
+    }
   }
 
   const keywordCompletions: Completion[] = SQL_KEYWORDS.map((k) => ({
@@ -94,46 +133,145 @@ function makeCompletionSource(tables: readonly SqlSchemaTable[]): CompletionSour
     boost: -1,
   }))
 
+  /** Values a column can hold, unioned across every table that defines a
+   *  column of that name when the reference is unqualified. */
+  function valuesFor(
+    column: string,
+    qualifier: string | undefined,
+    scope: ReturnType<typeof parseQueryScope>,
+  ): string[] {
+    const lc = column.toLowerCase()
+    const collect = (t: SqlSchemaTable) =>
+      t.columns.find((c) => c.name.toLowerCase() === lc)?.values ?? []
+
+    if (qualifier) {
+      const t = resolveTableRef(qualifier, tables, scope)
+      return t ? [...collect(t)] : []
+    }
+    const inScope = scope
+      .map((s) => tables.find((t) => t.name === s.table))
+      .filter((t): t is SqlSchemaTable => Boolean(t))
+    const pool = inScope.length ? inScope : tables
+    const out: string[] = []
+    for (const t of pool) {
+      for (const v of collect(t)) if (!out.includes(v)) out.push(v)
+    }
+    return out
+  }
+
   return (context: CompletionContext): CompletionResult | null => {
-    // Case 1: `tableName.<cursor>` or `tableName.partial`
-    // Look BEFORE the dot — find a `<word>.` sequence.
-    const dotMatch = context.matchBefore(/\b([A-Za-z_][\w]*)\.([\w]*)$/)
-    if (dotMatch) {
-      const m = dotMatch.text.match(/^([A-Za-z_][\w]*)\.([\w]*)$/)
-      if (m) {
-        const [, tableName, partial] = m
-        const cols = columnsByTable.get(tableName.toLowerCase())
-        if (cols) {
+    const line = context.state.doc.lineAt(context.pos)
+    const before = line.text.slice(0, context.pos - line.from)
+    const scope = parseQueryScope(context.state.doc.toString(), tables)
+
+    // ── 1. A value, either inside an open quote or right after the operator ──
+    const openQuote = /'([^']*)$/.exec(before)
+    const bareWord = /([A-Za-z0-9_$]*)$/.exec(before) as RegExpExecArray
+    const typedFrom = openQuote ? openQuote.index + 1 : bareWord.index
+    const head = stripValueList(before.slice(0, openQuote ? openQuote.index : bareWord.index))
+
+    if (VALUE_OPERATOR.test(head)) {
+      const lhs = head.replace(VALUE_OPERATOR, '')
+      const ref = COLUMN_REF.exec(lhs)
+      if (ref) {
+        const values = valuesFor(ref[2], ref[1], scope)
+        if (values.length > 0) {
           return {
-            // Replace only the part AFTER the dot
-            from: dotMatch.from + tableName.length + 1,
-            to: dotMatch.from + tableName.length + 1 + partial.length,
-            options: cols,
-            validFor: /^\w*$/,
+            from: line.from + typedFrom,
+            to: context.pos,
+            options: values.map((v) => ({
+              label: openQuote ? v : `'${v}'`,
+              type: 'text',
+              detail: ref[1] ? `${ref[1]}.${ref[2]}` : ref[2],
+              boost: 20,
+            })),
+            validFor: openQuote ? /^[^']*$/ : /^[\w'$]*$/,
           }
         }
       }
     }
+    // An open string literal is never an identifier position — offering tables
+    // and keywords inside quotes is pure noise.
+    if (openQuote) return null
 
-    // Case 2: bare word — suggest tables + columns + keywords
-    const word = context.matchBefore(/[A-Za-z_]\w*/)
-    if (!word) {
-      if (!context.explicit) return null
-      // Empty position, explicit (Ctrl-Space): still offer suggestions
-      return {
-        from: context.pos,
-        options: [...tableCompletions, ...columnCompletions, ...keywordCompletions],
-        validFor: /^\w*$/,
+    // ── 2. `alias.` / `table.` — that table's columns and nothing else ──
+    const dotted = context.matchBefore(/[A-Za-z_][\w$]*\s*\.\s*[\w$]*$/)
+    if (dotted) {
+      const m = /^([A-Za-z_][\w$]*)\s*\.\s*([\w$]*)$/.exec(dotted.text)
+      if (m) {
+        const table = resolveTableRef(m[1], tables, scope)
+        // Unresolvable qualifier: stay silent rather than offer another
+        // table's columns, which is what the flat list used to do.
+        if (!table) return null
+        return {
+          from: context.pos - m[2].length,
+          to: context.pos,
+          options: columnsByTable.get(table.name) ?? [],
+          validFor: /^[\w$]*$/,
+        }
       }
     }
-    if (word.from === word.to && !context.explicit) return null
+
+    // ── 3. Right after FROM / JOIN / UPDATE / INTO — tables only ──
+    if (AFTER_TABLE_CLAUSE.test(before)) {
+      return {
+        from: line.from + bareWord.index,
+        to: context.pos,
+        options: tableCompletions,
+        validFor: /^[\w$]*$/,
+      }
+    }
+
+    // ── 4. Anything else — qualified columns first, then tables, keywords ──
+    if (bareWord.index === before.length && !context.explicit) return null
+
+    const options: Completion[] = []
+    if (scope.length > 0) {
+      // Columns of the tables this query actually joined, inserted with the
+      // alias the query itself declared.
+      for (const s of scope) {
+        const t = tables.find((tb) => tb.name === s.table)
+        if (!t) continue
+        for (const c of t.columns) {
+          options.push({
+            label: `${s.alias}.${c.name}`,
+            type: c.pk ? 'constant' : 'property',
+            detail: columnDetail(c),
+            info: s.alias === t.name ? undefined : `${t.name}.${c.name}`,
+            boost: 8,
+          })
+        }
+      }
+      for (const s of scope) {
+        if (s.alias !== s.table) options.push({ label: s.alias, type: 'type', detail: s.table, boost: 6 })
+      }
+    }
+    options.push(...tableCompletions, ...keywordCompletions)
+    // Out-of-scope columns stay available (people write sub-selects) but sort
+    // below everything the current query can actually reference.
+    if (scope.length === 0) options.push(...qualifiedColumns)
 
     return {
-      from: word.from,
-      options: [...tableCompletions, ...columnCompletions, ...keywordCompletions],
-      validFor: /^\w*$/,
+      from: line.from + bareWord.index,
+      to: context.pos,
+      options,
+      validFor: /^[\w$]*$/,
     }
   }
+}
+
+function completionExtension(source: CompletionSource) {
+  return autocompletion({
+    activateOnTyping: true,
+    defaultKeymap: true,
+    maxRenderedOptions: 60,
+    // The info panel is what covers the list on a phone: it is rendered beside
+    // the options on a wide screen and on top of them on a narrow one. Below
+    // `md` it is hidden entirely (see the theme) and every fact it carried is
+    // in the option's own detail line instead.
+    closeOnBlur: true,
+    override: [source],
+  })
 }
 
 export default function CodeMirrorEditor({
@@ -195,14 +333,11 @@ export default function CodeMirrorEditor({
         // lang-sql for syntax highlighting only — we override completion
         // entirely below so column suggestions work at every position.
         sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
-        completionCompartment.current.of(
-          autocompletion({
-            activateOnTyping: true,
-            defaultKeymap: true,
-            maxRenderedOptions: 50,
-            override: [completionSource],
-          }),
-        ),
+        // Fixed positioning keeps the completion popup out of the wrapper's
+        // `overflow-hidden` box — otherwise the list is clipped at the bottom
+        // edge of the editor, which on a phone is most of the list.
+        tooltips({ position: 'fixed' }),
+        completionCompartment.current.of(completionExtension(completionSource)),
         themeCompartment.current.of(theme === 'dark' ? oneDark : []),
         cmPlaceholder(placeholder || ''),
         EditorView.updateListener.of((update) => {
@@ -219,8 +354,39 @@ export default function CodeMirrorEditor({
           '.cm-content': { fontFamily: 'ui-monospace, "JetBrains Mono", monospace' },
           '.cm-gutters': { borderRight: 'none' },
           '.cm-scroller': { overflow: 'auto' },
-          '.cm-tooltip-autocomplete': { fontFamily: 'ui-monospace, "JetBrains Mono", monospace' },
-          '.cm-completionDetail': { color: '#94a3b8', fontStyle: 'normal', marginLeft: '0.75rem' },
+          '.cm-tooltip-autocomplete': {
+            fontFamily: 'ui-monospace, "JetBrains Mono", monospace',
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 30px -10px rgb(0 0 0 / 0.45)',
+          },
+          '.cm-tooltip-autocomplete > ul': { maxHeight: '16rem' },
+          '.cm-tooltip-autocomplete > ul > li': {
+            padding: '3px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+          },
+          '.cm-completionLabel': { flex: '0 1 auto', minWidth: 0 },
+          '.cm-completionDetail': {
+            color: '#94a3b8',
+            fontStyle: 'normal',
+            marginLeft: 'auto',
+            paddingLeft: '0.75rem',
+            fontSize: '0.85em',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            flex: '0 1 auto',
+          },
+          // Touch: taller rows, a list that is allowed to be tall, and no info
+          // panel — on a narrow viewport it lands on top of the options it is
+          // supposed to explain.
+          '@media (max-width: 767px)': {
+            '.cm-tooltip-autocomplete': { maxWidth: 'calc(100vw - 1.5rem)' },
+            '.cm-tooltip-autocomplete > ul': { maxHeight: '45vh' },
+            '.cm-tooltip-autocomplete > ul > li': { padding: '9px 10px', lineHeight: '1.25' },
+            '.cm-completionInfo': { display: 'none' },
+          },
         }),
       ],
     })
@@ -254,14 +420,7 @@ export default function CodeMirrorEditor({
     const view = viewRef.current
     if (!view) return
     view.dispatch({
-      effects: completionCompartment.current.reconfigure(
-        autocompletion({
-          activateOnTyping: true,
-          defaultKeymap: true,
-          maxRenderedOptions: 50,
-          override: [completionSource],
-        }),
-      ),
+      effects: completionCompartment.current.reconfigure(completionExtension(completionSource)),
     })
   }, [completionSource])
 
@@ -288,7 +447,7 @@ export default function CodeMirrorEditor({
     // a query taller than the box scrolls instead of being clipped.
     <div
       ref={containerRef}
-      className="resize-y overflow-hidden rounded-lg border border-border bg-card min-h-[160px] h-[260px] max-h-[70vh] [&_.cm-editor]:h-full"
+      className="resize-y overflow-hidden rounded-lg border border-border bg-card min-h-[160px] h-[220px] max-h-[70vh] md:h-[260px] [&_.cm-editor]:h-full"
     />
   )
 }

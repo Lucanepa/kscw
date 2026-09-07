@@ -1370,6 +1370,13 @@ export default {
   sqlWorkspaceAskAiPlaceholder: 'z. B. "Aktive Mitglieder mit Schreiberlizenz in H1 oder H2, sortiert nach Nachname"',
   sqlWorkspaceAskAiSubmitHint: 'Cmd/Strg-Enter zum Generieren',
   sqlWorkspaceAskAiGenerate: 'SQL generieren',
+  sqlWorkspaceTables_one: 'Tabelle ({{count}})',
+  sqlWorkspaceTables_other: 'Tabellen ({{count}})',
+  sqlWorkspaceDidYouMean: 'Meintest du…',
+  sqlWorkspaceDidYouMeanHint: '"{{name}}" gibt es im Schema nicht. Tippe auf einen Vorschlag, um es in der Abfrage zu ersetzen.',
+  sqlWorkspaceAiMemory: 'Gedächtnis',
+  sqlWorkspaceAiClearMemory: 'Leeren',
+  sqlWorkspaceAiMemoryHint: 'Deine letzten Fragen bleiben im Kontext — eine Folgefrage verfeinert dieselbe Abfrage.',
 
   // Volley Feedback dashboard
   vfOverview: 'Übersicht',
