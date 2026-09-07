@@ -19,7 +19,7 @@ export function useParticipation(
   const { user } = useAuth()
   const { t } = useTranslation('common')
 
-  const { data: participationsRaw, refetch } = useCollection<Participation>('participations', {
+  const { data: participationsRaw, refetch, isLoading } = useCollection<Participation>('participations', {
     filter: user && activityId
       ? { _and: [
           { member: { _eq: user.id } },
@@ -172,6 +172,14 @@ export function useParticipation(
   return {
     participation,
     hasAbsence,
+    /**
+     * ⚠ `effectiveStatus: null` means TWO things — "still loading" and "has not
+     * answered" — and a caller cannot tell them apart. Rendering the Yes/Maybe/No
+     * row off it alone paints all three unselected first, which reads as an
+     * unanswered game and invites a tap to re-set what is already set. Gate the
+     * control on this flag; do not infer it from a null status.
+     */
+    isLoading,
     effectiveStatus: displayStatus,
     note: participation?.note ?? '',
     setStatus,

@@ -43,6 +43,8 @@ const statusStyles = {
 /** Shared data interface for both hooked and prefetched modes */
 interface ParticipationData {
   participation: Participation | null
+  /** True only in hooked mode, while the saved answer is still being fetched. */
+  isLoading: boolean
   effectiveStatus: Participation['status'] | null
   setStatus: (status: Participation['status'], note?: string, guestCount?: number) => Promise<void>
   saveConfirmed: boolean
@@ -65,7 +67,7 @@ function HookedParticipationButton(props: ParticipationButtonProps) {
   const { t } = useTranslation('participation')
   const { isStaffOnly } = useAuth()
   const isStaff = !!props.teamId && isStaffOnly(props.teamId)
-  const { participation, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed } = useParticipation(
+  const { participation, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed, isLoading } = useParticipation(
     props.activityType,
     props.activityId,
     props.activityDate,
@@ -84,7 +86,7 @@ function HookedParticipationButton(props: ParticipationButtonProps) {
       )}
       <ParticipationButtonInner
         {...props}
-        data={{ participation, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed }}
+        data={{ participation, isLoading, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed }}
       />
     </div>
   )
@@ -133,7 +135,7 @@ function PrefetchedParticipationButton(props: ParticipationButtonProps) {
   return (
     <ParticipationButtonInner
       {...props}
-      data={{ participation, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed }}
+      data={{ participation, isLoading: false, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed }}
     />
   )
 }
@@ -151,7 +153,7 @@ function ParticipationButtonInner({
   eventSessions,
   requireNoteIfAbsent = false,
   allowMaybe = true,
-  data: { participation, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed },
+  data: { participation, isLoading, effectiveStatus, setStatus, saveConfirmed, dismissConfirmed },
 }: ParticipationButtonProps & { data: ParticipationData }) {
   const { t } = useTranslation('participation')
   const { isGuestIn, isStaffOnly, isActingForOther, user } = useAuth()
@@ -311,7 +313,7 @@ function ParticipationButtonInner({
     <div className="relative">
       <button
         onClick={() => !deadlinePassed && setMenuOpen(!menuOpen)}
-        disabled={deadlinePassed}
+        disabled={deadlinePassed || isLoading}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         className={`inline-flex min-h-[44px] items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors sm:min-h-0 ${
