@@ -198,8 +198,11 @@ export default function ScorerPage() {
   // Contact details (email/phone) for officials of the coach/TR's own duty games.
   // Empty for admins (they read contacts via the items API) and non-leaders.
   const officialContacts = useOfficialContacts()
+  // ⚠ Size 0 means BOTH "still fetching" and "this viewer gets no contacts", so
+  // without the flag an official's phone and email were simply absent mid-load —
+  // indistinguishable from a member who hid them.
   const membersWithContact = useMemo(() => {
-    if (officialContacts.size === 0) return members
+    if (officialContacts.isLoading || officialContacts.size === 0) return members
     return members.map((m) => {
       const c = officialContacts.get(m.id)
       return c

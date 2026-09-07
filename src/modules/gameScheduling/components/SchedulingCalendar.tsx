@@ -172,12 +172,72 @@ interface LinkWarning {
   severity: 'clash' | 'note'
 }
 
+// Rows the day-level fetches below return. Each is paired with a module-level
+// EMPTY constant so "not loaded yet" has a STABLE identity — the fetches are raw
+// `fetchAllItems` / `kscwApi` calls (no TanStack cache), so their state is keyed
+// by what it was fetched for and read back through that key; a fresh `[]` on
+// every render would re-run every downstream useMemo.
+interface ClosureRow { start_date: string; end_date: string; reason?: string }
+interface ClubBlockRow { id: number; start_date: string; end_date: string; reason: string | null }
+interface BbGameRow { id: string; date: string; time?: string | null; hall: string; team: string; opponent?: string | null }
+interface TeamEventRow { id: string; title: string; start_date: string; end_date?: string | null; teamId: string }
+interface TrainingRow { id: string; date: string; start_time?: string | null; team: string | number; hall_name?: string | null }
+
+const EMPTY_CLOSURES: ClosureRow[] = []
+const EMPTY_TEAM_BLOCKS: SchedulingBlock[] = []
+const EMPTY_CLUB_BLOCKS: ClubBlockRow[] = []
+const EMPTY_BB_GAMES: BbGameRow[] = []
+const EMPTY_TEAM_EVENTS: TeamEventRow[] = []
+const EMPTY_TRAININGS: TrainingRow[] = []
+const EMPTY_ABSENCES: Map<string, string[]> = new Map()
+
+/** Stand-in for the month grid while the day-level data (hall closures, club and
+ *  team blocks, team events, cross-sport court holds) is still in flight. An empty
+ *  closure Set is indistinguishable from "no closures" — `CalendarGrid` collapses
+ *  a missing one to `false` — so painting the real grid early declares every
+ *  school-holiday evening free, which is exactly the read a planner picking a home
+ *  date makes. Mirrors CalendarGrid's own shape (month header, weekday strip, 6×7
+ *  cells at the same min-heights) so nothing moves when the grid lands. */
+function CalendarGridSkeleton({ label }: { label: string }) {
+  return (
+    <div className="flex flex-1 flex-col" role="status" aria-busy="true" aria-label={label}>
+      {/* Month header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="h-10 w-10 animate-pulse rounded-lg bg-gray-200 sm:h-9 sm:w-9 dark:bg-gray-700" />
+        <div className="h-6 w-36 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="h-10 w-10 animate-pulse rounded-lg bg-gray-200 sm:h-9 sm:w-9 dark:bg-gray-700" />
+      </div>
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={`h${i}`} className="flex justify-center py-2">
+            <div className="h-4 w-7 animate-pulse rounded bg-gray-200 sm:h-5 dark:bg-gray-700" />
+          </div>
+        ))}
+      </div>
+      {/* Day grid */}
+      <div className="grid flex-1 grid-cols-7 border-l border-gray-200 dark:border-gray-700" style={{ gridAutoRows: '1fr' }}>
+        {Array.from({ length: 42 }, (_, i) => (
+          <div
+            key={`d${i}`}
+            className="min-h-[3rem] border-b border-r border-gray-200 bg-white p-0.5 sm:min-h-[5rem] sm:p-1 lg:min-h-[6.5rem] lg:p-2 dark:border-gray-700 dark:bg-gray-800"
+          >
+            <div className="h-3 w-4 animate-pulse rounded bg-gray-200 sm:h-3.5 dark:bg-gray-700" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function SchedulingCalendar({ slots, bookings, teams, season, games = [], confirmedFrom = 'bookings', showCrossSport = true, title, showAbsences }: Props) {
   const { t } = useTranslation('gameScheduling')
 
   // Manual coach/player-sharing links for this season (volleyball). Fail-soft: an
   // error / missing collection just yields [] → no warnings (migration 218).
-  const { links: teamLinks } = useTeamLinks(season.id, 'volleyball')
+  // `isLoading` goes false on an error (and on the disabled/no-season query), so
+  // using it as a gate can never strand the grid behind a permanent skeleton.
+  const { links: teamLinks, isLoading: teamLinksLoading } = useTeamLinks(season.id, 'volleyball')
 
   const teamName = useMemo(() => {
     const m = new Map<string, string>()
@@ -244,15 +304,25 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
 
   // Hall closures (gcal + school holidays) for the season — block home games, so
   // they render as a red day background. Fetched from this season's August on.
-  const [closures, setClosures] = useState<{ start_date: string; end_date: string; reason?: string }[]>([])
+  // Tagged with the season it was fetched for: until that tag matches, the rows
+  // are UNKNOWN rather than empty, and the grid waits (`dayDataPending` below)
+  // instead of painting a closed school holiday as an ordinary free evening.
+  const closureKey = String(startYear)
+  const [closureState, setClosureState] = useState<{ key: string; rows: ClosureRow[] }>({ key: '', rows: EMPTY_CLOSURES })
   useEffect(() => {
-    fetchAllItems<{ start_date: string; end_date: string; reason?: string }>('hall_closures', {
+    let cancelled = false
+    fetchAllItems<ClosureRow>('hall_closures', {
       fields: ['start_date', 'end_date', 'reason'],
       filter: { end_date: { _gte: `${startYear}-08-01` } },
     })
-      .then(setClosures)
-      .catch(() => {})
+      .then((r) => { if (!cancelled) setClosureState({ key: String(startYear), rows: r }) })
+      // A FAILED fetch must release the gate too — an empty month is a wrong
+      // frame, but a skeleton that never lifts is a worse one.
+      .catch(() => { if (!cancelled) setClosureState({ key: String(startYear), rows: EMPTY_CLOSURES }) })
+    return () => { cancelled = true }
   }, [startYear])
+  const closures = closureState.key === closureKey ? closureState.rows : EMPTY_CLOSURES
+  const closuresPending = closureState.key !== closureKey
 
   const closedDates = useMemo(() => {
     const s = new Set<string>()
@@ -294,40 +364,50 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
   // for a team (e.g. "Keine Spiele (Daniela Imhof)"). The backend hard-blocks
   // every slot in the range, so without surfacing them here a date silently has
   // no slots and it's impossible to see why. Members can read scheduling_blocks.
-  const [blocks, setBlocks] = useState<SchedulingBlock[]>([])
+  // Per-team only — never on the all-teams overview (teamIds.length > 1); an
+  // empty key means "not applicable", which is a real none, not a pending one.
+  const teamScopeKey = teamIds.length === 1 ? `${teamIds[0]}|${startYear}` : ''
+  const [blockState, setBlockState] = useState<{ key: string; rows: SchedulingBlock[] }>({ key: '', rows: EMPTY_TEAM_BLOCKS })
   useEffect(() => {
-    // Per-team only — never on the all-teams overview (teamIds.length > 1).
-    if (teamIds.length !== 1) return
+    if (!teamScopeKey) return
     let cancelled = false
     fetchAllItems<SchedulingBlock>('scheduling_blocks', {
       fields: ['id', 'team', 'start_date', 'end_date', 'reason'],
       filter: { _and: [{ team: { _in: teamIds } }, { end_date: { _gte: `${startYear}-08-01` } }] },
     })
-      .then((r) => { if (!cancelled) setBlocks(r) })
-      .catch(() => { if (!cancelled) setBlocks([]) })
+      .then((r) => { if (!cancelled) setBlockState({ key: teamScopeKey, rows: r }) })
+      .catch(() => { if (!cancelled) setBlockState({ key: teamScopeKey, rows: EMPTY_TEAM_BLOCKS }) })
     return () => { cancelled = true }
-  }, [teamIds, startYear])
+  }, [teamScopeKey, teamIds, startYear])
+  const blocks = blockState.key === teamScopeKey ? blockState.rows : EMPTY_TEAM_BLOCKS
+  const blocksPending = teamScopeKey !== '' && blockState.key !== teamScopeKey
 
   // Club-wide blocked dates (scheduling_global_blocks, superadmin blackout) — no
   // HOME games for ANY team, so they're shown on every view (not team-scoped).
   // Read via the scheduling endpoint; a non-admin viewer just gets none.
-  const [clubBlocks, setClubBlocks] = useState<{ id: number; start_date: string; end_date: string; reason: string | null }[]>([])
+  // No key to track (it fetches once), so a `loaded` flag carries the same
+  // "empty means unknown until this flips" contract. Both paths set it.
+  const [clubBlockState, setClubBlockState] = useState<{ loaded: boolean; rows: ClubBlockRow[] }>({ loaded: false, rows: EMPTY_CLUB_BLOCKS })
   useEffect(() => {
     let cancelled = false
-    kscwApi<{ blocks: { id: number; start_date: string; end_date: string; reason: string | null }[] }>('/terminplanung/admin/club-blocked-dates')
-      .then((r) => { if (!cancelled) setClubBlocks(r.blocks || []) })
-      .catch(() => { if (!cancelled) setClubBlocks([]) })
+    kscwApi<{ blocks: ClubBlockRow[] }>('/terminplanung/admin/club-blocked-dates')
+      .then((r) => { if (!cancelled) setClubBlockState({ loaded: true, rows: r.blocks || EMPTY_CLUB_BLOCKS }) })
+      .catch(() => { if (!cancelled) setClubBlockState({ loaded: true, rows: EMPTY_CLUB_BLOCKS }) })
     return () => { cancelled = true }
   }, [])
+  const clubBlocks = clubBlockState.rows
+  const clubBlocksPending = !clubBlockState.loaded
 
   // Basketball games placed at KWI this season (cross-sport hall coordination):
   // a BB game holds a court, so volleyball schedulers need to see it as "Home game
   // (BB)". Read-only + fail-soft — a non-admin viewer without basketball_slot_plan
   // read simply gets none (same pattern as clubBlocks). BB teams aren't in this
   // calendar's `teams` prop, so the team name comes from the expand / free-text label.
-  const [bbGames, setBbGames] = useState<{ id: string; date: string; time?: string | null; hall: string; team: string; opponent?: string | null }[]>([])
+  // Empty key = cross-sport is off (or there is no season) — a real none.
+  const bbKey = showCrossSport && season.id != null ? `bb|${season.id}` : ''
+  const [bbState, setBbState] = useState<{ key: string; rows: BbGameRow[] }>({ key: '', rows: EMPTY_BB_GAMES })
   useEffect(() => {
-    if (season.id == null || !showCrossSport) return
+    if (!bbKey) return
     let cancelled = false
     fetchAllItems<{ id: string; date: string; time?: string | null; hall?: string | null; opponent?: string | null; kscw_team_label?: string | null; kscw_team?: { name?: string } | null }>('basketball_slot_plan', {
       fields: ['id', 'date', 'time', 'hall', 'opponent', 'kscw_team_label', 'kscw_team.name'],
@@ -338,23 +418,25 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
     })
       .then((rows) => {
         if (cancelled) return
-        setBbGames(rows.map((r) => ({
+        setBbState({ key: bbKey, rows: rows.map((r) => ({
           id: String(r.id), date: r.date, time: r.time, hall: r.hall || '',
           team: r.kscw_team?.name || r.kscw_team_label || '', opponent: r.opponent,
-        })))
+        })) })
       })
-      .catch(() => { if (!cancelled) setBbGames([]) })
+      .catch(() => { if (!cancelled) setBbState({ key: bbKey, rows: EMPTY_BB_GAMES }) })
     return () => { cancelled = true }
-  }, [season.id, showCrossSport])
+  }, [bbKey, season.id])
+  const bbGames = bbState.key === bbKey ? bbState.rows : EMPTY_BB_GAMES
+  const bbGamesPending = bbKey !== '' && bbState.key !== bbKey
 
   // Team events that block games (a tournament weekend, a team trip). The backend
   // drops every slot whose date falls in a linked event, so they too vanish
   // silently — surface them. M2M-safe: fetch the junction first (events_teams by
   // teams_id), then the events by id (never walk the alias in a filter).
-  const [teamEvents, setTeamEvents] = useState<{ id: string; title: string; start_date: string; end_date?: string | null; teamId: string }[]>([])
+  const [teamEventState, setTeamEventState] = useState<{ key: string; rows: TeamEventRow[] }>({ key: '', rows: EMPTY_TEAM_EVENTS })
   useEffect(() => {
     // Per-team only — never on the all-teams overview (teamIds.length > 1).
-    if (teamIds.length !== 1) return
+    if (!teamScopeKey) return
     let cancelled = false
     ;(async () => {
       try {
@@ -368,36 +450,38 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
           const set = eventToTeams.get(eid) ?? new Set<string>(); set.add(tid); eventToTeams.set(eid, set)
         }
         const eventIds = [...eventToTeams.keys()]
-        if (eventIds.length === 0) { if (!cancelled) setTeamEvents([]); return }
+        if (eventIds.length === 0) { if (!cancelled) setTeamEventState({ key: teamScopeKey, rows: EMPTY_TEAM_EVENTS }); return }
         const evs = await fetchAllItems<{ id: string; title: string; start_date: string; end_date?: string | null }>('events', {
           fields: ['id', 'title', 'start_date', 'end_date'],
           filter: { _and: [{ id: { _in: eventIds } }, { start_date: { _lte: `${startYear + 1}-04-30` } }, { start_date: { _gte: `${startYear}-08-01` } }] },
         })
-        const flat: { id: string; title: string; start_date: string; end_date?: string | null; teamId: string }[] = []
+        const flat: TeamEventRow[] = []
         for (const ev of evs) {
           for (const tid of eventToTeams.get(String(ev.id)) ?? []) {
             flat.push({ id: String(ev.id), title: ev.title, start_date: ev.start_date, end_date: ev.end_date, teamId: tid })
           }
         }
-        if (!cancelled) setTeamEvents(flat)
+        if (!cancelled) setTeamEventState({ key: teamScopeKey, rows: flat })
       } catch {
-        if (!cancelled) setTeamEvents([])
+        if (!cancelled) setTeamEventState({ key: teamScopeKey, rows: EMPTY_TEAM_EVENTS })
       }
     })()
     return () => { cancelled = true }
-  }, [teamIds, startYear])
+  }, [teamScopeKey, teamIds, startYear])
+  const teamEvents = teamEventState.key === teamScopeKey ? teamEventState.rows : EMPTY_TEAM_EVENTS
+  const teamEventsPending = teamScopeKey !== '' && teamEventState.key !== teamScopeKey
 
   // The team's own trainings — the scheduling calendar is game data, but on a
   // single team's calendar the training evenings give the week its rhythm, so
   // they render as faint context chips (a training is NOT a blocker: those same
   // evenings double as the team's home-game slots). Cancelled ones are skipped.
   // Fail-soft: a viewer without `trainings` read simply gets none.
-  const [trainings, setTrainings] = useState<{ id: string; date: string; start_time?: string | null; team: string | number; hall_name?: string | null }[]>([])
+  const [trainingState, setTrainingState] = useState<{ key: string; rows: TrainingRow[] }>({ key: '', rows: EMPTY_TRAININGS })
   useEffect(() => {
     // Per-team only — never on the all-teams overview (teamIds.length > 1).
-    if (teamIds.length !== 1) return
+    if (!teamScopeKey) return
     let cancelled = false
-    fetchAllItems<{ id: string; date: string; start_time?: string | null; team: string | number; hall_name?: string | null }>('trainings', {
+    fetchAllItems<TrainingRow>('trainings', {
       fields: ['id', 'date', 'start_time', 'team', 'hall_name'],
       filter: { _and: [
         { team: { _in: teamIds } },
@@ -406,10 +490,22 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
         { date: { _lte: `${startYear + 1}-04-30` } },
       ] },
     })
-      .then((r) => { if (!cancelled) setTrainings(r) })
-      .catch(() => { if (!cancelled) setTrainings([]) })
+      .then((r) => { if (!cancelled) setTrainingState({ key: teamScopeKey, rows: r }) })
+      .catch(() => { if (!cancelled) setTrainingState({ key: teamScopeKey, rows: EMPTY_TRAININGS }) })
     return () => { cancelled = true }
-  }, [teamIds, startYear])
+  }, [teamScopeKey, teamIds, startYear])
+  const trainings = trainingState.key === teamScopeKey ? trainingState.rows : EMPTY_TRAININGS
+  const trainingsPending = teamScopeKey !== '' && trainingState.key !== teamScopeKey
+
+  // Every per-day tint / chip source above starts out UNKNOWN, and each renders
+  // its absence identically to "there is nothing here" — a closed hall as a free
+  // evening, a club blackout as a bookable day, a basketball court hold as an
+  // empty court. They all fire on mount and land within a tick of each other, so
+  // the grid waits for the set rather than reflowing three times. Every branch
+  // (including every failure) tags its state, so this always releases.
+  const dayDataPending =
+    closuresPending || clubBlocksPending || blocksPending || bbGamesPending
+    || teamEventsPending || trainingsPending || teamLinksLoading
 
   // slot id -> opponent label, from confirmed home bookings (so a booked slot
   // shows who it's against).
@@ -441,7 +537,10 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
   // absences (single team-scoped calendar); the hook no-ops on an empty id list,
   // so the season overview never fetches.
   const crossTeamIds = useMemo(() => (absenceTeamId ? [absenceTeamId] : []), [absenceTeamId])
-  const { byDate: crossTeamByDate } = useCrossTeamConflicts(crossTeamIds)
+  const { byDate: crossTeamByDate, isLoading: crossTeamLoading } = useCrossTeamConflicts(crossTeamIds)
+  // The `.length > 0` AND keeps the pending pill off the all-teams overview,
+  // where the hook no-ops (empty map there is a real none, not an unknown).
+  const crossTeamPending = crossTeamIds.length > 0 && crossTeamLoading
 
   // Per-team blockers (team blocks "no games", team events, absences, wishes) are
   // ONLY meaningful on a single team's calendar — showing them on the all-teams
@@ -454,16 +553,14 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
   // (member_teams → members) then absences by member, per the M2M-safe pattern.
   // date key -> sorted names of members unavailable that day (so a click/hover
   // can show WHO, not just how many).
-  const [absencesByDate, setAbsencesByDate] = useState<Map<string, string[]>>(() => new Map())
-  // Dropping the map when the calendar stops being team-scoped is a
-  // reset-on-input-change, so it runs during render (React's
-  // adjust-state-during-render pattern) instead of inside the fetch effect —
-  // same trigger (absenceTeamId changed), same result.
-  const [prevAbsenceTeamId, setPrevAbsenceTeamId] = useState(absenceTeamId)
-  if (prevAbsenceTeamId !== absenceTeamId) {
-    setPrevAbsenceTeamId(absenceTeamId)
-    if (!absenceTeamId) setAbsencesByDate(new Map())
-  }
+  // Tagged with the team+season it was fetched for, mirroring useCrossTeamConflicts:
+  // the walk is two sequential round trips deep, so an untagged empty map would
+  // read as "nobody on this team is away all season" for as long as it runs — the
+  // exact opposite of what the badge exists to say. Deriving the map from the tag
+  // also drops the map on its own when the calendar stops being team-scoped, so the
+  // old adjust-state-during-render reset is no longer needed.
+  const absenceKey = absenceTeamId ? `${absenceTeamId}|${startYear}` : ''
+  const [absenceState, setAbsenceState] = useState<{ key: string; byDate: Map<string, string[]> }>({ key: '', byDate: EMPTY_ABSENCES })
   useEffect(() => {
     if (!absenceTeamId) return
     let cancelled = false
@@ -473,7 +570,7 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
           fields: ['member'], filter: { team: { _eq: absenceTeamId } },
         })
         const memberIds = [...new Set(links.map((l) => relId(l.member)).filter(Boolean))]
-        if (memberIds.length === 0) { if (!cancelled) setAbsencesByDate(new Map()); return }
+        if (memberIds.length === 0) { if (!cancelled) setAbsenceState({ key: absenceKey, byDate: EMPTY_ABSENCES }); return }
         const winStart = `${startYear}-08-01`
         const winEnd = `${startYear + 1}-03-31`
         const [members, abs] = await Promise.all([
@@ -517,13 +614,17 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
         for (const [k, set] of byDate) {
           names.set(k, [...set].map((mid) => nameById.get(mid) || mid).sort((a, b) => a.localeCompare(b)))
         }
-        if (!cancelled) setAbsencesByDate(names)
+        if (!cancelled) setAbsenceState({ key: absenceKey, byDate: names })
       } catch {
-        if (!cancelled) setAbsencesByDate(new Map())
+        // A failed walk still tags the key: the badge then honestly says "none",
+        // and the day cell stays clickable, rather than pulsing for ever.
+        if (!cancelled) setAbsenceState({ key: absenceKey, byDate: EMPTY_ABSENCES })
       }
     })()
     return () => { cancelled = true }
-  }, [absenceTeamId, startYear])
+  }, [absenceKey, absenceTeamId, startYear])
+  const absencesByDate = absenceState.key === absenceKey ? absenceState.byDate : EMPTY_ABSENCES
+  const absencesPending = absenceKey !== '' && absenceState.key !== absenceKey
 
   const entries = useMemo<SchedEntry[]>(() => {
     const out: SchedEntry[] = []
@@ -999,6 +1100,9 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
         })}
       </div>
 
+      {dayDataPending ? (
+        <CalendarGridSkeleton label={t('common:loading')} />
+      ) : (
       <CalendarGrid
         month={month}
         onMonthChange={goMonth}
@@ -1017,7 +1121,12 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
           const open = openByDate.get(toDateKey(date)) || 0
           const absent = absencesByDate.get(toDateKey(date))?.length || 0
           const linkWarns = linkWarningsByDate.get(toDateKey(date))?.length || 0
-          if (items.length === 0 && open === 0 && absent === 0 && linkWarns === 0) return
+          // The cell already looks clickable (CalendarGrid derives that from the
+          // month alone), so while an overlay is still unknown a day that is about
+          // to say "3 absent" must open the detail modal — which fills in live —
+          // instead of silently swallowing the tap.
+          if (!absencesPending && !crossTeamPending
+            && items.length === 0 && open === 0 && absent === 0 && linkWarns === 0) return
           setDayDetail({ date, entries: items })
         }}
         renderDayContent={(date, items) => {
@@ -1070,14 +1179,34 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
                   {t('openCount', { count: open })}
                 </span>
               )}
-              {absentNames.length > 0 && (
-                <span className="text-[10px] text-rose-500 dark:text-rose-400" title={t('absentPlayers', { names: absentNames.join(', ') })}>
-                  {t('absentCount', { count: absentNames.length })}
-                </span>
-              )}
-              {crossTeam.length > 0 && (
-                <div className="flex">
-                  <CrossTeamBadge conflicts={crossTeam} />
+              {/* Absence + cross-team row. Stays mounted while either overlay is
+                  still unknown, so an unknown count reads as a pending pill rather
+                  than as "nobody is away" — and so the link-warning badge below it
+                  doesn't jump down when the answer lands. */}
+              {(absentNames.length > 0 || crossTeam.length > 0 || absencesPending || crossTeamPending) && (
+                <div className="flex flex-col gap-0.5">
+                  {absencesPending ? (
+                    <span
+                      role="img"
+                      aria-label={t('common:loading')}
+                      className="h-3 w-12 animate-pulse rounded-full bg-rose-100 dark:bg-rose-900/40"
+                    />
+                  ) : absentNames.length > 0 ? (
+                    <span className="text-[10px] text-rose-500 dark:text-rose-400" title={t('absentPlayers', { names: absentNames.join(', ') })}>
+                      {t('absentCount', { count: absentNames.length })}
+                    </span>
+                  ) : null}
+                  {crossTeamPending ? (
+                    <span
+                      role="img"
+                      aria-label={t('common:loading')}
+                      className="h-3 w-6 animate-pulse rounded-full bg-sky-100 dark:bg-sky-900/40"
+                    />
+                  ) : crossTeam.length > 0 ? (
+                    <div className="flex">
+                      <CrossTeamBadge conflicts={crossTeam} />
+                    </div>
+                  ) : null}
                 </div>
               )}
               {linkWarns.length > 0 && (
@@ -1103,6 +1232,7 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
           )
         }}
       />
+      )}
 
       {/* Day-detail modal — time / team / opponent / hall in a table */}
       <Modal
@@ -1158,8 +1288,19 @@ export default function SchedulingCalendar({ slots, bookings, teams, season, gam
               </div>
             )}
 
-            {/* Who is unavailable that day (single-team calendars only). */}
-            {dayRows.absent.length > 0 && (
+            {/* Who is unavailable that day (single-team calendars only). While the
+                absence walk is still running the block keeps its place with a
+                pulsing line — a day opened from a pending cell must not look like
+                a day with nobody away. */}
+            {absencesPending ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 dark:border-rose-900 dark:bg-rose-900/20">
+                <span
+                  role="img"
+                  aria-label={t('common:loading')}
+                  className="block h-3 w-48 max-w-full animate-pulse rounded bg-rose-200 dark:bg-rose-900/60"
+                />
+              </div>
+            ) : dayRows.absent.length > 0 && (
               <div className="rounded-md border border-rose-200 bg-rose-50 p-3 dark:border-rose-900 dark:bg-rose-900/20">
                 <p className="text-xs font-medium text-rose-700 dark:text-rose-300">{t('absentPlayers', { names: dayRows.absent.join(', ') })}</p>
               </div>

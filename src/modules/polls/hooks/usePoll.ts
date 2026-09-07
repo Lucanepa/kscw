@@ -128,7 +128,7 @@ export function usePollVotes(poll: Poll, canManage = false) {
   // PollCard's timing gate (managers live, everyone else after voting/close).
   const canSeeResults = canManage || resultsVisible || isCreator
 
-  const { data: votesRaw, refetch, isLoading } = useCollection<PollVote>('poll_votes', {
+  const { data: votesRaw, refetch, isLoading, isError } = useCollection<PollVote>('poll_votes', {
     filter: pollId ? { poll: { _eq: pollId } } : { id: { _eq: -1 } },
     // Expand the voter so managers can see per-member answers (non-anonymous
     // polls). Non-managers only ever receive their own vote row (poll_votes
@@ -153,20 +153,42 @@ export function usePollVotes(poll: Poll, canManage = false) {
   // live without exposing identities.
   const needsAggregate = canManage ? anonymous : canSeeResults
   const [tick, setTick] = useState(0)
-  const [aggCounts, setAggCounts] =
-    useState<{ counts: Record<number, number>; totalVotes: number } | null>(null)
+  // Stamped with the poll it belongs to and with an explicit settled status.
+  // A bare `null` used to mean BOTH "still in flight" and "the request failed"
+  // (the catch reset it), so callers could not tell a pending aggregate from a
+  // dead one — and the tally below quietly fell back to the raw rows.
+  const [agg, setAgg] = useState<
+    { pollId: string; status: 'ready' | 'error'; counts: Record<number, number>; totalVotes: number } | null
+  >(null)
+  // Derived during render, never written from the effect body: a result stamped
+  // with a different poll's id counts as "not loaded", so a poll switch can't
+  // carry the previous poll's counts over, and the effect stays free of
+  // cascading renders.
+  const aggForPoll = agg && String(agg.pollId) === String(pollId) ? agg : null
   useEffect(() => {
-    // When the aggregate doesn't apply we simply leave aggCounts untouched —
-    // getResults() gates on `needsAggregate` so a stale value is never read
-    // (and avoiding a synchronous setState here keeps the effect free of
-    // cascading renders).
+    // When the aggregate doesn't apply we simply leave `agg` untouched — the
+    // memo below gates on `needsAggregate` so a stale value is never read.
+    // A `tick` re-fetch also leaves the previous ready value in place, so a
+    // realtime vote refreshes the numbers without flashing the skeleton.
     if (!pollId || !needsAggregate) return
     let cancelled = false
     kscwApi<{ counts: Record<number, number>; totalVotes: number }>(`/polls/${pollId}/results`)
-      .then((r) => { if (!cancelled) setAggCounts({ counts: r.counts ?? {}, totalVotes: r.totalVotes ?? 0 }) })
-      .catch(() => { if (!cancelled) setAggCounts(null) })
+      .then((r) => {
+        if (!cancelled) setAgg({ pollId, status: 'ready', counts: r.counts ?? {}, totalVotes: r.totalVotes ?? 0 })
+      })
+      // 'error', not null: null is "still loading", which would hold the results
+      // skeleton up for good after a 403/500/network blip.
+      .catch(() => { if (!cancelled) setAgg({ pollId, status: 'error', counts: {}, totalVotes: 0 }) })
     return () => { cancelled = true }
   }, [pollId, needsAggregate, tick])
+
+  // Is the tally `getResults()` returns trustworthy yet, and did it fail?
+  // Both sources are covered: the raw poll_votes fetch and — for viewers served
+  // by the identity-free endpoint — the /kscw/polls/:id/results round trip.
+  // Neither gate can stick: TanStack drops `isLoading` on failure, and the
+  // aggregate always settles to 'ready' or 'error'.
+  const resultsPending = isLoading || (needsAggregate && !!pollId && aggForPoll == null)
+  const resultsError = needsAggregate ? aggForPoll?.status === 'error' : isError
 
   useRealtime<PollVote>('poll_votes', (e) => {
     if (e.record.poll === pollId) { refetch(); setTick((t) => t + 1) }
@@ -202,8 +224,19 @@ export function usePollVotes(poll: Poll, canManage = false) {
     // Aggregate path (anonymous-poll managers, visible-results non-managers):
     // return the identity-free endpoint counts. No `voters` — either anonymity
     // demands it, or the viewer isn't entitled to names in the first place.
-    if (needsAggregate && aggCounts) {
-      return { counts: aggCounts.counts, voters: {} as Record<number, Array<{ id: string; name: string }>>, totalVotes: aggCounts.totalVotes }
+    //
+    // NEVER fall through to the raw `votes` tally on this path. These viewers
+    // only ever receive their OWN vote row (poll_votes read is OWN_MEMBER), so
+    // the fallback painted a fabricated result: their option at 100% with
+    // "1 vote" once they had voted, or every bar at 0% with "0 votes" if they
+    // hadn't — and the failed-aggregate case left that on screen for good.
+    // Zeroes here are inert placeholders; callers gate on `resultsPending` /
+    // `resultsError` instead of drawing them.
+    if (needsAggregate) {
+      if (aggForPoll?.status === 'ready') {
+        return { counts: aggForPoll.counts, voters: {} as Record<number, Array<{ id: string; name: string }>>, totalVotes: aggForPoll.totalVotes }
+      }
+      return { counts: {} as Record<number, number>, voters: {} as Record<number, Array<{ id: string; name: string }>>, totalVotes: 0 }
     }
     const counts: Record<number, number> = {}
     const voters: Record<number, Array<{ id: string; name: string }>> = {}
@@ -219,9 +252,9 @@ export function usePollVotes(poll: Poll, canManage = false) {
       })
     })
     return { counts, voters, totalVotes: votes.length }
-  }, [needsAggregate, aggCounts, votes])
+  }, [needsAggregate, aggForPoll, votes])
 
   const getResults = useCallback(() => results, [results])
 
-  return { votes, myVote, isLoading, vote, getResults, canSeeResults }
+  return { votes, myVote, isLoading, resultsPending, resultsError, vote, getResults, canSeeResults }
 }

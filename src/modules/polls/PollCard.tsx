@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Clock, EyeOff, Lock, Trash2 } from 'lucide-react'
+import { AlertCircle, Clock, EyeOff, Lock, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Poll } from '../../types'
 import { formatDateZurich } from '../../utils/dateHelpers'
@@ -22,7 +22,13 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
   // on mount and nothing upstream waits for it. Until it lands `myVote` is
   // undefined, which is indistinguishable from "hasn't voted yet", so the gates
   // below hold the vote/result UI back instead of guessing "no".
-  const { myVote, isLoading: votesLoading, vote, getResults, canSeeResults } = usePollVotes(poll, canManage)
+  // `resultsPending` / `resultsError` cover the OTHER half of the tally: the
+  // identity-free aggregate from /kscw/polls/:id/results, which most viewers'
+  // numbers actually come from and which nothing used to wait for.
+  const {
+    myVote, isLoading: votesLoading, resultsPending, resultsError,
+    vote, getResults, canSeeResults,
+  } = usePollVotes(poll, canManage)
   const [selected, setSelected] = useState<number[]>([])
   // Tracks the create/update mutation itself (not the votes fetch) so a slow
   // save disables the button and a second tap can't fire a duplicate vote.
@@ -55,14 +61,25 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
   // read), a misleading "100% / 1 vote" tally. A manager who hasn't voted yet
   // still gets the result bars — made tappable below via `canVote` so they can
   // cast a vote without losing sight of the running tally.
-  //
-  // Gated on the fetch too: `canManage` alone painted the bars on frame one
-  // from an empty tally — every bar at 0%, "0 vote(s)" — which reads as
-  // "nobody has answered", not as "still loading".
-  const showResults = !votesLoading && (canManage || (canSeeResults && (hasVoted || !isOpen || deadlinePassed)))
+  const wantsResults = canManage || (canSeeResults && (hasVoted || !isOpen || deadlinePassed))
+  // Entitled ≠ ready. Both halves of the tally have to be in before any bar is
+  // drawn: this card's poll_votes fetch AND, for the viewers served by the
+  // aggregate endpoint, its round trip. `canManage` alone used to paint the bars
+  // on frame one from an empty tally — every bar at 0%, "0 vote(s)", which reads
+  // as "nobody has answered"; gating on the votes fetch alone still left the
+  // aggregate ungated, so a member who had just voted saw a tally built from
+  // their own single row — their option at 100%, "1 vote".
+  // `resultsError` is the escape hatch: a failed aggregate must not leave a
+  // skeleton up for good, and must not fall back to that own-row tally either.
+  const showResults = wantsResults && !resultsPending && !resultsError
   // Managers see per-member answers (who picked what) — but only on
   // non-anonymous polls. An anonymous poll stays totals-only even for managers.
   const showVoters = canManage && !poll.anonymous
+  // Rows whose shape is known but whose numbers aren't: keep the shape, go
+  // dimmed. Deliberately skipped while the viewer can still cast a vote — a
+  // live ballot is honest and actionable, and stranding it behind the tally's
+  // spinner would be the worse bug.
+  const optionsPending = votesLoading || (wantsResults && resultsPending && !canVote)
 
   const { counts, voters, totalVotes } = getResults()
 
@@ -162,11 +179,12 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
 
       {/* Options */}
       <div className="space-y-2">
-        {/* Votes in flight: the option text is prop data and correct on frame
-            one, but whether it's selected, whether it's the member's answer and
-            whether tapping it does anything are not — so the rows keep their
-            shape and go dimmed + disabled instead of impersonating a ballot. */}
-        {votesLoading && poll.options.map((option, idx) => (
+        {/* Tally in flight: the option text is prop data and correct on frame
+            one, but whether it's selected, whether it's the member's answer, how
+            many picked it and whether tapping it does anything are not — so the
+            rows keep their shape and go dimmed + disabled instead of
+            impersonating a ballot or a result. */}
+        {optionsPending && poll.options.map((option, idx) => (
           <button
             key={idx}
             type="button"
@@ -176,7 +194,7 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
             {option}
           </button>
         ))}
-        {!votesLoading && poll.options.map((option, idx) => {
+        {!optionsPending && poll.options.map((option, idx) => {
           const count = counts[idx] || 0
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
           const isSelected = selected.includes(idx)
@@ -279,6 +297,15 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
         })}
       </div>
 
+      {/* The tally couldn't be loaded. Say so — the alternative was falling back
+          to the viewer's own vote row, which reads as "100% / 1 vote". */}
+      {wantsResults && resultsError && (
+        <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+          <AlertCircle className="h-3.5 w-3.5" />
+          <span>{t('common:error')}</span>
+        </div>
+      )}
+
       {/* Manager-only results: tell the voter why there's no tally. */}
       {!canSeeResults && hasVoted && (
         <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
@@ -321,11 +348,16 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {canSeeResults
-            ? (votesLoading
-                // Never "0 vote(s)" from a tally that hasn't loaded — a chip of
-                // the same height so the row doesn't jump when it does.
+            ? (resultsPending
+                // Never "0 vote(s)" / "1 vote" from a tally that hasn't loaded —
+                // and for most viewers that tally is the aggregate, not the
+                // poll_votes fetch this used to wait on. A chip of the same
+                // height, so the row doesn't jump when the number lands.
                 ? <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-                : t('votes', { count: totalVotes }))
+                : resultsError
+                  // Failed: no number at all rather than an own-row count.
+                  ? ''
+                  : t('votes', { count: totalVotes }))
             : ''}
         </span>
 

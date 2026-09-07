@@ -27,7 +27,7 @@ export default function PaymentLedgerModal({ invoice, onClose, onChanged }: {
 }) {
   const { t } = useTranslation('finance')
   const confirm = useConfirm()
-  const { data: payments, refetch } = useInvoicePayments(invoice?.id)
+  const { data: payments, refetch, isLoading, isError, isPlaceholderData } = useInvoicePayments(invoice?.id)
   const [entryType, setEntryType] = useState<PaymentEntryType>('payment')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState('cash')
@@ -61,7 +61,12 @@ export default function PaymentLedgerModal({ invoice, onClose, onChanged }: {
   }
 
   const typeLabel = (x: string) => ({ payment: t('payTypePayment'), credit_note: t('payTypeCredit'), refund: t('payTypeRefund'), writeoff: t('payTypeWriteoff') }[x] ?? x)
-  const rows = payments ?? []
+  // The ledger fetch starts when the modal opens, and the global keepPreviousData default
+  // (src/lib/query.tsx) hands back the PREVIOUS invoice's rows on the next open — either way
+  // the ledger below would claim something untrue about this invoice. isError releases the
+  // gate so a failed fetch can never strand the block in a permanent skeleton.
+  const ledgerPending = !isError && (isLoading || isPlaceholderData)
+  const rows = ledgerPending ? [] : (payments ?? [])
 
   return (
     <Modal open={!!invoice} onClose={onClose} title={t('payLedgerTitle')}>
@@ -118,10 +123,10 @@ export default function PaymentLedgerModal({ invoice, onClose, onChanged }: {
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           {/* Ledger */}
-          {rows.length === 0 ? (
+          {rows.length === 0 && !ledgerPending ? (
             <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">{t('payNoEntries')}</p>
           ) : (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700" aria-busy={ledgerPending}>
               <Table>
                 <TableHeader>
                   <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
@@ -132,6 +137,14 @@ export default function PaymentLedgerModal({ invoice, onClose, onChanged }: {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {ledgerPending && [0, 1].map((i) => (
+                    <TableRow key={`sk-${i}`} className="border-gray-200 dark:border-gray-700">
+                      <TableCell><div className="h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" /></TableCell>
+                      <TableCell><div className="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700" /></TableCell>
+                      <TableCell><div className="ml-auto h-4 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" /></TableCell>
+                      <TableCell><div className="ml-auto h-7 w-7 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" /></TableCell>
+                    </TableRow>
+                  ))}
                   {rows.map((p) => (
                     <TableRow key={p.id} className="border-gray-200 dark:border-gray-700">
                       <TableCell className="whitespace-nowrap text-gray-900 dark:text-gray-100">{p.payment_date ? formatDateCompactZurich(p.payment_date) : '–'}</TableCell>

@@ -61,7 +61,7 @@ export default function ParticipationSummary({
   const { t } = useTranslation('participation')
 
   const skipFetch = !!prefetched
-  const { data: fetchedRaw, isLoading, refetch } = useCollection<Participation>('participations', {
+  const { data: fetchedRaw, isLoading, isError, isPlaceholderData, refetch } = useCollection<Participation>('participations', {
     filter: activityId
       ? { _and: [{ activity_type: { _eq: activityType } }, { activity_id: { _eq: activityId } }] }
       : { id: { _eq: -1 } },
@@ -87,19 +87,32 @@ export default function ParticipationSummary({
   // participations row (FK to members), so fetch them separately and add to confirmed.
   const isMixedTournament = activityType === 'event' && String(activityId) === MIXED_TOURNAMENT_EVENT_ID
   const [extraConfirmed, setExtraConfirmed] = useState(0)
+  // Seeded TRUE for the mixed tournament so the FIRST paint is already "pending".
+  // The effect below only runs after that paint, so without this the green tally
+  // always rendered the members-only headcount as a settled number and then jumped
+  // once the non-member signups landed. Worse on a remount: the participations come
+  // back from the TanStack cache instantly while this count — plain component state,
+  // uncached — restarts at 0, so the wrong number arrives faster than the right one.
+  const [extraLoading, setExtraLoading] = useState(isMixedTournament)
   // Reset the add-on count when the activity stops being the mixed tournament.
   // Adjust-state-during-render instead of a synchronous setState in the effect.
   const [prevIsMixed, setPrevIsMixed] = useState(isMixedTournament)
   if (prevIsMixed !== isMixedTournament) {
     setPrevIsMixed(isMixedTournament)
     setExtraConfirmed(0)
+    setExtraLoading(isMixedTournament)
   }
   useEffect(() => {
+    // Deliberately no setState for the non-mixed case: the adjust-during-render block
+    // above has already put `extraLoading` at false, and a synchronous setState in an
+    // effect body is both an eslint error here and an extra render.
     if (!isMixedTournament) return
     let cancelled = false
     kscwApi<{ count: number }>('/public/mixed-tournament/non-member-count')
-      .then((r) => { if (!cancelled) setExtraConfirmed(r?.count ?? 0) })
-      .catch(() => { /* silent — count stays at 0 */ })
+      .then((r) => { if (!cancelled) { setExtraConfirmed(r?.count ?? 0); setExtraLoading(false) } })
+      // Release the gate on failure too. A tally short by the non-member signups is
+      // bad; a placeholder that never resolves is worse.
+      .catch(() => { if (!cancelled) setExtraLoading(false) })
     return () => { cancelled = true }
   }, [isMixedTournament])
 
@@ -157,17 +170,32 @@ export default function ParticipationSummary({
   const confirmedTotal = confirmed + allGuests + extraConfirmed
   const hasGuestBreakdown = allGuests > 0
 
-  // `bars` sits in the middle of a layout (under the RSVP buttons in the game
-  // detail panel, in the card's footer row), so the placeholder has to occupy the
-  // same footprint as the real counters — swapping a one-character "…" for three
-  // rectangles reflows everything below it once the fetch lands. Render the boxes
-  // greyed instead: they appear with the rest of the UI and fill in on arrival.
-  if (bars && isLoading && data.length === 0) return <ParticipationBarsSkeleton />
+  // Has every source these counters are summed from actually landed?
+  //  • the participations query — skipped entirely when the rows arrive as a prop
+  //  • the SAME query on a changed key: `placeholderData: keepPreviousData` is a
+  //    global default (src/lib/query.tsx), so a modal swapped onto another activity
+  //    gets the PREVIOUS activity's rows — plausible, settled-looking, and wrong
+  //  • the non-member add-on above, which is 0 until its own fetch resolves
+  // Two escape hatches, both mandatory: `isError`, because TanStack reports
+  // `isLoading === false` on a failed fetch while `data` stays undefined (a gate
+  // without it swaps a wrong number for a PERMANENT placeholder), and `activityId`,
+  // because the query is disabled without one so nothing is ever coming.
+  const listPending = !!activityId && !skipFetch && !isError && (isLoading || isPlaceholderData)
+  const countsPending = listPending || extraLoading
 
-  // Don't hide during loading — only hide when fetch completed with no data.
-  // `alwaysShow` keeps the counters visible (0/0/0) even for empty activities.
-  if (!alwaysShow && data.length === 0 && extraConfirmed === 0 && !isLoading) return null
-  if (!alwaysShow && data.length === 0 && extraConfirmed === 0) return <span className="text-xs text-gray-400">…</span>
+  // "Not loaded" must not be paintable as "these are the numbers". `bars` sits in the
+  // middle of a layout (under the RSVP buttons in the game detail panel, in the card's
+  // footer row), so its placeholder has to occupy the same footprint as the real
+  // counters — swapping a one-character "…" for three rectangles reflows everything
+  // below it once the fetch lands. The inline variants have no such footprint to hold,
+  // so they keep this component's existing pending idiom.
+  if (countsPending) {
+    return bars ? <ParticipationBarsSkeleton /> : <span className="text-xs text-gray-400">…</span>
+  }
+
+  // Everything resolved with nothing to show. `alwaysShow` keeps the counters
+  // visible (0/0/0) even for empty activities.
+  if (!alwaysShow && data.length === 0 && extraConfirmed === 0) return null
 
   if (bars) {
     return (

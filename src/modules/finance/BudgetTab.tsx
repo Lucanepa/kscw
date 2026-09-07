@@ -15,9 +15,26 @@ export default function BudgetTab({ rows, fiscalYearId, fiscalYearLabel }: {
   rows: BudgetRow[]; fiscalYearId: string; fiscalYearLabel: string
 }) {
   const { t, i18n } = useTranslation('finance')
-  const { data: budgetRaw, refetch } = useFinanceBudget(fiscalYearId, !!fiscalYearId)
+  const { data: budgetRaw, isLoading: budgetLoading, isError: budgetError, isPlaceholderData: budgetStale, refetch } =
+    useFinanceBudget(fiscalYearId, !!fiscalYearId)
   const [edit, setEdit] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
+
+  // `budgetOf()` falls back to 0 for an account with no line, so a not-yet-loaded
+  // budget is indistinguishable from "budgeted nothing": every cell paints empty and
+  // every variance paints the FULL actual (green income / red expense) before the
+  // real figures land. Hold the budget + variance cells until the lines are here.
+  //  - `budgetRaw === undefined` covers the frame right after `enabled` flips true,
+  //    where react-query still reports isLoading=false (same gotcha as FinancePage's
+  //    boot flag).
+  //  - `isPlaceholderData` is load-bearing: src/lib/query.tsx defaults to
+  //    keepPreviousData, so switching fiscal year serves the PREVIOUS year's budget
+  //    lines against this year's actuals — stale but entirely plausible.
+  //  - `!budgetError` is the escape hatch: on a failed fetch `data` stays undefined
+  //    forever, and a gate without it would strand the inputs behind a permanent
+  //    skeleton. On error we fall through to the old behaviour.
+  //  - a disabled query (no fiscal year) is not "pending" — there is nothing to load.
+  const budgetPending = !!fiscalYearId && !budgetError && (budgetLoading || budgetStale || budgetRaw === undefined)
 
   const budgetByAccount = useMemo(() => {
     const m = new Map<string, number>()
@@ -28,9 +45,16 @@ export default function BudgetTab({ rows, fiscalYearId, fiscalYearLabel }: {
   const income = rows.filter((r) => r.type === 'income')
   const expense = rows.filter((r) => r.type === 'expense')
   const budgetOf = (id: string | number) => budgetByAccount.get(String(id)) ?? 0
+  // Keyed per fiscal year: `edit` outlives a save and would otherwise override the
+  // next year's freshly loaded budget with last year's typed string — and commit it.
+  const editKey = (id: string | number) => `${fiscalYearId}:${id}`
   const variance = (r: BudgetRow) => r.type === 'expense' ? budgetOf(r.id) - r.bal : r.bal - budgetOf(r.id) // positive = favourable
 
   async function save(r: BudgetRow, raw: string) {
+    // The `val === budgetOf(r.id)` no-op guard below is only meaningful once the
+    // stored lines are here — against a not-yet-loaded baseline of 0 the same blur
+    // is either a silent no-op or an overwrite of a real budget.
+    if (budgetPending) return
     const val = Math.round(Number(raw.replace(',', '.')) * 100) / 100
     if (!Number.isFinite(val) || val === budgetOf(r.id)) return
     setSavingId(String(r.id))
@@ -41,6 +65,7 @@ export default function BudgetTab({ rows, fiscalYearId, fiscalYearLabel }: {
   }
 
   function exportCsv() {
+    if (budgetPending) return
     // Export headers always English regardless of UI locale (export convention).
     const tEn = i18n.getFixedT('en', 'finance')
     const line = (r: BudgetRow) => [r.number, r.name, toNum(budgetOf(r.id)).toFixed(2), r.bal.toFixed(2), variance(r).toFixed(2)]
@@ -82,18 +107,29 @@ export default function BudgetTab({ rows, fiscalYearId, fiscalYearLabel }: {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       {savingId === String(r.id) && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
-                      <input
-                        inputMode="decimal"
-                        value={edit[String(r.id)] ?? (budgetOf(r.id) ? String(budgetOf(r.id)) : '')}
-                        onChange={(e) => setEdit((p) => ({ ...p, [String(r.id)]: e.target.value }))}
-                        onBlur={(e) => save(r, e.target.value)}
-                        placeholder="0.00"
-                        className="w-24 rounded-md border border-gray-200 bg-transparent px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                      />
+                      {budgetPending ? (
+                        // Not rendering the input is the point: an element that does not
+                        // exist cannot be focused, typed into, or blur-commit a figure the
+                        // treasurer only typed because the cell looked empty.
+                        <div aria-hidden className="h-7 w-24 animate-pulse rounded-md bg-gray-200 dark:bg-gray-700" />
+                      ) : (
+                        <input
+                          inputMode="decimal"
+                          value={edit[editKey(r.id)] ?? (budgetOf(r.id) ? String(budgetOf(r.id)) : '')}
+                          onChange={(e) => setEdit((p) => ({ ...p, [editKey(r.id)]: e.target.value }))}
+                          onBlur={(e) => save(r, e.target.value)}
+                          placeholder="0.00"
+                          className="w-24 rounded-md border border-gray-200 bg-transparent px-2 py-1 text-right text-sm tabular-nums outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        />
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-gray-900 dark:text-gray-100">{formatChf(r.bal)}</TableCell>
-                  <TableCell className={`hidden sm:table-cell text-right tabular-nums ${v >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{formatChf(v)}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-right tabular-nums">
+                    {budgetPending
+                      ? <div aria-hidden className="ml-auto h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                      : <span className={v >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>{formatChf(v)}</span>}
+                  </TableCell>
                 </TableRow>
               )
             })}
@@ -108,11 +144,20 @@ export default function BudgetTab({ rows, fiscalYearId, fiscalYearLabel }: {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-gray-500 dark:text-gray-400">{t('budgetHint', { year: fiscalYearLabel })}</p>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={exportCsv}
-            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+          <button type="button" onClick={exportCsv} disabled={budgetPending}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-transparent dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 dark:disabled:hover:bg-transparent">
             <Download className="h-4 w-4" />{t('exportCsv')}
           </button>
-          <ReportExportMenu build={budgetReport} filename={`budget-${fiscalYearLabel || fiscalYearId}`} />
+          {/* A PDF/XLSX built in the zero-budget frame outlives the frame — same button,
+              disabled, rather than a menu that would export the wrong figures. */}
+          {budgetPending ? (
+            <button type="button" disabled
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 opacity-50 dark:border-gray-600 dark:text-gray-200">
+              <Download className="h-4 w-4" />{t('export')}
+            </button>
+          ) : (
+            <ReportExportMenu build={budgetReport} filename={`budget-${fiscalYearLabel || fiscalYearId}`} />
+          )}
         </div>
       </div>
       {income.length > 0 && section(t('income'), income)}

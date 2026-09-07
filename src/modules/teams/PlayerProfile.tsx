@@ -23,13 +23,26 @@ import { useReportPageLoading } from '../../hooks/usePageReady'
 
 type ExpandedMemberTeam = MemberTeam & { team: Team | string }
 
+type Attendance = { total: number; present: number }
+
+/**
+ * Identity of an attendance batch: the member and the exact set of active teams
+ * it was computed from. A stored batch whose key no longer matches the render
+ * is not an answer about this player — it is either stale (route switched to
+ * another member without a remount) or absent (the fan-out has not resolved
+ * yet), and both must render as "still loading", never as "—".
+ */
+function statsBatchKey(memberId: string | undefined, memberTeams: ExpandedMemberTeam[]): string {
+  return `${memberId ?? ''}|${memberTeams.map((mt) => relId(mt.team)).join(',')}`
+}
+
 /** Count confirmed attendance vs excused (covering absence) across activities. */
 function computeAttendance(
   activities: Array<{ id: string; date: string }>,
   participations: Participation[],
   seasonAbsences: Absence[],
   activityType: Participation['activity_type'],
-): { total: number; present: number } {
+): Attendance {
   let present = 0
   let excused = 0
   for (const activity of activities) {
@@ -55,6 +68,7 @@ function computeAttendance(
 export default function PlayerProfile() {
   const { t } = useTranslation('teams')
   const { t: tm } = useTranslation('messaging')
+  const { t: tc } = useTranslation('common')
   const { memberId } = useParams<{ memberId: string }>()
   const [searchParams] = useSearchParams()
   const fromTeam = searchParams.get('from')
@@ -94,8 +108,19 @@ export default function PlayerProfile() {
   })
   const absences = absencesRaw ?? []
 
-  const [trainingStats, setTrainingStats] = useState<{ total: number; present: number } | null>(null)
-  const [gameStats, setGameStats] = useState<{ total: number; present: number } | null>(null)
+  // The attendance batch below is fetched by an effect, so it is NEVER present
+  // on the first painted frame — the same commit that lifts the boot gate is the
+  // one that schedules the four requests. Storing it under the key it was
+  // computed for (member + active teams) is what lets the render tell "not
+  // loaded yet" apart from "genuinely none": a missing or mismatched key is a
+  // skeleton, `status: 'error'` is a failure, and only a matching ready batch
+  // may print a ratio. `null` no longer means four different things at once.
+  const [statsBatch, setStatsBatch] = useState<{
+    key: string
+    status: 'ready' | 'error'
+    training: Attendance | null
+    games: Attendance | null
+  } | null>(null)
 
   // Re-enter the loading state when the route switches to another member (the
   // page is not remounted). `loading` already starts true, so this only fires on
@@ -120,6 +145,7 @@ export default function PlayerProfile() {
   // two effects × 3 queries with participations/absences fetched redundantly).
   useEffect(() => {
     if (!memberId || !memberTeams?.length) return
+    const key = statsBatchKey(memberId, memberTeams)
     const teamIds = memberTeams.map((mt) => relId(mt.team))
     let cancelled = false
     Promise.all([
@@ -142,13 +168,18 @@ export default function PlayerProfile() {
         if (cancelled) return
         const trainingParts = participations.filter((p) => p.activity_type === 'training')
         const gameParts = participations.filter((p) => p.activity_type === 'game')
-        setTrainingStats(computeAttendance(trainings, trainingParts, seasonAbsences, 'training'))
-        setGameStats(computeAttendance(games, gameParts, seasonAbsences, 'game'))
+        setStatsBatch({
+          key,
+          status: 'ready',
+          training: computeAttendance(trainings, trainingParts, seasonAbsences, 'training'),
+          games: computeAttendance(games, gameParts, seasonAbsences, 'game'),
+        })
       })
       .catch(() => {
         if (cancelled) return
-        setTrainingStats(null)
-        setGameStats(null)
+        // A failed batch is still an ANSWER — it releases the skeleton and says
+        // so. Leaving it pending would strand three tiles on a spinner forever.
+        setStatsBatch({ key, status: 'error', training: null, games: null })
       })
     return () => { cancelled = true }
   }, [memberId, memberTeams, start, end])
@@ -166,6 +197,20 @@ export default function PlayerProfile() {
 
   const initials = `${memberFirstName(member)[0] ?? ''}${member.last_name?.[0] ?? ''}`.toUpperCase()
   const positions = coercePositions(member.position)
+
+  // A member on no ACTIVE team is a real answer, not a pending one: the effect
+  // never runs for them and the `_in: []` filters would have matched nothing
+  // anyway — so they read 0/0 immediately rather than waiting on a request that
+  // is never made. Everyone else is pending until a batch keyed to THIS member
+  // and THIS team set has landed, which is also what stops a route switch from
+  // painting the previous player's numbers under the new player's name.
+  const teamless = memberTeams.length === 0
+  const batch = statsBatch?.key === statsBatchKey(memberId, memberTeams) ? statsBatch : null
+  const statsPending = !teamless && batch === null
+  const statsFailed = batch?.status === 'error'
+  const trainingStats: Attendance | null = teamless ? { total: 0, present: 0 } : (batch?.training ?? null)
+  const gameStats: Attendance | null = teamless ? { total: 0, present: 0 } : (batch?.games ?? null)
+
   const trainingPct = trainingStats && trainingStats.total > 0
     ? Math.round((trainingStats.present / trainingStats.total) * 100)
     : null
@@ -339,24 +384,32 @@ export default function PlayerProfile() {
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
             label={t('trainingsAttended')}
-            value={trainingStats ? `${trainingStats.present}/${trainingStats.total}` : '—'}
+            value={trainingStats ? `${trainingStats.present}/${trainingStats.total}` : statsFailed ? tc('error') : '—'}
             sub={trainingPct !== null ? `${trainingPct}%` : undefined}
             icon={<TrendingUp className="h-4 w-4" />}
             color="brand"
+            loading={statsPending}
+            muted={statsFailed}
           />
           <StatCard
             label={t('gamesAttended')}
-            value={gameStats ? `${gameStats.present}/${gameStats.total}` : '—'}
+            value={gameStats ? `${gameStats.present}/${gameStats.total}` : statsFailed ? tc('error') : '—'}
             sub={gamePct !== null ? `${gamePct}%` : undefined}
             icon={<TrendingUp className="h-4 w-4" />}
             color="emerald"
+            loading={statsPending}
+            muted={statsFailed}
           />
+          {/* The red flag is a claim about a loaded number — never let it appear
+              (or vanish) under the reader while the batch is still in flight. */}
           <StatCard
             label={t('trainingRate')}
-            value={trainingPct !== null ? `${trainingPct}%` : '—'}
+            value={trainingPct !== null ? `${trainingPct}%` : statsFailed ? tc('error') : '—'}
             icon={<TrendingUp className="h-4 w-4" />}
             color="amber"
-            highlight={trainingPct !== null && trainingPct < 50}
+            highlight={!statsPending && trainingPct !== null && trainingPct < 50}
+            loading={statsPending}
+            muted={statsFailed}
           />
           <StatCard
             label={currentlyAbsent ? t('currentlyAbsent') : soonAbsent ? t('soonAbsent') : t('activeAbsences')}
@@ -404,6 +457,8 @@ function StatCard({
   icon,
   color,
   highlight,
+  loading,
+  muted,
 }: {
   label: string
   value: string
@@ -411,6 +466,14 @@ function StatCard({
   icon: React.ReactNode
   color: 'brand' | 'emerald' | 'amber' | 'red'
   highlight?: boolean
+  /**
+   * The number behind this tile has not arrived yet. The value slot becomes a
+   * skeleton of exactly the line's height, so the tile keeps its size and an
+   * unloaded stat can never be misread as "no attendance on record".
+   */
+  loading?: boolean
+  /** The value is a message (a failed fetch), not a figure — render it as prose. */
+  muted?: boolean
 }) {
   const iconColors = {
     brand: 'text-brand-500 bg-brand-50 dark:bg-brand-900/30 dark:text-brand-400',
@@ -422,7 +485,7 @@ function StatCard({
   return (
     <div
       className={`rounded-lg border p-3 sm:p-4 ${
-        highlight
+        highlight && !loading
           ? 'border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-900/10'
           : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
       }`}
@@ -434,9 +497,28 @@ function StatCard({
         <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       </div>
       <div className="mt-2 flex items-baseline gap-1.5">
-        <p className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100">{value}</p>
-        {sub && (
-          <span className="text-sm text-gray-400 dark:text-gray-500">{sub}</span>
+        {loading ? (
+          // h-7 / sm:h-8 matches the value line's height exactly — the tile does
+          // not resize when the real figure lands.
+          <span
+            aria-hidden="true"
+            className="inline-block h-7 w-16 animate-pulse rounded bg-gray-200 sm:h-8 dark:bg-gray-700"
+          />
+        ) : (
+          <>
+            <p
+              className={
+                muted
+                  ? 'text-sm font-medium leading-7 text-gray-500 sm:leading-8 dark:text-gray-400'
+                  : 'text-xl font-bold text-gray-900 sm:text-2xl dark:text-gray-100'
+              }
+            >
+              {value}
+            </p>
+            {sub && (
+              <span className="text-sm text-gray-400 dark:text-gray-500">{sub}</span>
+            )}
+          </>
         )}
       </div>
     </div>

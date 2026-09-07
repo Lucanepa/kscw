@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '@/components/Modal'
 import LocationCombobox from '@/components/LocationCombobox'
 import { useAuth } from '../../hooks/useAuth'
 import { useAdminMode } from '../../hooks/useAdminMode'
 import { useMutation } from '../../hooks/useMutation'
-import { useCollection } from '../../lib/query'
+import { useCollection, useItem } from '../../lib/query'
 import { logActivity } from '../../utils/logActivity'
 import { parseRespondByTime, toUtcIsoFromDatetimeLocal, todayLocal } from '../../utils/dateHelpers'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { MeetingTimeSelect } from '@/components/MeetingTimeSelect'
 import type { Training, Team, Hall, HallSlot, SlotClaim, TeamSettings } from '../../types'
 import type { RecurringEditScope } from './RecurringEditDialog'
-import { fetchAllItems, fetchItem, updateRecord, flattenM2MTeams } from '../../lib/api'
+import { fetchAllItems, updateRecord, flattenM2MTeams } from '../../lib/api'
 import { asObj, relId } from '../../utils/relations'
 
 // day_of_week in DB: 0=Mon, 1=Tue, ..., 6=Sun
@@ -84,7 +84,6 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
   const [excludedGuestLevels, setExcludedGuestLevels] = useState<number[]>([])
   const [respondByDefaultDays, setRespondByDefaultDays] = useState<number | null>(null)
   const [autoConfirmRsvp, setAutoConfirmRsvp] = useState<boolean | null>(null)
-  const [teamAutoConfirmDefault, setTeamAutoConfirmDefault] = useState(false)
   const [isTrial, setIsTrial] = useState(false)
   const [meetingOffset, setMeetingOffset] = useState<number | null>(10)
   const [error, setError] = useState('')
@@ -94,8 +93,11 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
   const [slotMode, setSlotMode] = useState<'auto' | 'manual'>('auto')
   const [selectedSlotKey, setSelectedSlotKey] = useState('')
 
-  // Track the teamId for which defaults were last applied (new training only)
-  const defaultsAppliedForTeam = useRef<string | null>(null)
+  // Track the teamId whose policy defaults were last applied (new training only).
+  // State, not a ref: the apply step below runs during render (adjust-state-during-
+  // render, like the other seeding in this file), and the create-mode reseed has to
+  // be able to clear it from render too.
+  const [appliedDefaultsForTeam, setAppliedDefaultsForTeam] = useState<string | null>(null)
 
   // The team's recurring training slots + its active claims. These were two
   // `fetchAllItems` calls in an un-flagged effect writing `useState<[]>`, so an
@@ -135,46 +137,44 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
   const slotsLoading =
     !!teamId && (slotsFetching || claimsFetching || slotsPending || claimsPending || slotsStale || claimsStale)
 
-  // Pre-fill defaults from team settings when creating a new training and teamId changes
-  useEffect(() => {
-    // Only apply defaults for new trainings (not edits)
-    if (training) return
-    if (!teamId) return
-    // Don't re-apply for the same team
-    if (defaultsAppliedForTeam.current === teamId) return
+  // The selected team's attendance policy (min participants, auto-cancel,
+  // require-note, respond-by offset, auto-confirm). These were two raw
+  // `fetchItem` calls in un-flagged effects writing straight into form state, so
+  // for the whole round trip the create form asserted a policy the team may not
+  // have: min participants empty ("no minimum"), require-note off ("no note
+  // needed"), the auto-cancel switch absent ENTIRELY (it is gated on min > 0, so
+  // it inserted itself a row above the notes once the real min landed) and the
+  // auto-confirm hint reading "(Off)". A keyed query is what makes "not loaded"
+  // tellable from "this team has no such rule".
+  const {
+    data: teamDefaultsRow,
+    error: teamDefaultsError,
+    isError: teamDefaultsFailed,
+    isPlaceholderData: teamDefaultsStale,
+  } = useItem<{ features_enabled: TeamSettings | null }>('teams', teamId || null, {
+    fields: ['features_enabled'],
+  })
 
-    defaultsAppliedForTeam.current = teamId
-    fetchItem<{ features_enabled: TeamSettings }>('teams', teamId, { fields: ['features_enabled'] })
-      .then((team) => {
-        const s = team.features_enabled ?? {}
-        if (s.training_min_participants !== undefined) {
-          setMinParticipants(String(s.training_min_participants))
-        }
-        if (s.training_auto_cancel_on_min !== undefined) {
-          setAutoCancelOnMin(s.training_auto_cancel_on_min)
-        }
-        if (s.training_require_note_if_absent !== undefined) {
-          setRequireNoteIfAbsent(s.training_require_note_if_absent)
-        }
-        // respond_by is a date in TrainingForm — store days offset for use when date is set
-        if (s.training_respond_by_days !== undefined) {
-          setRespondByDefaultDays(s.training_respond_by_days)
-        }
-        setTeamAutoConfirmDefault(s.training_auto_confirm === true)
-      })
-      .catch(() => { /* silently ignore */ })
-  }, [teamId, training])
-
-  // For edit mode: load team default so the hint label is correct
-  useEffect(() => {
-    if (!training || !teamId) return
-    fetchItem<{ features_enabled: TeamSettings }>('teams', teamId, { fields: ['features_enabled'] })
-      .then((team) => {
-        const s = team.features_enabled ?? {}
-        setTeamAutoConfirmDefault(s.training_auto_confirm === true)
-      })
-      .catch(() => { /* silent */ })
-  }, [training, teamId])
+  // ⚠ `isError` is the escape hatch, not decoration: TanStack leaves `data`
+  // undefined on a FAILED fetch, so gating on `data === undefined` alone would
+  // never release — a dropped request would strand the Save button behind a
+  // permanent placeholder. On failure we fall back to the blanks (the same
+  // fail-open the old `.catch(() => {})` had) and say so under the row.
+  // ⚠ `isPlaceholderData` is load-bearing: src/lib/query.tsx:83 sets
+  // `placeholderData: keepPreviousData` GLOBALLY, so on a team A→B switch this
+  // query hands back team A's `features_enabled` — the previous team's policy,
+  // which would otherwise be applied to (and saved on) B's training.
+  const teamDefaultsLoading =
+    !!teamId && !teamDefaultsFailed && (teamDefaultsRow === undefined || teamDefaultsStale)
+  // The settings we are allowed to act on — never the previous team's, never
+  // "unknown" dressed up as `{}`.
+  const teamSettings = teamDefaultsLoading ? undefined : teamDefaultsRow?.features_enabled
+  // Derived, not state: the edit-mode effect that used to keep this in state
+  // painted the hint as "(Off)" until its own round trip landed.
+  const teamAutoConfirmDefault = teamSettings?.training_auto_confirm === true
+  // Only the CREATE form seeds these controls from the team; in edit mode they
+  // come from the training row itself and are already correct on first paint.
+  const policyDefaultsLoading = !training && teamDefaultsLoading
 
   // Build matching slot options for the selected date
   const slotOptions = useMemo<SlotOption[]>(() => {
@@ -316,7 +316,7 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
       setExcludedGuestLevels([])
       setRespondByDefaultDays(null)
       setAutoConfirmRsvp(null)
-      setTeamAutoConfirmDefault(false)
+      setAppliedDefaultsForTeam(null)
       setIsTrial(defaultIsTrial)
       setSlotMode('auto')
       setSelectedSlotKey('')
@@ -324,14 +324,30 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
     setError('')
   }
 
-  // The create-mode half of the seeding above also cleared the "defaults already
-  // applied" guard. That is a ref write, which must not happen during render, so
-  // it stays in an effect — placed exactly where the old seeding effect was, so
-  // it still runs AFTER the team-defaults effect within the same commit (the
-  // original ordering: the guard was only observed as cleared on the next pass).
-  useEffect(() => {
-    if (!training) defaultsAppliedForTeam.current = null
-  }, [training, open])
+  // The create-mode half of the seeding above blanks the four policy fields, so
+  // they are re-seeded from the team's own settings here — adjust-state-during-
+  // render, guarded per team exactly like the old effect's ref. It fires only
+  // once `teamSettings` is defined, so it can never write "not loaded yet" and
+  // never the previous team's policy over the new team's form. Placed after the
+  // seeding block on purpose: within a pass the blanks are queued first and
+  // these land on top, and the reseed clears the guard so a reopened form gets
+  // the policy applied again instead of keeping the blanks.
+  if (!training && teamId && teamSettings && appliedDefaultsForTeam !== teamId) {
+    setAppliedDefaultsForTeam(teamId)
+    if (teamSettings.training_min_participants !== undefined) {
+      setMinParticipants(String(teamSettings.training_min_participants))
+    }
+    if (teamSettings.training_auto_cancel_on_min !== undefined) {
+      setAutoCancelOnMin(teamSettings.training_auto_cancel_on_min)
+    }
+    if (teamSettings.training_require_note_if_absent !== undefined) {
+      setRequireNoteIfAbsent(teamSettings.training_require_note_if_absent)
+    }
+    // respond_by is a date in TrainingForm — store days offset for use when date is set
+    if (teamSettings.training_respond_by_days !== undefined) {
+      setRespondByDefaultDays(teamSettings.training_respond_by_days)
+    }
+  }
 
   // When a date is selected on a new training, apply respond_by offset from team
   // defaults. Adjust-state-during-render on the same three values the old effect
@@ -647,13 +663,23 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
         })()}
 
         <div className="grid grid-cols-2 gap-4">
-          <FormInput
-            label={t('minParticipants')}
-            type="number"
-            value={minParticipants}
-            onChange={(e) => setMinParticipants(e.target.value)}
-            min={0}
-          />
+          {/* An empty box here is a statement — "this team has no minimum" — and
+              it is the one the team's own minimum overwrites a moment later. Show
+              the field's footprint instead until the policy has actually landed.
+              Max participants has no team default, so it is never gated. */}
+          {policyDefaultsLoading ? (
+            <FormField label={t('minParticipants')}>
+              <div className="h-11 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" aria-hidden="true" />
+            </FormField>
+          ) : (
+            <FormInput
+              label={t('minParticipants')}
+              type="number"
+              value={minParticipants}
+              onChange={(e) => setMinParticipants(e.target.value)}
+              min={0}
+            />
+          )}
           <FormInput
             label={t('maxParticipants')}
             type="number"
@@ -663,15 +689,36 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
           />
         </div>
 
+        {/* The read failing is not the same as the team having no policy: the
+            blanks below get saved onto the training, so say the club's rules
+            could not be read rather than failing open in silence. */}
+        {!training && teamDefaultsFailed && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            {tc('errorLoading')} {teamDefaultsError instanceof Error ? teamDefaultsError.message : ''}
+          </p>
+        )}
+
         <MeetingTimeSelect
           value={meetingOffset}
           onChange={setMeetingOffset}
           startClock={startTime}
         />
 
-        {minParticipants && Number(minParticipants) > 0 && (
-          <div className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <Switch checked={autoCancelOnMin} onCheckedChange={setAutoCancelOnMin} className="mt-0.5" />
+        {/* Kept mounted (dimmed, with the switch as a placeholder) while the
+            policy is in flight: this row is gated on min > 0, so a landing
+            minimum used to INSERT it here — pushing the notes, the respond-by
+            picker, the require-note switch and Save down a row under a thumb
+            already in motion. */}
+        {(policyDefaultsLoading || (!!minParticipants && Number(minParticipants) > 0)) && (
+          <div
+            className={`flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 ${policyDefaultsLoading ? 'opacity-60' : ''}`}
+            aria-busy={policyDefaultsLoading}
+          >
+            {policyDefaultsLoading ? (
+              <div className="mt-0.5 h-5 w-9 shrink-0 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+            ) : (
+              <Switch checked={autoCancelOnMin} onCheckedChange={setAutoCancelOnMin} className="mt-0.5" />
+            )}
             <div>
               <span>{t('autoCancelOnMin')}</span>
               <p className="text-xs text-gray-500 dark:text-gray-400">{t('autoCancelOnMinHint')}</p>
@@ -707,8 +754,18 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <Switch checked={requireNoteIfAbsent} onCheckedChange={setRequireNoteIfAbsent} />
+        <div
+          className={`flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 ${policyDefaultsLoading ? 'opacity-60' : ''}`}
+          aria-busy={policyDefaultsLoading}
+        >
+          {/* An off switch reads as "no note required" — a rule, not a blank. Its
+              own footprint stands in until the team's rule is known, so nothing
+              moves when the real value arrives. */}
+          {policyDefaultsLoading ? (
+            <div className="h-5 w-9 shrink-0 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+          ) : (
+            <Switch checked={requireNoteIfAbsent} onCheckedChange={setRequireNoteIfAbsent} />
+          )}
           <div>
             <span>{t('requireNoteIfAbsent', { ns: 'participation' })}</span>
             <p className="text-xs text-muted-foreground">{t('requireNoteIfAbsentHint', { ns: 'participation' })}</p>
@@ -764,7 +821,13 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
           <div>
             <span className="font-medium">{t('autoConfirmRsvp')}</span>
             <p className="text-xs text-muted-foreground">
-              {t('autoConfirmRsvpHint', { default: teamAutoConfirmDefault ? t('on', { defaultValue: 'On' }) : t('off', { defaultValue: 'Off' }) })}
+              {/* Same sentence, same height — but "(…)" instead of a flat
+                  "(Off)" while the team's default is still being read. */}
+              {t('autoConfirmRsvpHint', {
+                default: teamDefaultsLoading
+                  ? '…'
+                  : teamAutoConfirmDefault ? t('on', { defaultValue: 'On' }) : t('off', { defaultValue: 'Off' }),
+              })}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -820,7 +883,10 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
           <Button variant="ghost" type="button" onClick={onCancel}>
             {tc('cancel')}
           </Button>
-          <Button type="submit" loading={loading}>
+          {/* Create only, and released on error as well as on success: saving
+              here would write the blank policy (no minimum, no note required)
+              onto the training as if it were the team's. */}
+          <Button type="submit" loading={loading} disabled={policyDefaultsLoading}>
             {loading ? tc('saving') : tc('save')}
           </Button>
         </div>
