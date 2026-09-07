@@ -33,6 +33,7 @@ const CHANGELOG: ChangelogEntry[] = [
       {
         title: "Fixes",
         items: [
+          "The RSVP row no longer reads as unanswered while your answer is still loading.",
           "The officials on a game no longer read as \"nobody assigned\" while the screen is still loading. The heading appeared over an empty list, and if the second request failed it stayed that way.",
           "A team that is full is now refused by the contact form as full. The website already hid a full team\u2019s contact button, but a bookmarked or cached page could still reach the form; only closed basketball youth teams were being turned away.",
           "Date of birth sits left of the shirt number on the scorer\u2019s match sheet, matching the coach\u2019s roster and the order a scorer reads it in.",

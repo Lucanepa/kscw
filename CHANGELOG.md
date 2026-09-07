@@ -18,6 +18,7 @@ All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file 
 
 ### Fixes
 
+- **The RSVP row no longer reads as unanswered while your answer is still loading.**
 - **The officials on a game no longer read as "nobody assigned" while the screen is still loading.** The heading appeared over an empty list, and if the second request failed it stayed that way.
 - **A team that is full is now refused by the contact form as full.** The website already hid a full team's contact button, but a bookmarked or cached page could still reach the form; only closed basketball youth teams were being turned away.
 - **Date of birth sits left of the shirt number on the scorer's match sheet,** matching the coach's roster and the order a scorer reads it in.
