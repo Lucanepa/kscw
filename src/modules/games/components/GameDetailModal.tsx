@@ -212,7 +212,13 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   useEffect(() => {
     if (!game) return
     const exp = game as unknown as ExpandedGame
+    // Test what the modal RENDERS, not just the duty block. GAME_EXPAND already
+    // carries hall + kscw_team, but they were passengers: nothing here asked for
+    // them, so a source that expanded the duties and not the hall never triggered
+    // the re-fetch and the Venue section stayed empty for good.
     const needsExpand =
+      (game.hall && !asObj(exp.hall)) ||
+      (game.kscw_team && !asObj(exp.kscw_team)) ||
       (game.scorer_member && !asObj(exp.scorer_member)) ||
       (game.scoreboard_member && !asObj(exp.scoreboard_member)) ||
       (game.scorer_scoreboard_member && !asObj(exp.scorer_scoreboard_member)) ||

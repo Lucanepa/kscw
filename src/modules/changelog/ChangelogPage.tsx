@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.4.2'
+const APP_VERSION = '2.5.0'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,36 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.5.0',
+    date: '07.09.2026',
+    sections: [
+      {
+        title: "The match sheet checks itself",
+        items: [
+          "The match sheet now shows, next to each nominated player, whether they actually said they are coming. A green tick means confirmed, an amber mark means \"maybe\" or no answer yet, and a red cross means they declined \u2014 nominated in Volleymanager but not turning up. The Einsatzliste still decides who plays; this only checks it against the replies.",
+          "The same mark appears on the emergency bench list, where it answers the opposite question: who confirmed but was never nominated.",
+          "Where there is no Einsatzliste to check against, the column stays hidden rather than showing a row of ticks that verified nothing.",
+        ],
+      },
+      {
+        title: "Admin mode now means what it says",
+        items: [
+          "Admin powers now require admin mode to be switched on, everywhere. Fifteen places let an administrator edit any team\u2019s roster, cancel activities, open other teams\u2019 sign-up lists or export club-wide data while admin mode was off. If you are an administrator and something you could do before now seems missing, switch admin mode on.",
+          "Identity documents can now only be opened by a team\u2019s own coaches and team responsibles. Administrators were shown the button, but the documents are end-to-end encrypted and an administrator holds no key \u2014 so it could never have worked, and it reported \"0 documents downloaded\", which is the message meaning nobody had uploaded one.",
+        ],
+      },
+      {
+        title: "Fixes on the game screen",
+        items: [
+          "The buttons on a game no longer change while the screen finishes loading. For a coach the first button used to switch from the attendance list to the match sheet, with two more appearing above it \u2014 long enough that a tap could land on the wrong one.",
+          "A scorer no longer sees a \"View roster\" button that only ever opened an empty list. The match sheet is the one they need.",
+          "The venue no longer appears a moment after the rest of a game. Opened from your duty list, the hall and address were fetched only by a second request, so they filled in after the card was already on screen.",
+          "The match sheet now states the right times when it is not yet available. It claimed to open three hours before the game; it opens 40 minutes before for the scorer and earlier for the team.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.4.2',
     date: '07.09.2026',

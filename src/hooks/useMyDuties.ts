@@ -77,7 +77,10 @@ export function useMyDuties() {
 
   const { data, isLoading, refetch } = useCollection<Game & { kscw_team?: (Team & BaseRecord) | string }>('games', {
     filter,
-    fields: ['*', 'kscw_team.name', 'kscw_team.sport'],
+    // hall.* so GameDetailModal can paint Venue on first render. Without it the
+    // modal opened with an empty venue and filled it in only after its own
+    // re-fetch landed — the one visible 'still loading' block on an open modal.
+    fields: ['*', 'kscw_team.name', 'kscw_team.sport', 'hall.*'],
     sort: ['date', 'time'],
     limit: 50,
     enabled: !!memberId,

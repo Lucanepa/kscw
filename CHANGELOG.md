@@ -2,6 +2,26 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.5.0 — 2026-09-07
+
+### The match sheet checks itself
+
+- **The match sheet now shows, next to each nominated player, whether they actually said they are coming.** A green tick means confirmed, an amber mark means "maybe" or no answer yet, and a red cross means they declined — nominated in Volleymanager but not turning up. The Einsatzliste still decides who plays; this only checks it against the replies.
+- **The same mark appears on the emergency bench list, where it answers the opposite question: who confirmed but was never nominated..**
+- **Where there is no Einsatzliste to check against, the column stays hidden rather than showing a row of ticks that verified nothing..**
+
+### Admin mode now means what it says
+
+- **Admin powers now require admin mode to be switched on, everywhere.** Fifteen places let an administrator edit any team’s roster, cancel activities, open other teams’ sign-up lists or export club-wide data while admin mode was off. If you are an administrator and something you could do before now seems missing, switch admin mode on.
+- **Identity documents can now only be opened by a team’s own coaches and team responsibles.** Administrators were shown the button, but the documents are end-to-end encrypted and an administrator holds no key — so it could never have worked, and it reported "0 documents downloaded", which is the message meaning nobody had uploaded one.
+
+### Fixes on the game screen
+
+- **The buttons on a game no longer change while the screen finishes loading.** For a coach the first button used to switch from the attendance list to the match sheet, with two more appearing above it — long enough that a tap could land on the wrong one.
+- **A scorer no longer sees a "View roster" button that only ever opened an empty list.** The match sheet is the one they need.
+- **The venue no longer appears a moment after the rest of a game.** Opened from your duty list, the hall and address were fetched only by a second request, so they filled in after the card was already on screen.
+- **The match sheet now states the right times when it is not yet available.** It claimed to open three hours before the game; it opens 40 minutes before for the scorer and earlier for the team.
+
 ## v2.4.2 — 2026-09-07
 
 ### The school’s hall calendar
