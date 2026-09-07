@@ -193,7 +193,7 @@ export default {
   pregameSourceVm: 'Dall\'Einsatzliste registrata in Volleymanager.',
   pregameSourceRsvp: 'Dalle presenze confermate — nessuna Einsatzliste disponibile.',
   pregameEditedBy: 'Adattato da {{name}}',
-  pregameOutsideWindow: 'Il referto di gara si apre 3 ore prima della partita.',
+  pregameOutsideWindow: 'Il referto di gara si apre poco prima della partita e si chiude 3 ore dopo.',
   pregameNotAllowed: 'Solo l\'allenatore, il responsabile di squadra o il segnapunti designato possono aprire il referto di gara.',
   pregameNoTeam: 'Questa partita non ha una squadra KSCW.',
   pregameNoTime: 'Questa partita non ha un orario di inizio.',

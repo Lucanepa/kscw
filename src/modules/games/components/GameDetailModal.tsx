@@ -112,7 +112,7 @@ const NOMINATION_STATUS_TONE: Record<NominationStatus, string> = {
 export default function GameDetailModal({ game, onClose, readOnly, participations }: GameDetailModalProps) {
   const { t } = useTranslation('games')
   const { t: tc } = useTranslation('common')
-  const { user, isCoachOf, isStaffOnly, canParticipateIn, isGuestIn, coachTeamIds, teamResponsibleIds, hasAdminAccessToTeam } = useAuth()
+  const { user, isCoachOf, isStaffOnly, canParticipateIn, isGuestIn, coachTeamIds, teamResponsibleIds, hasAdminAccessToTeam, teamsLoading } = useAuth()
   const confirm = useConfirm()
   const [rosterOpen, setRosterOpen] = useState(false)
   const [participationListOpen, setParticipationListOpen] = useState(false)
@@ -647,8 +647,15 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
 
         {/* Show roster — directly beneath the RSVP tallies, visible for any
             scheduled game (also for guests / non-participants, who don't see
-            the Attending? block above). */}
-        {game.status === 'scheduled' && (
+            the Attending? block above).
+
+            Gated on `teamsLoading`: `isTeamStaff` below reads coachTeamIds /
+            teamResponsibleIds, which start EMPTY and fill from an async
+            loadTeamContext. Rendering before they land paints a coach the
+            visitor's button set, then swaps the first button's action from the
+            RSVP list to the match sheet and inserts two more above the fold —
+            so a thumb already on its way down lands on Show IDs. */}
+        {game.status === 'scheduled' && !teamsLoading && (
           <div className="border-t dark:border-gray-700 px-6 py-3">
             <Button
               variant="outline"
@@ -659,8 +666,11 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             </Button>
 
             {/* The RSVP list, for the people whose button above is a match sheet.
-                A coach or admin still needs to see who has answered what. */}
-            {rosterIsMatchSheet && (
+                A coach or admin still needs to see who has answered what — an
+                assigned scorer does not: it is the other team's internal "who is
+                coming", and `useMultiTeamMembers` returns nothing for someone
+                with no member_teams row there, so they only ever saw it empty. */}
+            {isTeamStaff && (
               <Button
                 variant="outline"
                 onClick={() => setParticipationListOpen(true)}

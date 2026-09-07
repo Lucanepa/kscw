@@ -197,7 +197,7 @@ export default {
   pregameSourceVm: 'From the Einsatzliste filed in Volleymanager.',
   pregameSourceRsvp: 'From the confirmed RSVPs — no Einsatzliste available.',
   pregameEditedBy: 'Adjusted by {{name}}',
-  pregameOutsideWindow: 'The match sheet opens 3 hours before the game.',
+  pregameOutsideWindow: 'The match sheet opens shortly before the game and closes 3 hours after it.',
   pregameNotAllowed: 'Only the coach, the team responsible or the assigned scorer can open the match sheet.',
   pregameNoTeam: 'This game has no KSCW team.',
   pregameNoTime: 'This game has no scheduled time.',

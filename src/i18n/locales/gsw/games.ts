@@ -196,7 +196,7 @@ export default {
   pregameSourceVm: 'Us de im Volleymanager erfasste Einsatzliste.',
   pregameSourceRsvp: 'Us de bestätigte Zuesäge — kei Einsatzliste vorhande.',
   pregameEditedBy: 'Aapasst vo {{name}}',
-  pregameOutsideWindow: 'S\'Matchblatt gaht 3 Stund vor em Spiel uf.',
+  pregameOutsideWindow: 'S\'Matchblatt gaht churz vor em Spiel uf und 3 Stund nachher wieder zue.',
   pregameNotAllowed: 'Nur de Trainer, d\'Teamverantwortlichi oder de iiteilt Schriiber chönd s\'Matchblatt ufmache.',
   pregameNoTeam: 'Das Spiel hät kei KSCW-Team.',
   pregameNoTime: 'Das Spiel hät kei Aaspielziit.',

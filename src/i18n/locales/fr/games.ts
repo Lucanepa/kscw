@@ -193,7 +193,7 @@ export default {
   pregameSourceVm: 'D\'après l\'Einsatzliste enregistrée dans Volleymanager.',
   pregameSourceRsvp: 'D\'après les présences confirmées — aucune Einsatzliste disponible.',
   pregameEditedBy: 'Adapté par {{name}}',
-  pregameOutsideWindow: 'La feuille de match s\'ouvre 3 heures avant le match.',
+  pregameOutsideWindow: 'La feuille de match s\'ouvre peu avant le match et se ferme 3 heures après.',
   pregameNotAllowed: 'Seuls l\'entraîneur, le responsable d\'équipe ou le marqueur désigné peuvent ouvrir la feuille de match.',
   pregameNoTeam: 'Ce match n\'a pas d\'équipe KSCW.',
   pregameNoTime: 'Ce match n\'a pas d\'heure de début.',
