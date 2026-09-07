@@ -1,18 +1,22 @@
 // src/modules/admin/SqlWorkspacePage.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import {
-  Play, Loader2, AlertTriangle, History, Database, RefreshCw, X, FileDown,
+  Play, AlertTriangle, History, Database, RefreshCw, X, FileDown,
   FileSpreadsheet, ClipboardCopy, Check, Sparkles, Wand2, Table2, ChevronRight,
 } from 'lucide-react'
-import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../../components/ui/sheet'
-import { Switch } from '../../components/ui/switch'
-import { API_URL } from '../../lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
+import { API_URL } from '@/lib/api'
 import CodeMirrorEditor from './components/CodeMirrorEditor'
 import ResultsTable from './components/ResultsTable'
-import { didYouMean, type DidYouMean, type SqlSchemaTable } from './utils/sqlSchema'
+import { didYouMean, shortType, type DidYouMean, type SqlSchemaTable } from './utils/sqlSchema'
 import { toCSV, toXlsx, copyAsTable, downloadBlob, downloadText } from './utils/exportResults'
 
 interface SchemaColumn {
@@ -390,81 +394,113 @@ export default function SqlWorkspacePage() {
   }, [result])
 
   // ── Schema browser, shared by the md+ sidebar and the mobile sheet ──
+  // A table per row, its columns as indented rows underneath — a data list, so
+  // it renders as a <Table> like every other record list in the app.
   const schemaBrowser = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-2 flex items-center gap-1.5">
         <Database className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="text-xs font-semibold text-foreground">{t('sqlWorkspaceSchema')}</span>
-        <span className="ml-auto text-[10px] text-muted-foreground">{tables.length}</span>
-        <button
-          type="button"
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{tables.length}</span>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => void loadSchema()}
-          className="rounded p-1.5 text-muted-foreground hover:bg-muted"
           title={t('sqlWorkspaceRefreshSchema')}
           aria-label={t('sqlWorkspaceRefreshSchema')}
+          className="h-8 w-8"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${schemaLoading ? 'animate-spin' : ''}`} />
-        </button>
+          <RefreshCw className={schemaLoading ? 'animate-spin motion-reduce:animate-none' : ''} />
+        </Button>
       </div>
-      <input
+      <Input
         type="text"
         value={tableFilter}
         onChange={(e) => setTableFilter(e.target.value)}
         placeholder={t('sqlWorkspaceFilterTables')}
-        className="mb-2 w-full rounded-md border border-border bg-background px-2 py-2 text-xs sm:py-1"
+        className="mb-2 h-9 text-xs"
       />
-      <ul className="min-h-0 flex-1 overflow-y-auto text-xs">
-        {filteredTables.map((tb) => {
-          const open = expandedTable === tb.name
-          return (
-            <li key={tb.name} className="mb-0.5">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setExpandedTable(open ? null : tb.name)}
-                  className="flex min-h-9 flex-1 items-center gap-1 truncate rounded px-1.5 py-1 text-left font-mono hover:bg-muted"
-                  title={tb.name}
-                >
-                  <ChevronRight className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`} />
-                  <span className="truncate">{tb.name}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => insertTableRef(tb.name)}
-                  className="rounded px-1.5 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10"
-                  title={t('sqlWorkspaceInsertSelect')}
-                >
-                  SELECT
-                </button>
-              </div>
-              {open && (
-                <ul className="ml-3 border-l border-border pl-2 text-[11px] text-muted-foreground">
-                  {tb.columns.map((c) => (
-                    <li
-                      key={c.name}
-                      className="py-0.5"
-                      title={`${tb.name}.${c.name} :: ${c.data_type}${c.nullable ? '?' : ''}${c.ref ? ` → ${c.ref}` : ''}`}
-                    >
-                      <span className="font-mono text-foreground">{c.name}</span>
-                      {c.pk && <span className="ml-1 text-[9px] font-semibold uppercase text-primary">pk</span>}
-                      <span className="ml-1">{c.data_type}{c.nullable ? '?' : ''}</span>
-                      {c.ref && <span className="ml-1 font-mono text-[10px] text-primary/80">→ {c.ref}</span>}
-                      {c.values && c.values.length > 0 && (
-                        <div className="truncate font-mono text-[10px] text-emerald-600 dark:text-emerald-400" title={c.values.join(', ')}>
-                          {c.values.join(' · ')}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          )
-        })}
-        {!schemaLoading && filteredTables.length === 0 && (
-          <li className="px-1.5 py-2 text-muted-foreground">{t('sqlWorkspaceNoTables')}</li>
-        )}
-      </ul>
+      {/* `table-fixed` + the neutralised inner wrapper is what keeps this
+          honest: long identifiers (`svrz_spielplaner_contacts`) otherwise widen
+          the table past the pane, and everything right-aligned — the column
+          count, the type, the SELECT button — scrolls out of sight. */}
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-card [&>div]:overflow-visible">
+        <Table className="table-fixed">
+          <TableBody>
+            {filteredTables.map((tb) => {
+              const open = expandedTable === tb.name
+              return (
+                <Fragment key={tb.name}>
+                  <TableRow>
+                    <TableCell className="p-0">
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setExpandedTable(open ? null : tb.name)}
+                        className="flex min-h-11 w-full items-center gap-1.5 px-2 text-left sm:min-h-9"
+                        title={tb.name}
+                      >
+                        <ChevronRight
+                          className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+                        />
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{tb.name}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+                          {tb.columns.length}
+                        </span>
+                      </button>
+                    </TableCell>
+                    <TableCell className="w-16 p-0 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => insertTableRef(tb.name)}
+                        title={t('sqlWorkspaceInsertSelect')}
+                        className="min-h-11 font-mono text-[10px] text-primary sm:min-h-9"
+                      >
+                        SELECT
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  {open &&
+                    tb.columns.map((c) => (
+                      <TableRow key={c.name} className="bg-muted/30">
+                        <TableCell colSpan={2} className="py-1 pl-6 pr-2 text-[11px]">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="min-w-0 flex-1 truncate font-mono text-foreground">{c.name}</span>
+                            {c.pk && (
+                              <span className="shrink-0 text-[9px] font-semibold uppercase text-primary">pk</span>
+                            )}
+                            <span className="shrink-0 text-right text-muted-foreground">
+                              {shortType(c.data_type)}{c.nullable ? '?' : ''}
+                            </span>
+                          </div>
+                          {c.ref && (
+                            <div className="font-mono text-[10px] text-primary/80">&rarr; {c.ref}</div>
+                          )}
+                          {c.values && c.values.length > 0 && (
+                            <div
+                              className="truncate font-mono text-[10px] text-emerald-600 dark:text-emerald-400"
+                              title={c.values.join(', ')}
+                            >
+                              {c.values.join(' \u00b7 ')}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </Fragment>
+              )
+            })}
+            {!schemaLoading && filteredTables.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={2} className="px-2 py-3 text-xs text-muted-foreground">
+                  {t('sqlWorkspaceNoTables')}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 
@@ -482,14 +518,15 @@ export default function SqlWorkspacePage() {
         <div className="flex items-center gap-2 px-3 pt-2 md:hidden">
           <h1 className="text-sm font-bold text-primary">{t('sqlWorkspaceTitle')}</h1>
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">PG 15.8</span>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setSchemaSheetOpen(true)}
-            className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted"
+            className="ml-auto min-h-9"
           >
-            <Table2 className="h-3.5 w-3.5" />
+            <Table2 />
             {t('sqlWorkspaceTables', { count: tables.length })}
-          </button>
+          </Button>
         </div>
 
         {/* Toolbar: the three controls get equal thirds on a phone, and sit
@@ -506,22 +543,22 @@ export default function SqlWorkspacePage() {
 
           <Popover open={aiOpen} onOpenChange={setAiOpen}>
             <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border border-primary/60 bg-primary/5 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10 md:min-h-9 md:w-auto"
+              <Button
+                variant="outline"
                 title={t('sqlWorkspaceAskAiHint')}
+                className="w-full gap-1.5 border-primary/60 bg-primary/5 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10 hover:text-primary md:h-9 md:min-h-9 md:w-auto"
               >
-                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <Sparkles />
                 <span className="truncate">{t('sqlWorkspaceAskAi')}</span>
                 {aiMemory.length > 0 && (
                   <span
-                    className="rounded-full bg-primary/15 px-1.5 text-[10px] font-mono"
+                    className="rounded-full bg-primary/15 px-1.5 font-mono text-[10px]"
                     title={t('sqlWorkspaceAiMemoryHint')}
                   >
                     {aiMemory.length}
                   </span>
                 )}
-              </button>
+              </Button>
             </PopoverTrigger>
             <PopoverContent align="center" sideOffset={6} className="w-[min(calc(100vw-1.5rem),440px)] p-3">
               <div className="mb-2 flex items-center gap-1.5">
@@ -536,13 +573,14 @@ export default function SqlWorkspacePage() {
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {t('sqlWorkspaceAiMemory')}
                     </span>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={clearAiMemory}
-                      className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-destructive"
+                      className="ml-auto h-7 min-h-0 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
                     >
                       {t('sqlWorkspaceAiClearMemory')}
-                    </button>
+                    </Button>
                   </div>
                   <ul className="space-y-0.5">
                     {aiMemory.slice(-3).map((turn) => (
@@ -555,7 +593,7 @@ export default function SqlWorkspacePage() {
                 </div>
               )}
 
-              <textarea
+              <Textarea
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 onKeyDown={(e) => {
@@ -566,20 +604,20 @@ export default function SqlWorkspacePage() {
                 }}
                 placeholder={t('sqlWorkspaceAskAiPlaceholder')}
                 rows={4}
-                className="w-full resize-y rounded-md border border-border bg-background p-2 text-xs"
+                className="resize-y text-xs"
                 autoFocus
               />
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="hidden text-[10px] text-muted-foreground sm:inline">{t('sqlWorkspaceAskAiSubmitHint')}</span>
-                <button
-                  type="button"
+                <Button
                   onClick={() => void handleAskAi()}
-                  disabled={aiLoading || !aiPrompt.trim()}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:flex-none sm:min-h-9"
+                  disabled={!aiPrompt.trim()}
+                  loading={aiLoading}
+                  icon={<Sparkles />}
+                  className="flex-1 px-3 text-xs font-semibold sm:h-9 sm:min-h-9 sm:flex-none"
                 >
-                  {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   {t('sqlWorkspaceAskAiGenerate')}
-                </button>
+                </Button>
               </div>
               {aiError && (
                 <div className="mt-2 rounded-md border border-destructive bg-destructive/10 p-2 text-[11px] text-destructive">
@@ -607,16 +645,16 @@ export default function SqlWorkspacePage() {
             <span>{t('sqlWorkspaceWriteMode')}</span>
           </label>
 
-          <button
-            type="button"
+          <Button
             onClick={execute}
-            disabled={loading || !sql.trim()}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 md:min-h-9 md:w-auto"
+            disabled={!sql.trim()}
+            loading={loading}
+            icon={<Play />}
             title={t('sqlWorkspaceRunHint')}
+            className="w-full px-3 text-xs font-semibold md:h-9 md:min-h-9 md:w-auto"
           >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             {t('sqlWorkspaceRun')}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -632,7 +670,7 @@ export default function SqlWorkspacePage() {
 
       <div className="flex min-h-0 flex-1">
         {/* Sidebar: schema */}
-        <aside className="hidden w-[260px] flex-shrink-0 overflow-hidden border-r border-border bg-card p-2 md:block">
+        <aside className="hidden w-[290px] flex-shrink-0 overflow-hidden border-r border-border bg-card p-2 md:block">
           {schemaBrowser}
         </aside>
 
@@ -655,26 +693,28 @@ export default function SqlWorkspacePage() {
               </span>
               <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden">
                 {recent.slice(0, 10).map((r) => (
-                  <button
+                  <Button
                     key={r.ts}
-                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => setSql(r.sql)}
                     title={r.sql}
-                    className="max-w-[200px] shrink-0 truncate rounded-md border border-border bg-card px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-muted"
+                    className="block max-w-[200px] shrink-0 truncate px-2 font-mono text-[11px] font-normal text-muted-foreground"
                   >
                     {r.sql.replace(/\s+/g, ' ').slice(0, 60)}
-                  </button>
+                  </Button>
                 ))}
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={clearRecent}
                 aria-label={t('sqlWorkspaceClearRecent')}
-                className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
                 title={t('sqlWorkspaceClearRecent')}
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
               >
-                <X className="h-3 w-3" />
-              </button>
+                <X />
+              </Button>
             </div>
           )}
 
@@ -685,41 +725,44 @@ export default function SqlWorkspacePage() {
                 <span>{t('sqlWorkspaceRows', { count: result.row_count })}</span>
                 <span>· {t('sqlWorkspaceDuration', { ms: result.duration_ms })}</span>
                 {result.statements > 1 && <span>· {t('sqlWorkspaceStatements', { count: result.statements })}</span>}
-                {result.truncated && <span className="font-semibold text-amber-600">· {t('sqlWorkspaceTruncated')}</span>}
+                {result.truncated && (
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">· {t('sqlWorkspaceTruncated')}</span>
+                )}
                 {result.write_mode && <span className="font-semibold text-destructive">· WRITE</span>}
               </div>
               {result.rows.length > 0 && (
                 <div className="grid grid-cols-3 gap-1.5 sm:flex sm:justify-end">
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
                     onClick={handleExportCsv}
                     disabled={exporting !== null}
-                    className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-50 sm:min-h-9"
+                    icon={<FileDown />}
                     title={t('sqlWorkspaceExportCsv')}
+                    className="gap-1 px-2 text-[11px] sm:h-9 sm:min-h-9"
                   >
-                    <FileDown className="h-3.5 w-3.5" />
                     {t('sqlWorkspaceExportCsv')}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={handleExportXlsx}
                     disabled={exporting !== null}
-                    className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-50 sm:min-h-9"
+                    loading={exporting === 'xlsx'}
+                    icon={<FileSpreadsheet />}
                     title={t('sqlWorkspaceExportXlsx')}
+                    className="gap-1 px-2 text-[11px] sm:h-9 sm:min-h-9"
                   >
-                    {exporting === 'xlsx' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
                     {t('sqlWorkspaceExportXlsx')}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={handleCopyTable}
                     disabled={exporting !== null}
-                    className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-50 sm:min-h-9"
+                    icon={copied ? <Check className="text-emerald-600 dark:text-emerald-400" /> : <ClipboardCopy />}
                     title={t('sqlWorkspaceCopyTableHint')}
+                    className="gap-1 px-2 text-[11px] sm:h-9 sm:min-h-9"
                   >
-                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
                     {copied ? t('sqlWorkspaceCopied') : t('sqlWorkspaceCopyTable')}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -744,14 +787,15 @@ export default function SqlWorkspacePage() {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {fix.suggestions.map((s) => (
-                        <button
+                        <Button
                           key={s}
-                          type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => applyFix(s)}
-                          className="inline-flex min-h-9 items-center rounded-md border border-primary/60 bg-primary/15 px-2.5 font-mono text-[11px] font-semibold text-foreground hover:bg-primary/25"
+                          className="min-h-11 border-primary/60 bg-primary/15 px-2.5 font-mono text-[11px] font-semibold text-foreground hover:bg-primary/25 sm:min-h-9"
                         >
                           {s}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                     <p className="mt-1.5 text-[10px] text-muted-foreground">

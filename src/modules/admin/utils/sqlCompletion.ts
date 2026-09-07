@@ -13,6 +13,7 @@ import type {
 import {
   parseQueryScope,
   resolveTableRef,
+  shortType,
   type SqlSchemaColumn,
   type SqlSchemaTable,
 } from './sqlSchema'
@@ -42,7 +43,7 @@ const COLUMN_REF = /(?:([A-Za-z_][\w$]*)\s*\.\s*)?([A-Za-z_][\w$]*)\s*$/
 
 /** Short marker appended to a column's detail line. */
 function columnDetail(c: SqlSchemaColumn): string {
-  const bits = [c.dataType ?? '']
+  const bits = [shortType(c.dataType)]
   if (c.pk) bits.push('PK')
   if (c.ref) bits.push(`→ ${c.ref}`)
   return bits.filter(Boolean).join(' · ')

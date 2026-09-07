@@ -45,8 +45,9 @@ async function loadColumns(database) {
     if (!entry) { entry = { name: r.table_name, columns: [] }; byTable.set(r.table_name, entry) }
     entry.columns.push({
       name: r.column_name,
-      data_type: r.data_type,
-      udt_name: r.udt_name,
+      // `USER-DEFINED` is what information_schema calls every enum and domain —
+      // useless in a type column. The underlying type name is what people know.
+      data_type: r.data_type === 'USER-DEFINED' ? r.udt_name : r.data_type,
       nullable: r.is_nullable === 'YES',
     })
   }

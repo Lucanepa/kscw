@@ -22,6 +22,25 @@ export interface SqlSchemaTable {
   columns: readonly SqlSchemaColumn[]
 }
 
+/** information_schema spells types out in full; nobody reads
+ *  `timestamp with time zone` in a 290px pane. Map the verbose spellings to
+ *  the names people actually write. */
+const SHORT_TYPES: Record<string, string> = {
+  'character varying': 'varchar',
+  character: 'char',
+  'timestamp with time zone': 'timestamptz',
+  'timestamp without time zone': 'timestamp',
+  'time with time zone': 'timetz',
+  'time without time zone': 'time',
+  'double precision': 'float8',
+  'bit varying': 'varbit',
+}
+
+export function shortType(dataType: string | undefined): string {
+  if (!dataType) return ''
+  return SHORT_TYPES[dataType] ?? dataType
+}
+
 /** A table brought into scope by a FROM/JOIN/UPDATE/INTO clause. */
 export interface TableRef {
   /** How the query refers to it — the alias if there is one, else the name. */
