@@ -57,6 +57,21 @@ Literal values — the single most common source of a query that runs and return
 - A season is the short label \`'2026/27'\`, never \`'2026/2027'\` or \`'2026-27'\`.
 - When the user writes a value in German or an abbreviation ("Schreiber", "Trainer", "VB"), map it to the stored value before using it.`
 
+/** Today in Zurich, as `YYYY-MM-DD`. */
+function todayZurich() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(new Date())
+}
+
+/** The season label the database uses for "now" — short form (`2026/27`), the
+ *  club year running August to July. Without this the model reads the season
+ *  column's value list and picks whichever comes first, which is how "teams
+ *  this season" came back filtered to the season before last. */
+function currentSeasonLabel(isoDate) {
+  const [y, m] = isoDate.split('-').map(Number)
+  const start = m >= 7 ? y : y - 1
+  return `${start}/${String((start + 1) % 100).padStart(2, '0')}`
+}
+
 /** Normalize the client-supplied conversation history into Anthropic messages.
  *  Each turn is a previous natural-language prompt and the SQL that was
  *  generated for it, so a follow-up ("now only H1", "same but count them")
@@ -125,6 +140,8 @@ export function registerSqlAi(router, { database, logger }) {
       const schemaText = formatSchemaForPrompt(await loadSchemaModel(database, log))
       const model = DEFAULT_MODEL
       const history = historyMessages(req.body?.history)
+      const today = todayZurich()
+      const season = currentSeasonLabel(today)
 
       const anthropicResp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -144,6 +161,13 @@ export function registerSqlAi(router, { database, logger }) {
               type: 'text',
               text: `# Database schema (PostgreSQL 15.8, public)\n${schemaText}`,
               cache_control: { type: 'ephemeral' },
+            },
+            // After the cache breakpoint on purpose: this block changes every
+            // day, and putting it inside the cached prefix would invalidate the
+            // schema dump with it.
+            {
+              type: 'text',
+              text: `# Today\nCurrent date: ${today} (Europe/Zurich). "This season" / "the current season" means '${season}'; the previous one is the label one year lower. Seasons run August to July and are always written in the short form '2026/27'.`,
             },
           ],
           messages: [...history, { role: 'user', content: promptText }],
