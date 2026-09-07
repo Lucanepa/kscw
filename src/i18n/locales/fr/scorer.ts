@@ -162,6 +162,8 @@ export default {
   rosterColNumber: '#',
   rosterColName: 'Nom',
   rosterColDob: 'Date de naissance',
+  /** Narrow screens: the full label wraps to two lines in the column. */
+  rosterColDobShort: 'Naiss.',
   rosterEmpty: 'Aucun joueur trouve pour cette equipe.',
   rosterOutsideWindow: 'La composition n\'est disponible que de 40 minutes avant le match jusqu\'a la fin.',
   rosterNotScorer: 'Seul le marqueur designe peut voir la composition.',

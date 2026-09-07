@@ -111,6 +111,51 @@ const NOMINATION_STATUS_TONE: Record<NominationStatus, string> = {
   failed: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200',
 }
 
+/**
+ * Does this game object still carry bare ids for relations the modal renders?
+ *
+ * Asks about what is DISPLAYED, not just the duty block: GAME_EXPAND carries hall
+ * and kscw_team too, and while nothing here asked for them a source that expanded
+ * the duties but not the hall never triggered the re-fetch, leaving Venue empty
+ * for good.
+ *
+ * Pure, and used twice on purpose — the effect fires the re-fetch off it, and the
+ * render uses it to tell "not loaded yet" apart from "nobody is assigned". Without
+ * that second use the duty section paints its heading off a bare id and then has
+ * no rows to show under it, which reads as "no scorer assigned" until the second
+ * request lands — and stays that way for good if the request fails.
+ */
+function gameNeedsExpand(game: Game): boolean {
+  const exp = game as unknown as ExpandedGame
+  return !!(
+    (game.hall && !asObj(exp.hall)) ||
+    (game.kscw_team && !asObj(exp.kscw_team)) ||
+    (game.scorer_member && !asObj(exp.scorer_member)) ||
+    (game.scoreboard_member && !asObj(exp.scoreboard_member)) ||
+    (game.scorer_scoreboard_member && !asObj(exp.scorer_scoreboard_member)) ||
+    (game.scorer_duty_team && !asObj(exp.scorer_duty_team)) ||
+    (game.scoreboard_duty_team && !asObj(exp.scoreboard_duty_team)) ||
+    (game.scorer_scoreboard_duty_team && !asObj(exp.scorer_scoreboard_duty_team)) ||
+    (game.bb_scorer_member && !asObj(exp.bb_scorer_member)) ||
+    (game.bb_timekeeper_member && !asObj(exp.bb_timekeeper_member)) ||
+    (game.bb_24s_official && !asObj(exp.bb_24s_official)) ||
+    (game.bb_duty_team && !asObj(exp.bb_duty_team)) ||
+    (game.bb_scorer_duty_team && !asObj(exp.bb_scorer_duty_team)) ||
+    (game.bb_timekeeper_duty_team && !asObj(exp.bb_timekeeper_duty_team)) ||
+    (game.bb_24s_duty_team && !asObj(exp.bb_24s_duty_team))
+  )
+}
+
+/** One duty line's worth of placeholder, while the expansion is in flight. */
+function DutyRowSkeleton() {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1" aria-hidden="true">
+      <div className="h-3 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+      <div className="h-3 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+    </div>
+  )
+}
+
 export default function GameDetailModal({ game, onClose, readOnly, participations }: GameDetailModalProps) {
   const { t } = useTranslation('games')
   const { t: tc } = useTranslation('common')
@@ -211,28 +256,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   // Re-fetch with full expand when opened from calendar (which only expands kscw_team,hall)
   useEffect(() => {
     if (!game) return
-    const exp = game as unknown as ExpandedGame
-    // Test what the modal RENDERS, not just the duty block. GAME_EXPAND already
-    // carries hall + kscw_team, but they were passengers: nothing here asked for
-    // them, so a source that expanded the duties and not the hall never triggered
-    // the re-fetch and the Venue section stayed empty for good.
-    const needsExpand =
-      (game.hall && !asObj(exp.hall)) ||
-      (game.kscw_team && !asObj(exp.kscw_team)) ||
-      (game.scorer_member && !asObj(exp.scorer_member)) ||
-      (game.scoreboard_member && !asObj(exp.scoreboard_member)) ||
-      (game.scorer_scoreboard_member && !asObj(exp.scorer_scoreboard_member)) ||
-      (game.scorer_duty_team && !asObj(exp.scorer_duty_team)) ||
-      (game.scoreboard_duty_team && !asObj(exp.scoreboard_duty_team)) ||
-      (game.scorer_scoreboard_duty_team && !asObj(exp.scorer_scoreboard_duty_team)) ||
-      (game.bb_scorer_member && !asObj(exp.bb_scorer_member)) ||
-      (game.bb_timekeeper_member && !asObj(exp.bb_timekeeper_member)) ||
-      (game.bb_24s_official && !asObj(exp.bb_24s_official)) ||
-      (game.bb_duty_team && !asObj(exp.bb_duty_team)) ||
-      (game.bb_scorer_duty_team && !asObj(exp.bb_scorer_duty_team)) ||
-      (game.bb_timekeeper_duty_team && !asObj(exp.bb_timekeeper_duty_team)) ||
-      (game.bb_24s_duty_team && !asObj(exp.bb_24s_duty_team))
-    if (needsExpand) {
+    if (gameNeedsExpand(game)) {
       fetchItem<Game>('games', game.id, { fields: ['*', ...GAME_EXPAND.split(',').map(r => `${r}.*`)] }).then(r => setFullGame(r)).catch(() => {})
     }
   }, [game])
@@ -294,6 +318,10 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   if (!game) return null
 
   const expanded = (fullGame ?? game) as unknown as ExpandedGame
+  // Duty names live only on the second request. Until it lands the duty rows have
+  // nothing to render, so the section would show its heading over empty space —
+  // indistinguishable from "no officials assigned".
+  const awaitingExpand = !fullGame && gameNeedsExpand(game)
   const expandedHall = asObj<Hall & BaseRecord>(expanded.hall)
   const awayHall = game.away_hall_json
   const awayMapsUrl = awayHall
@@ -798,7 +826,16 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
             <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
               {t('scorerDuties')}
             </h4>
-            {asObj<Member & BaseRecord>(expanded.scorer_scoreboard_member) ? (
+            {awaitingExpand ? (
+              // One placeholder per duty the game actually has, so the block does not
+              // resize much when the real rows replace them.
+              Array.from({
+                length: (game.scorer_scoreboard_member
+                  ? 1
+                  : (game.scorer_member ? 1 : 0) + (game.scoreboard_member ? 1 : 0))
+                  + (game.referee_member ? 1 : 0),
+              }).map((_, i) => <DutyRowSkeleton key={i} />)
+            ) : asObj<Member & BaseRecord>(expanded.scorer_scoreboard_member) ? (
               <DutyPersonRow
                 label={t('scorerTaefeler')}
                 member={asObj<Member & BaseRecord>(expanded.scorer_scoreboard_member)}
@@ -825,7 +862,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
                 )}
               </>
             )}
-            {asObj<Member & BaseRecord>(expanded.referee_member) && (
+            {!awaitingExpand && asObj<Member & BaseRecord>(expanded.referee_member) && (
               <DutyPersonRow
                 label={t('referee')}
                 member={asObj<Member & BaseRecord>(expanded.referee_member)}

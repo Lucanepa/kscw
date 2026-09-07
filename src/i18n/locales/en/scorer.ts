@@ -162,6 +162,8 @@ export default {
   rosterColNumber: '#',
   rosterColName: 'Name',
   rosterColDob: 'Date of birth',
+  /** Narrow screens: the full label wraps to two lines in the column. */
+  rosterColDobShort: 'DoB',
   rosterEmpty: 'No players found for this team.',
   rosterOutsideWindow: 'The roster is only available from 40 minutes before the game until it ends.',
   rosterNotScorer: 'Only the assigned scorer can view the roster.',
