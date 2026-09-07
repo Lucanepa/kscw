@@ -177,6 +177,12 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   })
   const [fullGame, setFullGame] = useState<Game | null>(null)
   const [lateData, setLateData] = useState<DutyLateData | null>(null)
+  // `lateData === null` used to mean two opposite things: "the duty-late GET has
+  // not landed yet" AND "nobody has flagged this official". The second reading
+  // won on the first frame, so an already-reported duty painted a red "report as
+  // late" alarm instead of its banner + revealed phone/email. Seeded TRUE so the
+  // very first frame is guarded rather than answered.
+  const [lateFetched, setLateFetched] = useState(false)
   // Per-game Einsatzliste override — held locally so the pills react instantly;
   // the write goes through updateGame (which invalidates the games query).
   const [autoNomination, setAutoNomination] = useState<boolean | null>(game?.auto_nomination_list ?? null)
@@ -251,6 +257,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   if (prevLateKey !== lateKey) {
     setPrevLateKey(lateKey)
     setLateData(null)
+    setLateFetched(false)
   }
 
   // Re-fetch with full expand when opened from calendar (which only expands kscw_team,hall)
@@ -263,18 +270,33 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
 
   // Late-report state — only for coaches/TRs/admins of the PLAYING team, on home
   // games. Lets the "duty is late" reveal survive a reload without re-emailing.
+  // Derived during render, NOT set from inside the effect: a synchronous setState
+  // in an effect body is a cascading-render hazard (eslint react-hooks), and this
+  // answer is pure anyway.
+  //
+  // `coachTeamIds` / `teamResponsibleIds` start EMPTY and fill from an async
+  // loadTeamContext, so answering this before they land says "not staff". Waiting
+  // on `teamsLoading` is what re-arms the fetch when the context arrives — with
+  // the old id-only deps a cold start, a deep link or a household acting-member
+  // swap left the alarm standing for good.
+  const lateTeamId = relId(game?.kscw_team)
+  const canSeeLate = !!game?.id && game?.type === 'home' && !teamsLoading
+    && (hasAdminAccessToTeam(lateTeamId) || coachTeamIds.includes(lateTeamId) || teamResponsibleIds.includes(lateTeamId))
+  // Only whoever may see the alarm ever waits for it; for everyone else it is
+  // never "loading", so nothing is gated on a fetch that will not happen.
+  const lateLoading = canSeeLate && !lateFetched
+
   useEffect(() => {
-    if (!game?.id || game.type !== 'home') return
-    const teamId = relId(game.kscw_team)
-    const canSee = hasAdminAccessToTeam(teamId) || coachTeamIds.includes(teamId) || teamResponsibleIds.includes(teamId)
-    if (!canSee) return
+    if (!canSeeLate || !game?.id) return
     let cancelled = false
     kscwApi<DutyLateData>(`/games/${game.id}/duty-late`)
       .then((r) => { if (!cancelled) setLateData(r) })
       .catch(() => { /* non-fatal — alarm still works, reveal just won't pre-populate */ })
+      // Settles on failure too: the report POST is idempotent server side, so
+      // failing open to the alarm beats hanging on a skeleton for ever.
+      .finally(() => { if (!cancelled) setLateFetched(true) })
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot per game open; auth read via closure
-  }, [game?.id, game?.type])
+  }, [canSeeLate, game?.id])
 
   useEffect(() => {
     if (!game) return
@@ -457,6 +479,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
     canReportLate,
     reported: lateData?.reports?.[role] ?? null,
     revealedContact: lateData?.contacts?.[role] ?? null,
+    lateLoading,
     onReport: reportLate,
   })
   const homeWon = Number(game.home_score) > Number(game.away_score)
@@ -1121,7 +1144,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function DutyPersonRow({
   label, member, dutyTeam, role, gameDate, gameTime,
-  adminSeesContact, canReportLate, reported, revealedContact, onReport,
+  adminSeesContact, canReportLate, reported, revealedContact, lateLoading, onReport,
 }: {
   label: string
   member?: (Member & BaseRecord) | null
@@ -1133,6 +1156,8 @@ function DutyPersonRow({
   canReportLate: boolean
   reported: DutyLateReport | null
   revealedContact: DutyLateContact | null
+  /** True while GET /games/:id/duty-late is still in flight — `reported: null` is not yet an answer. */
+  lateLoading: boolean
   onReport: (role: string, roleLabel: string, personName: string) => void
 }) {
   const { t } = useTranslation('games')
@@ -1149,8 +1174,12 @@ function DutyPersonRow({
   const showEmail = !!(contact && !contact.hide_email && contact.email)
 
   // Coaches/TRs (not admins, who already see contact) get the alarm while inside
-  // the role window and it hasn't been flagged yet.
-  const showAlarm = canReportLate && !adminSeesContact && !reported && inWindow && !!member
+  // the role window and it hasn't been flagged yet. `!lateLoading` is what makes
+  // "not flagged" an answer rather than a default: without it the alarm painted
+  // over an already-reported duty, and swapped for the banner + tel:/mailto:
+  // links under a thumb that was already on its way down.
+  const alarmSlotApplies = canReportLate && !adminSeesContact && inWindow && !!member
+  const showAlarm = alarmSlotApplies && !lateLoading && !reported
 
   const reportedTime = reported?.at
     ? new Intl.DateTimeFormat('de-CH', { timeZone: 'Europe/Zurich', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(reported.at))
@@ -1164,6 +1193,13 @@ function DutyPersonRow({
           {name}
           {teamName && <TeamChip team={teamName} size="xs" />}
         </span>
+
+        {alarmSlotApplies && lateLoading && (
+          // Same height/rounding as the button below, so nothing jumps when the
+          // real answer (alarm, or banner + contacts) replaces it. Neutral on
+          // purpose — a red placeholder would still read as "not reported".
+          <div className="mt-1.5 h-10 w-full animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+        )}
 
         {showAlarm && (
           <button

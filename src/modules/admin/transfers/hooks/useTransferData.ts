@@ -50,6 +50,12 @@ interface VmLicenceRow {
 
 export interface TransferData {
   bootLoading: boolean
+  /**
+   * The two `sv_vm_check` reads have not landed yet. Every figure derived from
+   * `validationStateOf` / `vmSaysSwiss` is provisional while this is true — see
+   * the note where it is computed.
+   */
+  crossChecksLoading: boolean
   isFetching: boolean
   refetch: () => Promise<unknown>
   cohorts: TransferCohorts
@@ -210,7 +216,7 @@ export function useTransferData(): TransferData {
    * category). So presence here means "holds a KSCW player licence" — which is
    * precisely the thing an ITC clears.
    */
-  const { data: vmLicenceRaw } = useCollection<VmLicenceRow>('sv_vm_check', {
+  const { data: vmLicenceRaw, isError: vmLicenceError } = useCollection<VmLicenceRow>('sv_vm_check', {
     fields: ['association_id', 'nationality_code'],
     all: true,
     staleTime: 3_600_000,
@@ -316,7 +322,7 @@ export function useTransferData(): TransferData {
   )
   const matchKeys = useMemo(() => vmMatchKeys(licenceScope), [licenceScope])
 
-  const { data: vmRaw } = useCollection<VmRow>('sv_vm_check', {
+  const { data: vmRaw, isError: vmError } = useCollection<VmRow>('sv_vm_check', {
     filter: {
       _or: [
         { association_id: { _in: matchKeys.licences } },
@@ -472,8 +478,38 @@ export function useTransferData(): TransferData {
     teamsRaw === undefined || membersRaw === undefined ||
     (teamIds.length > 0 && junctionRaw === undefined)
 
+  /**
+   * The Swiss Volley cross-check has not answered yet.
+   *
+   * Deliberately NOT folded into `bootLoading` — the worklist must still render
+   * during a VM outage (see the note above). It exists because the ABSENCE of a
+   * `sv_vm_check` row and a NEGATIVE answer from Swiss Volley are the same value
+   * here: with `vmRaw` still `undefined`, `validationStateOf` falls through to
+   * `'unknown'` for everyone, so `blockedRows` over-counts and `stateCounts`
+   * buckets settled rows as blocked. That is not a rare timing window — `vmRaw`
+   * is `enabled`-gated on `matchKeys`, which derives from `cohorts` → `members`,
+   * so it cannot have resolved at the moment the boot gate lifts. The page-level
+   * summaries that read as verdicts (the red eligibility alarm, the chips) wait
+   * for this instead of asserting a number they are about to retract.
+   *
+   * ⚠ The `matchKeys` guard is not optional. `vmRaw` is `enabled`-gated, so on a
+   * cohort with no licence number and no email it stays `undefined` for good —
+   * a bare `vmRaw === undefined` would hide those summaries permanently, the
+   * same trap the comment above documents for `isLoading`.
+   */
+  // // ⚠ `isLoading` goes false on ERROR while `data` stays undefined, so a bare
+  // `data === undefined` gate never releases after a failed fetch — a permanent
+  // skeleton is worse than the wrong frame it replaced. Errors fall through.
+  // A VM outage must not take the state-filter chips down with the numbers.
+  const crossChecksLoading =
+    !vmLicenceError && !vmError && (
+      vmLicenceRaw === undefined
+      || ((matchKeys.licences.length > 0 || matchKeys.emails.length > 0) && vmRaw === undefined)
+    )
+
   return {
     bootLoading,
+    crossChecksLoading,
     // Refresh is a refetch of `members` only: it is the one collection the
     // page's own writes and the VIS check touch.
     isFetching,

@@ -92,41 +92,48 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
 
   // Slot mode state
   const [slotMode, setSlotMode] = useState<'auto' | 'manual'>('auto')
-  const [teamSlots, setTeamSlots] = useState<HallSlot[]>([])
-  const [teamClaims, setTeamClaims] = useState<SlotClaim[]>([])
   const [selectedSlotKey, setSelectedSlotKey] = useState('')
 
   // Track the teamId for which defaults were last applied (new training only)
   const defaultsAppliedForTeam = useRef<string | null>(null)
 
-  // Clearing the team empties the slot/claim lists. This was the synchronous
-  // half of the fetch effect below; adjusting state during render keeps the
-  // effect body free of synchronous setState. It never fires on mount
-  // (`teamId` starts '' and the lists start empty), matching the old effect's
-  // mount run, which was a no-op.
-  const [prevSlotTeamId, setPrevSlotTeamId] = useState(teamId)
-  if (prevSlotTeamId !== teamId) {
-    setPrevSlotTeamId(teamId)
-    if (!teamId) {
-      setTeamSlots([])
-      setTeamClaims([])
-    }
-  }
-
-  // Fetch team's hall_slots and active claims when teamId changes
-  useEffect(() => {
-    if (!teamId) return
-    fetchAllItems<HallSlot>('hall_slots', {
-      filter: { _and: [{ teams: { teams_id: { _eq: teamId } } }, { slot_type: { _eq: 'training' } }, { recurring: { _eq: true } }] },
-      sort: ['day_of_week,start_time'],
-      fields: ['*', 'teams.teams_id'],
-    }).then(items => setTeamSlots(flattenM2MTeams(items))).catch(() => setTeamSlots([]))
-
-    fetchAllItems<SlotClaim>('slot_claims', {
-      filter: { _and: [{ claimed_by_team: { _eq: teamId } }, { status: { _eq: 'active' } }, { date: { _gte: todayLocal() } }] },
-      sort: ['date,start_time'],
-    }).then(setTeamClaims).catch(() => setTeamClaims([]))
-  }, [teamId])
+  // The team's recurring training slots + its active claims. These were two
+  // `fetchAllItems` calls in an un-flagged effect writing `useState<[]>`, so an
+  // empty list meant BOTH "not fetched yet" and "this team has no slot" — the
+  // form asserted "No hall slot for this day" for the whole round-trip — and a
+  // team A→B switch kept A's rows on screen (and could auto-apply A's times to
+  // B's training) until B's landed. Keyed queries fix both halves: `data` is
+  // `undefined` rather than the previous team's rows while a new team loads,
+  // and the fetch flags tell "unknown" apart from "none".
+  const { data: teamSlotsRaw, isFetching: slotsFetching, isPending: slotsPending, isPlaceholderData: slotsStale } = useCollection<HallSlot>('hall_slots', {
+    filter: { _and: [{ teams: { teams_id: { _eq: teamId } } }, { slot_type: { _eq: 'training' } }, { recurring: { _eq: true } }] },
+    sort: ['day_of_week', 'start_time'],
+    fields: ['*', 'teams.teams_id'],
+    all: true,
+    enabled: !!teamId,
+  })
+  const { data: teamClaimsRaw, isFetching: claimsFetching, isPending: claimsPending, isPlaceholderData: claimsStale } = useCollection<SlotClaim>('slot_claims', {
+    filter: { _and: [{ claimed_by_team: { _eq: teamId } }, { status: { _eq: 'active' } }, { date: { _gte: todayLocal() } }] },
+    sort: ['date', 'start_time'],
+    all: true,
+    enabled: !!teamId,
+  })
+  // Must stay memoised: `slotOptions` below depends on these by identity and the
+  // render-phase auto-select compares `prevSlotOptions` by identity — a fresh
+  // `[]` on every render would setState on every render (React #301).
+  const teamSlots = useMemo(() => flattenM2MTeams(teamSlotsRaw ?? []), [teamSlotsRaw])
+  const teamClaims = useMemo<SlotClaim[]>(() => teamClaimsRaw ?? [], [teamClaimsRaw])
+  // `isPending` also covers the frame before a newly keyed fetch is marked
+  // in-flight. It goes false on error too, so a FAILED fetch falls back to the
+  // real "no slot" panel instead of a permanent skeleton — the same fail-open
+  // the old `.catch(() => setTeamSlots([]))` had.
+  // ⚠ `isPlaceholderData` is load-bearing, not belt-and-braces. src/lib/query.tsx:83
+  // sets `placeholderData: keepPreviousData` GLOBALLY, so on a team A→B switch these
+  // queries hand back team A's rows — not undefined. Without this flag `slotOptions`
+  // would briefly describe the previous team, and the auto-apply below would write
+  // that team's start time, end time and hall into this form.
+  const slotsLoading =
+    !!teamId && (slotsFetching || claimsFetching || slotsPending || claimsPending || slotsStale || claimsStale)
 
   // Pre-fill defaults from team settings when creating a new training and teamId changes
   useEffect(() => {
@@ -211,8 +218,13 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
   // (`slotMode` / `selectedSlotKey` are still read as latest values, not deps).
   // `prevSlotOptions` starts as null so this also fires on the first render,
   // mirroring the old effect's mount run.
+  // Held back while the slots/claims are in flight: an empty `slotOptions` then
+  // means "unknown", and acting on it used to clear a seeded selection and, on a
+  // team switch, overwrite the form's times/hall from the PREVIOUS team's slot.
+  // Skipping the comparison leaves `prevSlotOptions` stale, so it fires exactly
+  // once when the real rows land.
   const [prevSlotOptions, setPrevSlotOptions] = useState<SlotOption[] | null>(null)
-  if (prevSlotOptions !== slotOptions) {
+  if (!slotsLoading && prevSlotOptions !== slotOptions) {
     setPrevSlotOptions(slotOptions)
     if (slotMode !== 'auto' || slotOptions.length === 0) {
       if (slotMode === 'auto') setSelectedSlotKey('')
@@ -502,13 +514,20 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
           onChange={setDate}
         />
 
-        {/* Slot mode toggle — only show when team has any configured hall slots */}
-        {teamId && teamSlots.length > 0 && (
-          <div className="inline-flex w-full rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+        {/* Slot mode toggle — only show when team has any configured hall slots.
+            Kept mounted (disabled + dimmed) while the slots are still loading so
+            it does not INSERT itself under a thumb already aiming at the date
+            picker or the time fields below. */}
+        {teamId && (slotsLoading || teamSlots.length > 0) && (
+          <div
+            className={`inline-flex w-full rounded-lg bg-gray-100 p-1 dark:bg-gray-800 ${slotsLoading ? 'opacity-60' : ''}`}
+            aria-busy={slotsLoading}
+          >
             <button
               type="button"
               onClick={switchToAuto}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              disabled={slotsLoading}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
                 slotMode === 'auto'
                   ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
                   : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -519,7 +538,8 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
             <button
               type="button"
               onClick={switchToManual}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              disabled={slotsLoading}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
                 slotMode === 'manual'
                   ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
                   : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -533,7 +553,11 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
         {/* Slot mode indicator — auto-mode informational box (no inline switch link, toggle handles that) */}
         {slotMode === 'auto' && teamId && date && (
           <div>
-            {slotOptions.length === 0 ? (
+            {/* `slotOptions.length === 0` only means "no slot on this weekday"
+                once the team's slots and claims have actually been fetched. */}
+            {slotsLoading ? (
+              <div className="h-9 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" aria-hidden="true" />
+            ) : slotOptions.length === 0 ? (
               <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                 {t('noSlotForDay')}
               </div>
@@ -566,7 +590,10 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
 
         {/* Time and hall fields — read-only when a slot is active */}
         {(() => {
-          const slotActive = slotMode === 'auto' && !!selectedSlotKey
+          // Also treated as slot-governed while the slots are still loading and a
+          // date is set: until they land it is unknown whether a slot owns these
+          // fields, and a slot that lands overwrites whatever was typed here.
+          const slotActive = slotMode === 'auto' && (!!selectedSlotKey || (slotsLoading && !!date))
           return (
             <>
               <div className="grid grid-cols-2 gap-4">

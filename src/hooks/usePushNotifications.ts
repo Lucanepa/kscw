@@ -13,6 +13,12 @@ interface PushState {
   subscribed: boolean
   /** Loading state during subscribe/unsubscribe */
   loading: boolean
+  /**
+   * The service-worker probe that fills `subscribed` is still running. Until it
+   * settles, `subscribed: false` only means "not known yet" — callers must not
+   * paint it as "not subscribed" or wire a handler to it.
+   */
+  probing: boolean
 }
 
 /**
@@ -41,23 +47,36 @@ export function usePushNotifications() {
       permission: supported ? Notification.permission : 'default',
       subscribed: false,
       loading: false,
+      // Unsupported browsers never run the probe below, so they must not start
+      // out probing — the toggle row is not rendered for them at all.
+      probing: supported,
     }
   })
 
   // Whether a subscription already exists is only knowable asynchronously
-  // (service-worker ready → PushManager) — that stays in an effect.
+  // (service-worker ready → PushManager) — that stays in an effect. It can pend
+  // for hundreds of ms (serviceWorker.ready waits for an active worker, and
+  // registration is fire-and-forget from sw-register.js), so `probing` marks the
+  // window in which `subscribed: false` is a placeholder rather than an answer.
   useEffect(() => {
     if (!detectPushSupport()) return
 
-    navigator.serviceWorker.ready.then(reg => {
-      reg.pushManager.getSubscription().then(sub => {
-        setState(s => ({ ...s, subscribed: !!sub }))
+    navigator.serviceWorker.ready
+      .then(reg => reg.pushManager.getSubscription())
+      .then(sub => {
+        setState(s => ({ ...s, subscribed: !!sub, probing: false }))
       })
-    })
+      // getSubscription() can reject; without this the row would stay disabled
+      // forever, so a failed probe falls back to the "not subscribed" default.
+      .catch(() => {
+        setState(s => ({ ...s, probing: false }))
+      })
   }, [])
 
   const subscribe = useCallback(async () => {
-    if (!state.supported || state.loading) return false
+    // Refuse while probing — we don't yet know whether this device is already
+    // subscribed, so acting on it could re-subscribe an existing endpoint.
+    if (!state.supported || state.loading || state.probing) return false
 
     setState(s => ({ ...s, loading: true }))
 
@@ -115,10 +134,10 @@ export function usePushNotifications() {
       setState(s => ({ ...s, loading: false }))
       return false
     }
-  }, [state.supported, state.loading, t])
+  }, [state.supported, state.loading, state.probing, t])
 
   const unsubscribe = useCallback(async () => {
-    if (!state.supported || state.loading) return false
+    if (!state.supported || state.loading || state.probing) return false
 
     setState(s => ({ ...s, loading: true }))
 
@@ -147,7 +166,7 @@ export function usePushNotifications() {
       setState(s => ({ ...s, loading: false }))
       return false
     }
-  }, [state.supported, state.loading, t])
+  }, [state.supported, state.loading, state.probing, t])
 
   return {
     ...state,

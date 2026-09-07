@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { X } from 'lucide-react'
@@ -7,7 +7,8 @@ import ConfirmDialog from '@/components/ConfirmDialog'
 import { Button } from '../../components/ui/button'
 import { getFileUrl } from '../../utils/fileUrl'
 import { logActivity } from '../../utils/logActivity'
-import { fetchAllItems, updateRecord, m2mUpdatePayload } from '../../lib/api'
+import { updateRecord, m2mUpdatePayload } from '../../lib/api'
+import { useCollection } from '../../lib/query'
 import { flattenMemberIds, memberFirstName } from '../../utils/relations'
 import type { Team, Member } from '../../types'
 
@@ -34,21 +35,32 @@ function displayName(m: Member | undefined): string {
  */
 export default function ManageStaffModal({ open, onClose, team, onTeamUpdate }: ManageStaffModalProps) {
   const { t } = useTranslation('teams')
-  const [allMembers, setAllMembers] = useState<Member[]>([])
   const [pendingRemove, setPendingRemove] = useState<{ id: string; role: StaffRole } | null>(null)
   const [busy, setBusy] = useState(false)
 
   // Unfiltered on membership so current staff always resolve to a name; the
   // search pool below narrows to active members.
-  useEffect(() => {
-    if (!open) return
-    fetchAllItems<Member>('members', {
-      sort: ['last_name'],
-      fields: ['id', 'first_name', 'nickname', 'last_name', 'photo', 'kscw_membership_active'],
-    })
-      .then(setAllMembers)
-      .catch(() => setAllMembers([]))
-  }, [open])
+  //
+  // The roster used to be `useState<Member[]>([])` filled by an open-gated
+  // effect, so `[]` meant three things at once: still downloading, request
+  // failed, and nobody matches. That painted definitive answers over an
+  // unloaded roster — "No results" for a coach who IS in the club, and an
+  // em-dash name next to a live remove button. `isPending` (not `isLoading`)
+  // is the gate: it stays true across the `enabled: open` flip, and goes
+  // false on failure so a dead fetch shows an error, not a forever skeleton.
+  const {
+    data: allMembers = [],
+    isPending: membersLoading,
+    isError: membersError,
+  } = useCollection<Member>('members', {
+    sort: ['last_name'],
+    fields: ['id', 'first_name', 'nickname', 'last_name', 'photo', 'kscw_membership_active'],
+    all: true,
+    enabled: open,
+    // No staleTime on purpose: this modal is opened to act on the CURRENT roster,
+    // and it replaced a per-open fetch. Caching it for a minute would hide a member
+    // added elsewhere from the very screen you opened to find them.
+  })
 
   const memberById = useMemo(() => {
     const map = new Map<string, Member>()
@@ -117,6 +129,8 @@ export default function ManageStaffModal({ open, onClose, team, onTeamUpdate }: 
         currentIds={currentIds.coach}
         memberById={memberById}
         allMembers={allMembers}
+        membersLoading={membersLoading}
+        membersError={membersError}
         busy={busy}
         onAdd={handleAdd}
         onRemove={(id) => setPendingRemove({ id, role: 'coach' })}
@@ -128,6 +142,8 @@ export default function ManageStaffModal({ open, onClose, team, onTeamUpdate }: 
         currentIds={currentIds.team_responsible}
         memberById={memberById}
         allMembers={allMembers}
+        membersLoading={membersLoading}
+        membersError={membersError}
         busy={busy}
         onAdd={handleAdd}
         onRemove={(id) => setPendingRemove({ id, role: 'team_responsible' })}
@@ -149,12 +165,14 @@ export default function ManageStaffModal({ open, onClose, team, onTeamUpdate }: 
   )
 }
 
-function StaffSection({ heading, role, currentIds, memberById, allMembers, busy, onAdd, onRemove }: {
+function StaffSection({ heading, role, currentIds, memberById, allMembers, membersLoading, membersError, busy, onAdd, onRemove }: {
   heading: string
   role: StaffRole
   currentIds: string[]
   memberById: Map<string, Member>
   allMembers: Member[]
+  membersLoading: boolean
+  membersError: boolean
   busy: boolean
   onAdd: (role: StaffRole, memberId: string) => void
   onRemove: (memberId: string) => void
@@ -184,16 +202,26 @@ function StaffSection({ heading, role, currentIds, memberById, allMembers, busy,
         <ul className="mt-2 divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
           {currentIds.map((id) => {
             const m = memberById.get(id)
+            // The junction gives the ids synchronously, the names arrive a
+            // round-trip later. An unresolved row therefore means "roster not
+            // loaded", not "member without a name" — keep '—' for the latter
+            // and don't offer the destructive X against a row nobody can read
+            // (the ConfirmDialog would ask "Remove — as coach?").
+            const unresolved = membersLoading && !m
             return (
               <li key={id} className="flex min-h-[44px] items-center gap-3 px-3 py-1.5">
-                <Avatar member={m} />
-                <span className="min-w-0 flex-1 truncate text-sm text-gray-900 dark:text-gray-100">{displayName(m)}</span>
+                <Avatar member={m} pending={unresolved} />
+                <span className="min-w-0 flex-1 truncate text-sm text-gray-900 dark:text-gray-100">
+                  {unresolved
+                    ? <span className="block h-4 w-32 max-w-full animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                    : displayName(m)}
+                </span>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                   onClick={() => onRemove(id)}
-                  disabled={busy}
+                  disabled={busy || unresolved}
                   title={t('common:remove')}
                 >
                   <X className="h-4 w-4" />
@@ -213,7 +241,13 @@ function StaffSection({ heading, role, currentIds, memberById, allMembers, busy,
       />
       {search.length >= 2 && (
         <div className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          {matches.length === 0 ? (
+          {/* Never claim "No results" against a pool that hasn't arrived — an
+              admin who reads it goes off and creates a duplicate member. */}
+          {membersLoading ? (
+            <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('common:loading')}</p>
+          ) : membersError ? (
+            <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('common:error')}</p>
+          ) : matches.length === 0 ? (
             <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{t('noSearchResults')}</p>
           ) : (
             matches.slice(0, 10).map((m) => (
@@ -234,7 +268,10 @@ function StaffSection({ heading, role, currentIds, memberById, allMembers, busy,
   )
 }
 
-function Avatar({ member }: { member: Member | undefined }) {
+function Avatar({ member, pending }: { member: Member | undefined; pending?: boolean }) {
+  if (pending && !member) {
+    return <div className="h-6 w-6 shrink-0 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+  }
   if (member?.photo) {
     return (
       <img

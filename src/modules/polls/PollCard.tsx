@@ -18,7 +18,11 @@ interface PollCardProps {
 export default function PollCard({ poll, canManage, onClose, onDelete }: PollCardProps) {
   const { t } = useTranslation('polls')
   const confirm = useConfirm()
-  const { myVote, vote, getResults, canSeeResults } = usePollVotes(poll, canManage)
+  // `isLoading` is this card's own poll_votes fetch — every card fires it cold
+  // on mount and nothing upstream waits for it. Until it lands `myVote` is
+  // undefined, which is indistinguishable from "hasn't voted yet", so the gates
+  // below hold the vote/result UI back instead of guessing "no".
+  const { myVote, isLoading: votesLoading, vote, getResults, canSeeResults } = usePollVotes(poll, canManage)
   const [selected, setSelected] = useState<number[]>([])
   // Tracks the create/update mutation itself (not the votes fetch) so a slow
   // save disables the button and a second tap can't fire a duplicate vote.
@@ -28,13 +32,20 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
   const [editing, setEditing] = useState(false)
 
   const isOpen = poll.status === 'open'
+  // ⚠ Only meaningful once `votesLoading` is false — before that it just means
+  // "the vote rows haven't arrived", not "this member hasn't voted".
   const hasVoted = !!myVote
   const deadlinePassed = isDeadlinePassed(poll.deadline)
   // Voting is allowed while the poll is open and before the deadline. A voter
   // may change their answer up to that point (decision 2026-07-02) — vote()
   // already updates the existing row, we just re-expose the form on request.
   const votingOpen = isOpen && !deadlinePassed
-  const canVote = votingOpen && (!hasVoted || editing)
+  // Gated on the votes fetch as well: while it's in flight an already-voted
+  // member used to get the untouched ballot with a live "Vote" button, and
+  // vote() (which closes over myVote) then takes the create branch — poll_votes
+  // has no (poll, member) unique index, so that duplicate row is counted
+  // forever in every later tally.
+  const canVote = votingOpen && !votesLoading && (!hasVoted || editing)
   // Managers (coach/TR/board) see the live tally at any time so they can monitor
   // replies before the deadline (decision 2026-06-28). Everyone else sees results
   // once they've voted, the poll closed, or the deadline passed — IF the poll
@@ -44,7 +55,11 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
   // read), a misleading "100% / 1 vote" tally. A manager who hasn't voted yet
   // still gets the result bars — made tappable below via `canVote` so they can
   // cast a vote without losing sight of the running tally.
-  const showResults = canManage || (canSeeResults && (hasVoted || !isOpen || deadlinePassed))
+  //
+  // Gated on the fetch too: `canManage` alone painted the bars on frame one
+  // from an empty tally — every bar at 0%, "0 vote(s)" — which reads as
+  // "nobody has answered", not as "still loading".
+  const showResults = !votesLoading && (canManage || (canSeeResults && (hasVoted || !isOpen || deadlinePassed)))
   // Managers see per-member answers (who picked what) — but only on
   // non-anonymous polls. An anonymous poll stays totals-only even for managers.
   const showVoters = canManage && !poll.anonymous
@@ -66,7 +81,8 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
   }
 
   const handleVote = async () => {
-    if (selected.length === 0 || submitting) return
+    // votesLoading: myVote isn't known yet, so vote() would insert a second row.
+    if (selected.length === 0 || submitting || votesLoading) return
     setSubmitting(true)
     try {
       await vote(selected)
@@ -146,7 +162,21 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
 
       {/* Options */}
       <div className="space-y-2">
-        {poll.options.map((option, idx) => {
+        {/* Votes in flight: the option text is prop data and correct on frame
+            one, but whether it's selected, whether it's the member's answer and
+            whether tapping it does anything are not — so the rows keep their
+            shape and go dimmed + disabled instead of impersonating a ballot. */}
+        {votesLoading && poll.options.map((option, idx) => (
+          <button
+            key={idx}
+            type="button"
+            disabled
+            className="w-full animate-pulse cursor-default rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-left text-sm text-gray-400 dark:border-gray-700 dark:bg-gray-700/40 dark:text-gray-500"
+          >
+            {option}
+          </button>
+        ))}
+        {!votesLoading && poll.options.map((option, idx) => {
           const count = counts[idx] || 0
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
           const isSelected = selected.includes(idx)
@@ -290,7 +320,13 @@ export default function PollCard({ poll, canManage, onClose, onDelete }: PollCar
           just be their own row (0 or 1), so show nothing. */}
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {canSeeResults ? t('votes', { count: totalVotes }) : ''}
+          {canSeeResults
+            ? (votesLoading
+                // Never "0 vote(s)" from a tally that hasn't loaded — a chip of
+                // the same height so the row doesn't jump when it does.
+                ? <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                : t('votes', { count: totalVotes }))
+            : ''}
         </span>
 
         {canManage && (

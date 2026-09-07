@@ -123,20 +123,53 @@ export default function TransfersPage() {
         u20Count={data.cohorts.u20}
       />
 
-      <TransferAlerts
-        blockedCount={data.blockedRows.length}
-        dangerousConflictCount={dangerousConflictCount}
-        onShowBlocked={ui.showBlocked}
-        onShowConflicts={ui.showConflicts}
-      />
+      {/* ⚠ Both summaries below wait for the Swiss Volley cross-check, and only
+          these two do — the worklist itself stays visible during a VM outage
+          (see `crossChecksLoading` in `useTransferData`). Until `sv_vm_check`
+          answers, `validationStateOf` cannot tell "Swiss Volley has not
+          validated this licence" from "we have not asked yet", so `blockedRows`
+          over-counts and every chip is bucketed as if the register had never
+          been checked. Painting them anyway means asserting an FIVB Art. 11.4
+          eligibility alarm — and a set of filters — that the very next frame
+          retracts. */}
+      {!data.crossChecksLoading && (
+        /* No placeholder for the alarm on purpose: a grey strip where a red one
+           is about to appear is still a claim. Nothing is the honest frame. */
+        <TransferAlerts
+          blockedCount={data.blockedRows.length}
+          dangerousConflictCount={dangerousConflictCount}
+          onShowBlocked={ui.showBlocked}
+          onShowConflicts={ui.showConflicts}
+        />
+      )}
 
-      <TransferNumbersBar
-        stateCounts={data.stateCounts}
-        needsCount={data.cohorts.needs.length}
-        stateFilter={ui.stateFilter}
-        onStateFilterChange={ui.setStateFilter}
-        lastVisCheck={data.lastVisCheck}
-      />
+      {data.crossChecksLoading ? (
+        /* The chips DO get a placeholder — they are a fixture of the layout, and
+           the tabs below would otherwise jump when they land. Same container
+           classes as the real bar so the height matches at every breakpoint
+           (the chips are 44px tall below `sm`), and the chip widths are the only
+           invention. */
+        <div
+          aria-hidden="true"
+          className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/30"
+        >
+          <div className="h-4 w-28 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="h-11 w-24 animate-pulse rounded-full bg-gray-100 sm:h-6 dark:bg-gray-800" />
+            <div className="h-11 w-28 animate-pulse rounded-full bg-gray-100 sm:h-6 dark:bg-gray-800" />
+            <div className="h-11 w-20 animate-pulse rounded-full bg-gray-100 sm:h-6 dark:bg-gray-800" />
+          </div>
+          <div className="ml-auto h-4 w-36 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
+        </div>
+      ) : (
+        <TransferNumbersBar
+          stateCounts={data.stateCounts}
+          needsCount={data.cohorts.needs.length}
+          stateFilter={ui.stateFilter}
+          onStateFilterChange={ui.setStateFilter}
+          lastVisCheck={data.lastVisCheck}
+        />
+      )}
 
       <TransferCohortTabs
         activeTab={ui.activeTab}

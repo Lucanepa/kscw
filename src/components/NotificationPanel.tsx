@@ -343,7 +343,10 @@ export default function NotificationPanel({
           <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                {push.subscribed ? <BellRing className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                {/* While the SW probe runs, `subscribed: false` only means "not
+                    known yet" — show a neutral bell instead of asserting either
+                    state, and keep the button dimmed + inert (see below). */}
+                {push.probing ? <Bell className="h-4 w-4" /> : push.subscribed ? <BellRing className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
                 <span>{t('pushNotifications')}</span>
               </div>
               {push.permission === 'denied' ? (
@@ -351,14 +354,14 @@ export default function NotificationPanel({
               ) : (
                 <button
                   onClick={() => push.subscribed ? push.unsubscribe() : push.subscribe()}
-                  disabled={push.loading}
+                  disabled={push.loading || push.probing}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    push.subscribed
+                    push.probing || push.subscribed
                       ? 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                       : 'bg-brand-600 text-white hover:bg-brand-700'
                   } disabled:opacity-50`}
                 >
-                  {push.loading ? '...' : push.subscribed ? t('pushDisable') : t('pushEnable')}
+                  {push.loading || push.probing ? '...' : push.subscribed ? t('pushDisable') : t('pushEnable')}
                 </button>
               )}
             </div>

@@ -23,13 +23,16 @@ const selectCls = `${inputCls} dark:bg-gray-800`
 const apiErr = (e: unknown, fb: string) => (e as { body?: { error?: string } })?.body?.error || fb
 const btnPrimary = 'inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50'
 const btnGhost = 'inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700'
+// Stand-in for a table that has not been read yet — same shape as ExpensesTab /
+// TkExpensesPage, so "still loading" never looks like "the books are empty".
+const Spinner = () => <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
 
 type Section = 'journal' | 'accounts' | 'trial' | 'close' | 'settings'
 
 export default function LedgerTab({ fiscalYearId }: { fiscalYearId?: string | number | null }) {
   const { t } = useTranslation('finance')
   const [section, setSection] = useState<Section>('journal')
-  const { data: years } = useLedgerFiscalYears()
+  const { data: years, isLoading: fyLoading } = useLedgerFiscalYears()
   // Follows the single global fiscal-year selector in the FinancePage header — no
   // second dropdown here.
   const fyId = String(fiscalYearId ?? '')
@@ -56,21 +59,23 @@ export default function LedgerTab({ fiscalYearId }: { fiscalYearId?: string | nu
         ))}
       </div>
 
-      {section === 'journal' && <Journal fyId={effFy} fyClosed={activeFy?.status === 'closed'} />}
+      {/* fyLoading is passed down because `effFy` is '' until the years land — which
+          disables the child queries, so their own isLoading stays false in that window. */}
+      {section === 'journal' && <Journal fyId={effFy} fyClosed={activeFy?.status === 'closed'} fyLoading={fyLoading} />}
       {section === 'accounts' && <Accounts />}
-      {section === 'trial' && <TrialBalance fyId={effFy} period={activeFy?.label || effFy} />}
-      {section === 'close' && <CloseYear fy={activeFy} />}
+      {section === 'trial' && <TrialBalance fyId={effFy} period={activeFy?.label || effFy} fyLoading={fyLoading} />}
+      {section === 'close' && <CloseYear fy={activeFy} fyLoading={fyLoading} />}
       {section === 'settings' && <AutopostSettings />}
     </div>
   )
 }
 
 /* ── Journal ─────────────────────────────────────────────────────────── */
-function Journal({ fyId, fyClosed }: { fyId: string; fyClosed?: boolean }) {
+function Journal({ fyId, fyClosed, fyLoading }: { fyId: string; fyClosed?: boolean; fyLoading?: boolean }) {
   const { t } = useTranslation('finance')
   const confirm = useConfirm()
   const qc = useQueryClient()
-  const { data: entries } = useLedgerEntries(fyId || null, !!fyId)
+  const { data: entries, isLoading } = useLedgerEntries(fyId || null, !!fyId)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<number | null>(null)
   const refresh = () => qc.invalidateQueries({ queryKey: ['finance'] })
@@ -79,12 +84,20 @@ function Journal({ fyId, fyClosed }: { fyId: string; fyClosed?: boolean }) {
   async function remove(id: number) { if (!(await confirm({ message: t('ledDeleteSure'), danger: true }))) return; setBusy(id); try { await deleteLedgerEntry(id); refresh() } catch (e) { toast.error(apiErr(e, t('ledActionError'))) } finally { setBusy(null) } }
 
   const rows = entries ?? []
+  // `rows` used to mean both "no bookings" and "not read yet" — over the club's book of
+  // record that reads as a definitive empty journal. fyLoading covers the window where
+  // fyId is still '' (query disabled ⇒ isLoading false).
+  const loading = fyLoading || isLoading
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button type="button" className={btnPrimary} disabled={fyClosed} onClick={() => setOpen(true)}><Plus className="h-4 w-4" />{t('ledPostEntry')}</button>
+        {/* Stays disabled until the year's status is known — posting into a closed year
+            is rejected 409, and the button must not flip enabled → disabled under a tap. */}
+        <button type="button" className={btnPrimary} disabled={fyClosed || fyLoading} onClick={() => setOpen(true)}><Plus className="h-4 w-4" />{t('ledPostEntry')}</button>
       </div>
-      {rows.length === 0 ? (
+      {loading ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('ledNoEntries')}</p>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -173,7 +186,7 @@ function PostEntryModal({ open, onClose, fyId, onDone }: { open: boolean; onClos
 function Accounts() {
   const { t } = useTranslation('finance')
   const qc = useQueryClient()
-  const { data: accounts } = useLedgerAccounts(true, true)
+  const { data: accounts, isLoading } = useLedgerAccounts(true, true)
   const [open, setOpen] = useState(false)
   const refresh = () => qc.invalidateQueries({ queryKey: ['finance', 'ledger-accounts'] })
   const typeLabel = (ty: string | null) => (ty ? t(`acctType_${ty}`) : '–')
@@ -187,7 +200,9 @@ function Accounts() {
         <p className="text-xs text-gray-500 dark:text-gray-400">{t('ledAccountsHint')}</p>
         <button type="button" className={btnPrimary} onClick={() => setOpen(true)}><Plus className="h-4 w-4" />{t('ledNewAccount')}</button>
       </div>
-      {rows.length === 0 ? (
+      {isLoading ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('ledNoAccounts')}</p>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -252,10 +267,13 @@ function NewAccountModal({ open, onClose, onDone }: { open: boolean; onClose: ()
 }
 
 /* ── Trial balance ───────────────────────────────────────────────────── */
-function TrialBalance({ fyId, period }: { fyId: string; period: string }) {
+function TrialBalance({ fyId, period, fyLoading }: { fyId: string; period: string; fyLoading?: boolean }) {
   const { t } = useTranslation('finance')
-  const { data } = useLedgerTrialBalance(fyId || null, !!fyId)
+  const { data, isLoading } = useLedgerTrialBalance(fyId || null, !!fyId)
   const rows = data?.rows ?? []
+  // Same gate as the journal: a statutory report that has not been fetched must not
+  // render as a report with nothing in it.
+  const loading = fyLoading || isLoading
   const report = (): FinanceReport => ({
     title: t('ledTrialBalance'), org: 'KSC Wiedikon', period,
     columns: [{ label: t('ledColNumber'), type: 'text' }, { label: t('ledColName'), type: 'text' }, { label: t('ledColDebit'), type: 'money' }, { label: t('ledColCredit'), type: 'money' }, { label: t('ledColBalance'), type: 'money' }],
@@ -271,7 +289,9 @@ function TrialBalance({ fyId, period }: { fyId: string; period: string }) {
           {rows.length > 0 && <ReportExportMenu build={report} filename={`trial-balance-${period}`} />}
         </div>
       )}
-      {rows.length === 0 ? (
+      {loading ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('ledNoEntries')}</p>
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -302,7 +322,7 @@ function TrialBalance({ fyId, period }: { fyId: string; period: string }) {
 }
 
 /* ── Year-end close ──────────────────────────────────────────────────── */
-function CloseYear({ fy }: { fy?: { id: number; label: string | null; status: string } }) {
+function CloseYear({ fy, fyLoading }: { fy?: { id: number; label: string | null; status: string }; fyLoading?: boolean }) {
   const { t } = useTranslation('finance')
   const qc = useQueryClient()
   const { data: accounts } = useLedgerAccounts()
@@ -323,7 +343,7 @@ function CloseYear({ fy }: { fy?: { id: number; label: string | null; status: st
     } catch (e) { setError(apiErr(e, t('ledActionError'))) } finally { setBusy(false) }
   }
 
-  if (!fy) return <p className="text-sm text-gray-500">{t('ledNoYear')}</p>
+  if (!fy) return fyLoading ? <Spinner /> : <p className="text-sm text-gray-500">{t('ledNoYear')}</p>
   return (
     <div className="max-w-xl space-y-4">
       <div className="rounded-md bg-gray-50 p-3 text-sm dark:bg-gray-800">

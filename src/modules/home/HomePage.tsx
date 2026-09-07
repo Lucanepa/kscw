@@ -79,7 +79,7 @@ export default function HomePage() {
 
   const { user, isApproved, primarySport, coachTeamIds } = useAuth()
   const { canManageTeam } = useTeamPermissions()
-  const { items: fillableForms, refetch: refetchForms } = useFillableForms()
+  const { items: fillableForms, isLoading: fillableFormsLoading, refetch: refetchForms } = useFillableForms()
   const [fillItem, setFillItem] = useState<FillableForm | null>(null)
   // IBAN nudge — finance needs every member's up-to-date IBAN. Show a dismissible
   // banner to members who haven't set one; the CTA opens the profile editor.
@@ -646,8 +646,13 @@ export default function HomePage() {
         <HomePollsCard teamIds={userTeamIds} canManage={canManageTeam} />
       )}
 
-      {/* Forms to fill — surfaced here because the /forms nav item is author-only. */}
-      {user && isApproved && fillableForms.length > 0 && (
+      {/* Forms to fill — surfaced here because the /forms nav item is author-only.
+          ⚠ Held until the hook has the member's SUBMISSIONS too, not just the
+          open forms: until then every row reads "Fill in" and opens a blank
+          create even for a form already answered. Nothing renders meanwhile —
+          this card is an optional insert above YourDuesCard, so a placeholder
+          would cause the very layout shift the gate exists to avoid. */}
+      {user && isApproved && !fillableFormsLoading && fillableForms.length > 0 && (
         <div className="mb-6 lg:flex lg:flex-col lg:items-center">
           <div className="w-full overflow-hidden rounded-xl border border-blue-200 bg-blue-50/60 lg:max-w-2xl dark:border-blue-800/50 dark:bg-blue-900/20">
             <div className="flex items-center gap-2 border-b border-blue-200 px-4 py-2.5 dark:border-blue-800/50">

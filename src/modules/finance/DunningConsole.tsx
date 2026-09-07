@@ -13,6 +13,50 @@ const labelCls = 'block text-xs font-medium uppercase tracking-wider text-gray-5
 const inputCls = 'mt-1 w-full rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100'
 const apiErr = (e: unknown, fb: string) => (e as { body?: { error?: string } })?.body?.error || fb
 const daysOverdue = (due: string | null, today: string) => (due ? Math.max(0, Math.floor((Date.parse(today) - Date.parse(due)) / 86_400_000)) : 0)
+const tableWrapCls = 'rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+const thCls = 'text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400'
+const barCls = 'block h-3 animate-pulse rounded bg-gray-200 dark:bg-gray-700'
+
+/** Shared header so the loading placeholder has the exact shape of the real table. */
+function DunningHead() {
+  const { t } = useTranslation('finance')
+  return (
+    <TableHeader>
+      <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
+        <TableHead className={thCls}>{t('colRecipient')}</TableHead>
+        <TableHead className={`hidden sm:table-cell ${thCls}`}>{t('colDue')}</TableHead>
+        <TableHead className={`text-right ${thCls}`}>{t('colOpen')}</TableHead>
+        <TableHead className={thCls}>{t('dunColLevel')}</TableHead>
+        <TableHead className={`text-right ${thCls}`}></TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+/** Placeholder rows while the candidate list is in flight — never a verdict. */
+function DunningSkeleton() {
+  return (
+    <div className={tableWrapCls} aria-busy="true">
+      <Table>
+        <DunningHead />
+        <TableBody>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <TableRow key={i} className="border-gray-200 dark:border-gray-700">
+              <TableCell>
+                <span className={`${barCls} w-32`} aria-hidden="true" />
+                <span className={`${barCls} mt-1.5 w-24`} aria-hidden="true" />
+              </TableCell>
+              <TableCell className="hidden sm:table-cell"><span className={`${barCls} w-20`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-16`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} w-10`} aria-hidden="true" /></TableCell>
+              <TableCell><span className={`${barCls} ml-auto w-24`} aria-hidden="true" /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
 
 function EscalateModal({ row, onClose, onDone }: { row: DunningCandidate | null; onClose: () => void; onDone: () => void }) {
   const { t } = useTranslation('finance')
@@ -72,10 +116,13 @@ function EscalateModal({ row, onClose, onDone }: { row: DunningCandidate | null;
 
 export default function DunningConsole() {
   const { t } = useTranslation('finance')
-  const { data, refetch } = useDunningCandidates()
+  const { data, isLoading, isError, refetch } = useDunningCandidates()
   const [target, setTarget] = useState<DunningCandidate | null>(null)
   const [busyDun, setBusyDun] = useState<number | null>(null)
   const [err, setErr] = useState('')
+  // `data` is undefined while the request is in flight AND when it fails, so an empty
+  // `candidates` used to mean either "nothing overdue" or "nothing loaded yet" — and the
+  // console printed the all-clear for both. Only trust the length once the query settled.
   const candidates = data?.candidates ?? []
   const today = data?.today ?? new Date().toISOString().slice(0, 10)
 
@@ -91,20 +138,16 @@ export default function DunningConsole() {
     <div className="space-y-4">
       <p className="text-xs text-gray-500 dark:text-gray-400">{t('dunHint')}</p>
       {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
-      {candidates.length === 0 ? (
+      {isLoading ? (
+        <DunningSkeleton />
+      ) : isError ? (
+        <p className="rounded-lg border border-dashed border-red-300 py-10 text-center text-sm text-red-600 dark:border-red-800 dark:text-red-400">{t('common:error')}</p>
+      ) : candidates.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">{t('dunNone')}</p>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div className={tableWrapCls}>
           <Table>
-            <TableHeader>
-              <TableRow className="border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
-                <TableHead className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('colRecipient')}</TableHead>
-                <TableHead className="hidden sm:table-cell text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('colDue')}</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('colOpen')}</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('dunColLevel')}</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400"></TableHead>
-              </TableRow>
-            </TableHeader>
+            <DunningHead />
             <TableBody>
               {candidates.map((c) => (
                 <TableRow key={c.id} className="border-gray-200 dark:border-gray-700">

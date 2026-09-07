@@ -51,6 +51,12 @@ interface WeekViewProps {
   absencesByDate?: Map<string, AbsentMember[]>
   /** date key (yyyy-MM-dd) -> roster-sharing teams playing that day. */
   crossTeamByDate?: Map<string, CrossTeamConflict[]>
+  /** True while the absence overlay is still fetching: `absencesByDate` is empty
+   *  because the answer is unknown, NOT because nobody is away. Render a pending
+   *  pill instead of the day's real count. */
+  absencesPending?: boolean
+  /** Same, for the cross-team overlay. */
+  crossTeamPending?: boolean
 }
 
 export default function WeekView({
@@ -62,6 +68,8 @@ export default function WeekView({
   onMove,
   absencesByDate,
   crossTeamByDate,
+  absencesPending = false,
+  crossTeamPending = false,
 }: WeekViewProps) {
   const { t } = useTranslation('spielplanung')
   const days = useMemo(() => getWeekDays(weekStart), [weekStart])
@@ -175,10 +183,24 @@ export default function WeekView({
                   <div className={cn('text-sm font-semibold', isToday && 'text-accent-foreground')}>
                     {formatDate(d, 'd')}
                   </div>
-                  {(absent.length > 0 || crossTeam.length > 0) && (
+                  {/* Mounted while an overlay is pending too — an unknown count
+                      must not look like "nobody away / no conflict". */}
+                  {(absent.length > 0 || crossTeam.length > 0 || absencesPending || crossTeamPending) && (
                     <div className="mt-0.5 flex justify-center gap-1">
-                      {crossTeam.length > 0 && <CrossTeamBadge conflicts={crossTeam} />}
-                      {absent.length > 0 && <AbsenceBadge absent={absent} />}
+                      {crossTeamPending ? (
+                        <span
+                          role="img"
+                          aria-label={t('common:loading')}
+                          className="h-3 w-5 animate-pulse rounded-full bg-sky-100 dark:bg-sky-900/40"
+                        />
+                      ) : crossTeam.length > 0 && <CrossTeamBadge conflicts={crossTeam} />}
+                      {absencesPending ? (
+                        <span
+                          role="img"
+                          aria-label={t('common:loading')}
+                          className="h-3 w-5 animate-pulse rounded-full bg-amber-100 dark:bg-amber-900/40"
+                        />
+                      ) : absent.length > 0 && <AbsenceBadge absent={absent} />}
                     </div>
                   )}
                 </div>
