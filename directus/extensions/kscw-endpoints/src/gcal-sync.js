@@ -18,7 +18,7 @@
  * so nothing churns for unchanged entries.
  */
 
-import { pushHomeGames, pushClubClosures, listOwnedClosureEventIds, findDuplicate, KSCW_CALENDAR_ID } from './gcal-push.js'
+import { pushHomeGames, pushClubClosures, listOwnedClosureEventIds, findDuplicate, isOwnGameTitle, KSCW_CALENDAR_ID } from './gcal-push.js'
 import { writeUserLog } from './activity-log.js'
 import { emptyChanges, hasChanges, notifyGCalChanges } from './gcal-notify.js'
 
@@ -94,9 +94,10 @@ function parseIcs(text) {
 // Measured against the live feed at the flip, this changed 1 of 19 future
 // entries — the exam reservation; the other 18 already matched.
 //
-// Our OWN events never reach here: pushed games are dropped by event id and
-// "VB "-titled games by prefix, both before this point. Closing the hall for our
-// own game would cancel the very game it describes.
+// Our OWN events never reach here: pushed games are dropped by event id and, as
+// a backstop, by the exact title shape buildEvent() emits — both before this
+// point. Closing the hall for our own game would cancel the very game it
+// describes.
 //
 // override === false → admin says this one closes nothing.
 // override === true / null/undefined → closes (true is a recorded human "yes").
@@ -221,7 +222,12 @@ export function registerGCalSync(router, { database, logger, services, getSchema
         // they did before.
         const evId = String(ev.uid).split('@')[0]
         if (push.eventIds.has(evId) || ownedClosureIds.has(evId)) continue
-        if (ev.title?.startsWith('VB ')) continue // club VB games — app-managed, never a closure
+        // Backstop for the event-id skip above (empty when push is disabled).
+        // Matches only "<VB|BB> <team> vs. <opponent> (Halle X)" — our own
+        // format — so the hall admin's hand-typed "BB - Freundschaftsspiel" and
+        // "BB DU16E …" still import. A bare "VB " prefix used to do this job and
+        // covered nothing once basketball games stopped being mislabelled VB.
+        if (isOwnGameTitle(ev.title)) continue // club games — app-managed, never a closure
         seenUids.add(ev.uid)
 
         // ── hall_events (display) — upsert by uid (raw knex; no hook needed).

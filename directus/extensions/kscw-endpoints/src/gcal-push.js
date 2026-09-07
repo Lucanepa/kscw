@@ -134,8 +134,15 @@ function addMinutes(hhmm, minutes) {
 
 // "VB D4 vs. Rüschlikon 4 (Halle A)" — the format the hall administration has
 // used for years. Keep it; they read this calendar.
-function buildEvent(game) {
-  const prefix = game.source === 'basketplan' ? 'BB' : 'VB'
+//
+// ⚠ The sport comes from the TEAM, not from `game.source`. Deriving it from the
+// source ("basketplan → BB, else VB") mislabelled every hand-entered basketball
+// fixture: `ManualGameModal` writes source='manual', so all 5 upcoming BB home
+// games at KWI read "VB Lions D1 vs. RJ Lakers D1" on the school's calendar
+// (reported 07.09.2026 by the hall administration). `source` still decides the
+// two Basketplan rows that carry no kscw_team.
+export function buildEvent(game) {
+  const prefix = game.sport === 'basketball' || game.source === 'basketplan' ? 'BB' : 'VB'
   const team = game.team_name || game.home_team || '?'
   const hall = `Halle ${game.hall_letter}`
   const startTime = String(game.time).slice(0, 5)
@@ -150,6 +157,17 @@ function buildEvent(game) {
     transparency: 'transparent', // never block anyone's own calendar
     extendedProperties: { private: { wiedisync: 'game', game_id: game.game_id } },
   }
+}
+
+// The exact shape buildEvent() emits. The pull half uses it as a backstop for
+// "this event is ours" when the event-id set is unavailable (push disabled), so
+// it must stay narrow: the hall administration hand-types its own basketball
+// entries ("BB - Freundschaftsspiel", "BB DU16E …") which are NOT ours and must
+// keep importing as hall_events.
+const OWN_GAME_TITLE = /^(?:VB|BB) .+ vs\. .+ \(Halle [A-Z]\)$/
+
+export function isOwnGameTitle(title) {
+  return OWN_GAME_TITLE.test(String(title ?? '').trim())
 }
 
 function needsUpdate(existing, desired) {
@@ -194,6 +212,7 @@ export async function pushHomeGames(db, log) {
       db.raw("to_char(g.time, 'HH24:MI') as time"),
       db.raw("right(h.name, 1) as hall_letter"),
       't.name as team_name',
+      't.sport as sport',
     )
 
   const desired = new Map()
