@@ -125,10 +125,10 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                     {data.source === 'vm' && (
                       <TableHead className="w-8" title={tg('rsvpCheckLegend')}>{tg('rsvpCheckHeader')}</TableHead>
                     )}
+                    <TableHead className="w-24">{t('rosterColDob')}</TableHead>
                     <TableHead className="w-12">{t('rosterColNumber')}</TableHead>
                     <TableHead>{t('rosterColName')}</TableHead>
-                    {showLicence && <TableHead className="w-16">{t('rosterColLicence')}</TableHead>}
-                    <TableHead className="text-right">{t('rosterColDob')}</TableHead>
+                    {showLicence && <TableHead className="w-16 text-right">{t('rosterColLicence')}</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -137,6 +137,9 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                       {data.source === 'vm' && (
                         <TableCell className="text-center"><RsvpCheck state={r.rsvp ?? null} /></TableCell>
                       )}
+                      <TableCell className="w-24 whitespace-normal tabular-nums text-xs text-muted-foreground">
+                        {r.birthdate ? formatDateZurich(r.birthdate) : '—'}
+                      </TableCell>
                       <TableCell className="font-semibold tabular-nums">{r.number ?? '—'}</TableCell>
                       <TableCell className="whitespace-normal break-words">
                         {r.last_name}{r.first_initial ? `, ${r.first_initial}` : ''}
@@ -158,13 +161,10 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                         )}
                       </TableCell>
                       {showLicence && (
-                        <TableCell className="text-xs text-gray-500 dark:text-gray-400">
+                        <TableCell className="text-right text-xs text-gray-500 dark:text-gray-400">
                           {r.licence ?? '—'}
                         </TableCell>
                       )}
-                      <TableCell className="text-right tabular-nums">
-                        {r.birthdate ? formatDateZurich(r.birthdate) : '—'}
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -181,18 +181,18 @@ export default function RosterModal({ gameId, onClose }: RosterModalProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-24">{t('rosterColDob')}</TableHead>
                       <TableHead>{t('rosterColName')}</TableHead>
-                      <TableHead className="text-right">{t('rosterColDob')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {coaches.map((c, i) => (
                       <TableRow key={`c-${c.last_name}-${i}`}>
+                        <TableCell className="w-24 whitespace-normal tabular-nums text-xs text-muted-foreground">
+                          {c.birthdate ? formatDateZurich(c.birthdate) : '—'}
+                        </TableCell>
                         <TableCell className="whitespace-normal break-words">
                           {c.last_name}{c.first_initial ? `, ${c.first_initial}` : ''}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {c.birthdate ? formatDateZurich(c.birthdate) : '—'}
                         </TableCell>
                       </TableRow>
                     ))}
