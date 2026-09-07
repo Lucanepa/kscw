@@ -316,6 +316,12 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   // Staff of the playing team — coach, team-responsible, or admin. Gates the
   // referee-expenses panel (hidden from everyone else).
   const isTeamStaff = adminSeesContact || isCoachOf(kscwTeamId) || teamResponsibleIds.includes(kscwTeamId)
+  // Show IDs is NARROWER than isTeamStaff, and must mirror the server: mayRead()
+  // in identity-document.js has no admin branch and refuses an admin outright —
+  // they hold no envelope, so they could not decrypt a thing. Offering them the
+  // button is a dead end that reports "0 documents downloaded", i.e. the message
+  // that means "nobody has uploaded one". Real coach/TR membership only.
+  const canShowIds = coachTeamIds.includes(kscwTeamId) || teamResponsibleIds.includes(kscwTeamId)
   // The assigned Schreiber (scorer roles only — pure Täfeler excluded, mirroring
   // the roster endpoint). For them "View roster" opens the confirmed match sheet
   // (jersey #, DoB, coaches, ±window) instead of the RSVP roster. `user.id` is a
@@ -680,10 +686,11 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
               </Button>
             )}
 
-            {/* Show IDs — coach/TR only. The documents are end-to-end encrypted: the app
-                decrypts them on this device with the coach's own key, and the club cannot
-                read them at all. Displayed only in the 45 minutes before kickoff. */}
-            {isTeamStaff && (
+            {/* Show IDs — coach/TR only, admins deliberately excluded (see canShowIds).
+                The documents are end-to-end encrypted: the app decrypts them on this
+                device with the coach's own key, and the club cannot read them at all.
+                Displayed only in the 45 minutes before kickoff. */}
+            {canShowIds && (
               <Button
                 variant="outline"
                 onClick={() => setIdsOpen(true)}
