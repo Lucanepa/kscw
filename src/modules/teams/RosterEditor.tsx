@@ -7,7 +7,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import Modal from '../../components/Modal'
 import { logActivity } from '../../utils/logActivity'
 import { coercePositions, getPositionI18nKey, getPositionInitial, getPositionsForSport, getSelectablePositions, isNonPlayingStaff } from '../../utils/memberPositions'
-import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useTeamMembers } from '../../hooks/useTeamMembers'
 import { useMutation } from '../../hooks/useMutation'
 import { useCollection } from '../../lib/query'
@@ -49,7 +49,7 @@ const ROLE_COLORS: Record<LeadershipRole, string> = {
 export default function RosterEditor() {
   const { t } = useTranslation('teams')
   const { teamSlug } = useParams<{ teamSlug: string }>()
-  const { isCoachOf } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const season = getCurrentSeason()
   const { data: allMembersRaw } = useCollection<Member>('members', { filter: { kscw_membership_active: { _eq: true } }, all: true, sort: ['last_name'], fields: ['id', 'first_name', 'nickname', 'last_name', 'photo', 'number', 'position'] })
   const allMembers = allMembersRaw ?? []
@@ -77,7 +77,7 @@ export default function RosterEditor() {
   // below). Read-only surfaces must not PATCH members.position — see
   // useTeamMembers + the 2026-06-20 error-log audit.
   const { members, isLoading, refetch } = useTeamMembers(teamId, {
-    persistNormalization: !!team && isCoachOf(team.id),
+    persistNormalization: !!team && canManageTeam(team.id),
   })
 
   // Report to app boot gate — see usePageReady.tsx. Must run on every render, so
@@ -309,7 +309,7 @@ export default function RosterEditor() {
   }
 
   // Access guard AFTER all hooks (rules-of-hooks): team is non-null here.
-  if (!isCoachOf(team.id)) {
+  if (!canManageTeam(team.id)) {
     return <Navigate to={`/teams/${teamSlug}`} replace />
   }
 

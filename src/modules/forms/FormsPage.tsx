@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Pencil, BarChart3, Trash2, Lock, Unlock, Link as LinkIcon, Globe } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
 import { useCollection } from '../../lib/query'
 import { useFillableForms, type FillableForm } from '../../hooks/useFillableForms'
 import { updateRecord, deleteRecord } from '../../lib/api'
@@ -46,12 +47,13 @@ export default function FormsPage() {
   const { t: tc } = useTranslation('common')
   const confirm = useConfirm()
   const navigate = useNavigate()
-  const { user, coachTeamIds, teamResponsibleIds, isAdmin, isGlobalAdmin, isVorstand, isVbAdmin, isBbAdmin } = useAuth()
+  const { user, coachTeamIds, teamResponsibleIds, isAdmin, isVorstand, isVbAdmin, isBbAdmin } = useAuth()
+  const { effectiveIsAdmin, effectiveIsVorstand } = useAdminMode()
   // Authoring is role-gated (see Layout) — members never reach this page via nav,
   // they fill forms from the Home card. Coaches/TRs/Sport Admins/Vorstand/Admins.
   const canManageForms = isAdmin || isVorstand || coachTeamIds.length > 0 || teamResponsibleIds.length > 0
   // Full managers (global admin + Vorstand) manage every form incl. club-wide.
-  const fullManager = isGlobalAdmin || isVorstand
+  const fullManager = effectiveIsAdmin || effectiveIsVorstand
 
   const { data: formsRaw, isLoading, refetch } = useCollection<FormDef>('forms', {
     fields: ['*', 'teams.teams_id.id', 'teams.teams_id.name', 'teams.teams_id.sport'],

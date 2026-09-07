@@ -8,6 +8,7 @@ import { useTeamMembers } from '../../hooks/useTeamMembers'
 import { useTeamIdentityDocs } from '../../hooks/useTeamIdentityDocs'
 import type { ExpandedMemberTeam } from '../../hooks/useTeamMembers'
 import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useAdminMode } from '../../hooks/useAdminMode'
 import { usePendingMembers } from '../../hooks/usePendingMembers'
 import { useCollection } from '../../lib/query'
@@ -59,7 +60,8 @@ function parsePicturePos(pos: string) {
 export default function TeamDetail() {
   const { t } = useTranslation('teams')
   const { teamSlug } = useParams<{ teamSlug: string }>()
-  const { user, isCoachOf, hasAdminAccessToTeam, canViewTeam } = useAuth()
+  const { user, hasAdminAccessToTeam, canViewTeam } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const { effectiveIsAdmin } = useAdminMode()
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
@@ -73,7 +75,10 @@ export default function TeamDetail() {
   }
   const teamId = team?.id
   const { members, isLoading: membersLoading } = useTeamMembers(teamId)
-  const canManage = isCoachOf(teamId ?? '') || (effectiveIsAdmin && hasAdminAccessToTeam(teamId ?? ''))
+  // Was `isCoachOf(id) || (effectiveIsAdmin && hasAdminAccessToTeam(id))` — the leaky
+  // first half made the mode-aware second half dead code for exactly the admins it
+  // was written to constrain.
+  const canManage = canManageTeam(teamId ?? '')
   // Who has an identity document on file. Staff-only, and `null` (unknown) hides the column.
   const identityDocs = useTeamIdentityDocs(teamId, canManage)
   const { data: pendingMembers, refetch: refetchPending } = usePendingMembers(canManage ? teamId : undefined)
@@ -577,7 +582,7 @@ export default function TeamDetail() {
           </div>
         </div>
 
-        {isCoachOf(teamId ?? '') && (
+        {canManageTeam(teamId ?? '') && (
           <Link
             to={`/teams/${teamSlug}/roster/edit`}
             className="inline-flex items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600"
@@ -722,7 +727,7 @@ export default function TeamDetail() {
             title={t('noMembers')}
             description={t('noMembersDescription')}
             action={
-              isCoachOf(teamId ?? '') ? (
+              canManageTeam(teamId ?? '') ? (
                 <Link
                   to={`/teams/${teamSlug}/roster/edit`}
                   className="text-sm text-brand-600 hover:text-brand-700"

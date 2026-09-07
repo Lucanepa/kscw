@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Ban, RotateCcw } from 'lucide-react'
 import Modal from '@/components/Modal'
 import { useAuth } from '../hooks/useAuth'
+import { useTeamPermissions } from '../hooks/useTeamPermissions'
 import { useAdminMode } from '../hooks/useAdminMode'
 import { useMutation } from '../hooks/useMutation'
 
@@ -44,7 +45,8 @@ export default function CancelActivityButton({
   onDone,
 }: CancelActivityButtonProps) {
   const { t } = useTranslation('common')
-  const { isCoachOf, teamResponsibleIds } = useAuth()
+  const { teamResponsibleIds } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const { effectiveIsAdmin } = useAdminMode()
   const { update, isLoading } = useMutation(COLLECTION[kind])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -53,7 +55,7 @@ export default function CancelActivityButton({
 
   const canManage =
     effectiveIsAdmin ||
-    teamIds.some((id) => isCoachOf(id) || teamResponsibleIds.includes(id))
+    teamIds.some((id) => canManageTeam(id) || teamResponsibleIds.includes(id))
   if (!canManage) return null
 
   const keys = CANCEL_KEYS[kind]

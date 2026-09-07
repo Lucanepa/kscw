@@ -6,6 +6,7 @@ import ParticipationSummary from '../../components/ParticipationSummary'
 import { rsvpButtonClass } from '../../utils/participationColors'
 import ParticipationRosterModal from '../../components/ParticipationRosterModal'
 import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useParticipation } from '../../hooks/useParticipation'
 import { useMyCoveringAbsence } from '../../hooks/useMyCoveringAbsence'
 import { useAbsenceNoteText } from '../../hooks/useAbsenceNoteText'
@@ -33,12 +34,13 @@ interface TrainingDetailModalProps {
 export default function TrainingDetailModal({ training, onClose }: TrainingDetailModalProps) {
   const { t } = useTranslation('trainings')
   const { t: tc } = useTranslation('common')
-  const { user, canParticipateIn, isCoachOf, isStaffOnly, coachTeamIds, teamResponsibleIds } = useAuth()
+  const { user, canParticipateIn, isStaffOnly, coachTeamIds, teamResponsibleIds } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const [rosterOpen, setRosterOpen] = useState(false)
 
   const teamId = relId(training?.team)
   const canParticipate = !!user && !!teamId && canParticipateIn(teamId)
-  const isStaff = !!teamId && isCoachOf(teamId)
+  const isStaff = !!teamId && canManageTeam(teamId)
 
   if (!training) return null
 

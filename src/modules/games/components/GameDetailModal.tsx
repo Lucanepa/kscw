@@ -15,6 +15,7 @@ import PreGameRosterModal from './PreGameRosterModal'
 import ShowIdsModal from './ShowIdsModal'
 import { useAuth } from '../../../hooks/useAuth'
 import { useAdminMode } from '../../../hooks/useAdminMode'
+import { useTeamPermissions } from '../../../hooks/useTeamPermissions'
 import { useIsCalledUpToGame } from '../../../hooks/useUserVisibleGameIds'
 import { useParticipation } from '../../../hooks/useParticipation'
 import { useMyCoveringAbsence } from '../../../hooks/useMyCoveringAbsence'
@@ -115,6 +116,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   const { t: tc } = useTranslation('common')
   const { user, isStaffOnly, canParticipateIn, isGuestIn, coachTeamIds, teamResponsibleIds, hasAdminAccessToTeam, teamsLoading } = useAuth()
   const { effectiveIsAdmin } = useAdminMode()
+  const { canManageTeam } = useTeamPermissions()
   const confirm = useConfirm()
   const [rosterOpen, setRosterOpen] = useState(false)
   const [participationListOpen, setParticipationListOpen] = useState(false)
@@ -320,14 +322,14 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
   // `isCoachOf` folds `hasAdminAccessToTeam` in — so calling them raw handed an
   // admin full coach powers with admin mode off. This modal was the only one of
   // six `hasAdminAccessToTeam` call sites that did not pair it with useAdminMode.
-  const isTeamAdmin = effectiveIsAdmin && hasAdminAccessToTeam(kscwTeamId)
-  const adminSeesContact = isTeamAdmin
-  // Coach-or-admin, the way `isCoachOf` means it, but mode-aware. Team
-  // responsibles are deliberately NOT included — that matches `isCoachOf`.
-  const canEditAsCoach = isTeamAdmin || coachTeamIds.includes(kscwTeamId)
-  // Staff of the playing team — coach, team-responsible, or admin-in-admin-mode.
-  // Gates the referee-expenses panel (hidden from everyone else).
-  const isTeamStaff = isTeamAdmin || coachTeamIds.includes(kscwTeamId) || teamResponsibleIds.includes(kscwTeamId)
+  // Contact reveal is admin-only — NOT a coach power — so it keeps its own root.
+  const adminSeesContact = effectiveIsAdmin && hasAdminAccessToTeam(kscwTeamId)
+  // Everything else is the shared idiom: coach/TR of the team, or an admin for its
+  // sport while admin mode is ON. `coachTeamIds` is coaches ∪ responsibles, so this
+  // covers what `isTeamStaff` and `canEditAsCoach` used to spell out separately.
+  const canEditAsCoach = canManageTeam(kscwTeamId)
+  // Staff of the playing team. Gates the referee-expenses panel.
+  const isTeamStaff = canManageTeam(kscwTeamId)
   // Show IDs is NARROWER than isTeamStaff, and must mirror the server: mayRead()
   // in identity-document.js has no admin branch and refuses an admin outright —
   // they hold no envelope, so they could not decrypt a thing. Offering them the

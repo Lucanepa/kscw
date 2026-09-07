@@ -9,6 +9,8 @@ import { rsvpButtonClass } from '../../utils/participationColors'
 import ParticipationRosterModal from '../../components/ParticipationRosterModal'
 import SessionParticipationSheet from '../../components/SessionParticipationSheet'
 import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useParticipation } from '../../hooks/useParticipation'
 import { useMyCoveringAbsence } from '../../hooks/useMyCoveringAbsence'
 import { useAbsenceNoteText } from '../../hooks/useAbsenceNoteText'
@@ -39,7 +41,9 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
   const { t } = useTranslation('events')
   const { t: tP } = useTranslation('participation')
   const { t: tc } = useTranslation('common')
-  const { user, canParticipateIn, isCoachOf, isStaffOnlyForTeams, coachTeamIds, teamResponsibleIds, isAdmin, memberTeamIds, getGuestLevel } = useAuth()
+  const { user, canParticipateIn, isStaffOnlyForTeams, coachTeamIds, teamResponsibleIds, memberTeamIds, getGuestLevel } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
+  const { effectiveIsAdmin } = useAdminMode()
   const [rosterOpen, setRosterOpen] = useState(false)
   const [signupsOpen, setSignupsOpen] = useState(false)
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false)
@@ -57,7 +61,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
   }
   // Mirrors the endpoint's own rule: admin, sport admin, or the event's creator.
   // The server enforces it; this only decides whether to render the controls.
-  const canManageShare = !!event && (isAdmin
+  const canManageShare = !!event && (effectiveIsAdmin
     || (!!user && event.created_by != null && String(event.created_by) === String(user.id)))
   const publicSignupUrl = shareToken ? `${window.location.origin}/e/${shareToken}` : ''
 
@@ -104,7 +108,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
   // coach of the second team as a plain player (their RSVP then counts in the
   // player tally instead of the Staff section).
   const eventTeamIds = (event?.teams ?? []).map((tid) => teamId(tid))
-  const isStaff = eventTeamIds.some((id) => isCoachOf(id))
+  const isStaff = eventTeamIds.some((id) => canManageTeam(id))
   const isStaffParticipant = isStaffOnlyForTeams(eventTeamIds)
 
   // Fetch sessions for multi-session events
@@ -402,7 +406,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
               </button>
               {/* Admin-only: the merged view, which is the only place the guest
                   (OpnForm) half of the signups is visible at all. */}
-              {isAdmin && (
+              {effectiveIsAdmin && (
                 <button
                   onClick={() => setSignupsOpen(true)}
                   aria-label={t('signupsTitle')}

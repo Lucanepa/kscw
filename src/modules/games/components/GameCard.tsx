@@ -11,7 +11,7 @@ import ParticipationSummary from '../../../components/ParticipationSummary'
 import ParticipationWarningBadge from '../../../components/ParticipationWarningBadge'
 import type { Warning } from '../../../utils/participationWarnings'
 import { useAuth } from '../../../hooks/useAuth'
-import { useAdminMode } from '../../../hooks/useAdminMode'
+import { useTeamPermissions } from '../../../hooks/useTeamPermissions'
 import { useIsCalledUpToGame } from '../../../hooks/useUserVisibleGameIds'
 import type { Participation } from '../../../types'
 import { asObj, relId, teamCoachIds } from '../../../utils/relations'
@@ -83,8 +83,8 @@ function StatusBadge({ status }: { status: Game['status'] }) {
 
 export default function GameCard({ game, onClick, variant = 'card', participations, myParticipation, warnings, onParticipationSaved, onOpenRoster, onEdit, onDelete }: GameCardProps) {
   const { t } = useTranslation('games')
-  const { user, canParticipateIn, isCoachOf, teamResponsibleIds, isStaffOnly, isGuestIn } = useAuth()
-  const { effectiveIsAdmin } = useAdminMode()
+  const { user, canParticipateIn, isStaffOnly, isGuestIn } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   // A called-up player (migration 271) has no member_teams row on the team whose
   // fixture this is, so canParticipateIn — which is team-scoped — says no. They were
   // borrowed precisely so they can answer it, hence the OR.
@@ -94,7 +94,7 @@ export default function GameCard({ game, onClick, variant = 'card', participatio
   // array of id strings — so they all quietly answered false there.
   const teamIdForPerms = relId(game.kscw_team)
   const canParticipate = !!user && !!teamIdForPerms && (canParticipateIn(teamIdForPerms) || isCalledUp)
-  const canManage = !!user && (effectiveIsAdmin || isCoachOf(teamIdForPerms) || teamResponsibleIds.includes(teamIdForPerms))
+  const canManage = !!user && canManageTeam(teamIdForPerms)
   const canDelete = canManage && game.source === 'manual'
   const expanded = game as unknown as ExpandedGame
   const expandedHall = asObj<Hall & BaseRecord>(expanded.hall)

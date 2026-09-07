@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { PartyPopper } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useDeepLinkedActivity, DEEP_LINK_FIELDS } from '../../hooks/useDeepLinkedActivity'
 import { useAdminMode } from '../../hooks/useAdminMode'
 import { useCollection } from '../../lib/query'
@@ -40,7 +41,8 @@ type InvitedMemberRef =
 export default function EventsPage() {
   const { t } = useTranslation('events')
   const { t: tc } = useTranslation('common')
-  const { user, isCoach, isCoachOf, memberTeamIds, coachTeamIds, teamsLoading, matchesRole } = useAuth()
+  const { user, isCoach, memberTeamIds, coachTeamIds, teamsLoading, matchesRole } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const { effectiveIsAdmin, effectiveIsVorstand } = useAdminMode()
   // Merge member + coach teams for visibility
   const allUserTeamIds = useMemo(() => [...new Set([...memberTeamIds, ...coachTeamIds])], [memberTeamIds, coachTeamIds])
@@ -305,7 +307,7 @@ export default function EventsPage() {
               // Admins can edit all events
               const canEdit = !teamsLoading && (effectiveIsAdmin || (isCoach && (
                 event.teams.length === 0 ||
-                event.teams.some((tid) => isCoachOf(teamId(tid)))
+                event.teams.some((tid) => canManageTeam(teamId(tid)))
               )))
               return (
                 <EventCard

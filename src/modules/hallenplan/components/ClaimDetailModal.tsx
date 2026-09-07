@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Modal from '@/components/Modal'
 import TeamChip from '../../../components/TeamChip'
-import { useAuth } from '../../../hooks/useAuth'
-import { useAdminMode } from '../../../hooks/useAdminMode'
+import { useTeamPermissions } from '../../../hooks/useTeamPermissions'
 import { formatDate } from '../../../utils/dateHelpers'
 import { logActivity } from '../../../utils/logActivity'
 import type { HallSlot, Hall, Team, SlotClaim } from '../../../types'
@@ -30,8 +29,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function ClaimDetailModal({ slot, claim, halls, teams, onClose, onReleased }: Props) {
   const { t } = useTranslation('hallenplan')
-  const { isCoachOf } = useAuth()
-  const { effectiveIsAdmin: isAdmin } = useAdminMode()
+  const { canManageTeam } = useTeamPermissions()
   const [releasing, setReleasing] = useState(false)
   const [confirmRelease, setConfirmRelease] = useState(false)
 
@@ -47,7 +45,8 @@ export default function ClaimDetailModal({ slot, claim, halls, teams, onClose, o
     ? `${claimedByMember.nickname || claimedByMember.first_name || ''} ${claimedByMember.last_name || ''}`.trim()
     : ''
 
-  const canRelease = isAdmin || isCoachOf(claim.claimed_by_team)
+  // `isAdmin ||` was mode-blind too — canManageTeam covers the sport admin, in admin mode.
+  const canRelease = canManageTeam(claim.claimed_by_team)
 
   async function handleRelease() {
     setReleasing(true)

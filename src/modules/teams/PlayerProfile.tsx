@@ -4,7 +4,8 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { XCircle, ChevronRight, Mail, Phone, Award, Calendar, TrendingUp, AlertCircle, AlertTriangle } from 'lucide-react'
 import { differenceInYears } from 'date-fns'
 import { useCollection } from '../../lib/query'
-import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import TeamChip from '../../components/TeamChip'
 import StatusBadge from '../../components/StatusBadge'
 import EmptyState from '../../components/EmptyState'
@@ -57,7 +58,8 @@ export default function PlayerProfile() {
   const { memberId } = useParams<{ memberId: string }>()
   const [searchParams] = useSearchParams()
   const fromTeam = searchParams.get('from')
-  const { isCoachOf, isAdmin } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
+  const { effectiveIsAdmin } = useAdminMode()
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -176,7 +178,7 @@ export default function PlayerProfile() {
     ? asObj<Team>(memberTeams.find((mt) => asObj<Team>(mt.team)?.name === fromTeam)?.team)
     : null
 
-  const isCoach = memberTeams.some((mt) => isCoachOf(relId(mt.team)))
+  const isCoach = memberTeams.some((mt) => canManageTeam(relId(mt.team)))
 
   // Absence status: currently absent, soon absent, or count
   const today = todayLocal()
@@ -206,7 +208,7 @@ export default function PlayerProfile() {
         <span className="font-medium text-gray-900 dark:text-gray-100">{memberDisplayName(member)}</span>
       </nav>
 
-      {isAdmin && member.communications_banned === true && (
+      {effectiveIsAdmin && member.communications_banned === true && (
         <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <div>

@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
 import { fetchAllItems } from '../../lib/api'
 import { Button } from '@/components/ui/button'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -21,6 +22,7 @@ export default function JsExportPage() {
   const { t } = useTranslation('jsExport')
   const { t: tc } = useTranslation('common')
   const { coachTeamIds, teamResponsibleIds, isAdmin, isVorstand, teamsLoading } = useAuth()
+  const { effectiveIsAdmin, effectiveIsVorstand } = useAdminMode()
 
   const canJsExport = isAdmin || isVorstand || coachTeamIds.length > 0 || teamResponsibleIds.length > 0
   const leaderTeamIds = useMemo(
@@ -57,7 +59,7 @@ export default function JsExportPage() {
       setTeamsFetching(true)
       try {
         // Admins + board see every active team; coaches/TR see the teams they lead.
-        const showAll = isAdmin || isVorstand
+        const showAll = effectiveIsAdmin || effectiveIsVorstand
         const filter = showAll ? { active: { _eq: true } } : { id: { _in: leaderTeamIds } }
         const list = (showAll || leaderTeamIds.length > 0)
           ? await fetchAllItems<TeamRow>('teams', { filter, fields: ['id', 'name', 'sport'], sort: ['name'] })
@@ -72,7 +74,7 @@ export default function JsExportPage() {
     load()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, isVorstand, teamKey, teamsLoading])
+  }, [effectiveIsAdmin, effectiveIsVorstand, teamKey, teamsLoading])
 
   if (teamsLoading) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>

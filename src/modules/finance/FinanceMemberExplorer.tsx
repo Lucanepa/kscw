@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { formatDateCompactZurich } from '../../utils/dateHelpers'
 import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
 import {
   useFinanceInvoices, useFinanceMembers, useFinanceInvoiceDocuments,
   toNum, formatChf, isOpenInvoice, FINANCE_INVOICE_FOLDER,
@@ -408,7 +409,11 @@ function MemberDetail({ member, invoices, documents, canEdit, onBack, onSaved, o
 
 export default function FinanceMemberExplorer() {
   const { t } = useTranslation('finance')
-  const { isFinance } = useAuth()
+  // `isFinance` folds in isGlobalAdmin, so it was mode-blind. A real finance-role
+  // holder keeps edit rights unconditionally; an admin needs the toggle.
+  const { matchesRole, isGlobalAdmin } = useAuth()
+  const { isAdminMode } = useAdminMode()
+  const canEditFinance = matchesRole('finance') || (isGlobalAdmin && isAdminMode)
   const qc = useQueryClient()
   const { data: membersRaw, isLoading } = useFinanceMembers()
   const { data: invoicesRaw } = useFinanceInvoices()
@@ -469,7 +474,7 @@ export default function FinanceMemberExplorer() {
         member={selected}
         invoices={invoicesByMember.get(String(selected.id)) ?? []}
         documents={documents}
-        canEdit={isFinance}
+        canEdit={canEditFinance}
         onBack={() => setSelectedId(null)}
         onSaved={() => { qc.invalidateQueries({ queryKey: ['finance', 'members'] }) }}
         onDocsChanged={() => { qc.invalidateQueries({ queryKey: ['finance', 'invoice-documents'] }) }}

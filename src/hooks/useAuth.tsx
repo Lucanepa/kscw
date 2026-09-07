@@ -67,7 +67,7 @@ export interface AuthContextValue {
   isApproved: boolean
   isProfileComplete: boolean
   isCoach: boolean
-  isCoachOf: (teamId: string) => boolean
+  isCoachOfOrAdmin: (teamId: string) => boolean
   canParticipateIn: (teamId: string) => boolean
   isStaffOnly: (teamId: string) => boolean
   /** Staff-only across a multi-team activity — see AuthProvider. */

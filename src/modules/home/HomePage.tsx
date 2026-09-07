@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useCollection } from '../../lib/query'
 import { fetchSeasons } from '../../lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -76,7 +77,8 @@ export default function HomePage() {
   const { t: tf } = useTranslation('forms')
   const { t: tg } = useTranslation('games')
 
-  const { user, isApproved, primarySport, coachTeamIds, isCoachOf } = useAuth()
+  const { user, isApproved, primarySport, coachTeamIds } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const { items: fillableForms, refetch: refetchForms } = useFillableForms()
   const [fillItem, setFillItem] = useState<FillableForm | null>(null)
   // IBAN nudge — finance needs every member's up-to-date IBAN. Show a dismissible
@@ -641,7 +643,7 @@ export default function HomePage() {
           otherwise live only on the team page) are easy to find. Renders null
           when the user's teams have no open polls. */}
       {user && isApproved && hasTeams && (
-        <HomePollsCard teamIds={userTeamIds} canManage={isCoachOf} />
+        <HomePollsCard teamIds={userTeamIds} canManage={canManageTeam} />
       )}
 
       {/* Forms to fill — surfaced here because the /forms nav item is author-only. */}

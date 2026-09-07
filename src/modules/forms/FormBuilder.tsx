@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import TeamMultiSelect from '@/components/TeamMultiSelect'
 import { ChevronUp, ChevronDown, Trash2, Plus, Languages } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useAdminMode } from '../../hooks/useAdminMode'
 import { useCollection, useInvalidate } from '../../lib/query'
 import { createRecord, updateRecord, m2mUpdatePayload } from '../../lib/api'
 import { teamNameToColorKey } from '../../utils/teamColors'
@@ -56,21 +57,22 @@ export default function FormBuilder({ form, onSave, onCancel }: Props) {
   const { t } = useTranslation('forms')
   const { t: tc } = useTranslation('common')
   const invalidate = useInvalidate()
-  const { user, coachTeamIds, teamResponsibleIds, isGlobalAdmin, isVorstand, isVbAdmin, isBbAdmin } = useAuth()
+  const { user, coachTeamIds, teamResponsibleIds, isVbAdmin, isBbAdmin } = useAuth()
+  const { effectiveIsAdmin, effectiveIsVorstand } = useAdminMode()
   // Full managers (global admin + Vorstand) can target any audience incl.
   // club-wide; everyone else is locked to team-scoped forms. Public exposure
   // (anonymous internet submissions) is also full-manager-only.
-  const canClubWide = isGlobalAdmin || isVorstand
-  const canPublic = isGlobalAdmin || isVorstand
+  const canClubWide = effectiveIsAdmin || effectiveIsVorstand
+  const canPublic = effectiveIsAdmin || effectiveIsVorstand
 
   const { data: allTeamsRaw } = useCollection<Team>('teams', { filter: { active: { _eq: true } }, sort: ['name'], limit: 50 })
   const allTeams = allTeamsRaw ?? []
   const availableTeams = useMemo(() => {
-    if (isGlobalAdmin || isVorstand) return allTeams
+    if (effectiveIsAdmin || effectiveIsVorstand) return allTeams
     if (isVbAdmin || isBbAdmin) return allTeams.filter((tm) => (tm.sport === 'volleyball' ? isVbAdmin : tm.sport === 'basketball' ? isBbAdmin : false))
     const leaderTeams = new Set<string>([...coachTeamIds, ...teamResponsibleIds])
     return allTeams.filter((tm) => leaderTeams.has(tm.id))
-  }, [allTeams, isGlobalAdmin, isVorstand, isVbAdmin, isBbAdmin, coachTeamIds, teamResponsibleIds])
+  }, [allTeams, effectiveIsAdmin, effectiveIsVorstand, isVbAdmin, isBbAdmin, coachTeamIds, teamResponsibleIds])
   const teamOptions = useMemo(
     () =>
       availableTeams.map((tm) => ({

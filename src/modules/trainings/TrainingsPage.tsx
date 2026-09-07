@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuth } from '../../hooks/useAuth'
+import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useDeepLinkedActivity, DEEP_LINK_FIELDS } from '../../hooks/useDeepLinkedActivity'
 import { useAdminMode } from '../../hooks/useAdminMode'
 import { useActivitiesWithParticipations } from '../../lib/query'
@@ -45,7 +46,8 @@ type TrainingExpanded = Training & {
 export default function TrainingsPage() {
   const { t } = useTranslation('trainings')
   const { t: tc } = useTranslation('common')
-  const { user, isCoach, isCoachOf, memberTeamIds, coachTeamIds, teamsLoading } = useAuth()
+  const { user, isCoach, memberTeamIds, coachTeamIds, teamsLoading } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   // Merge member + coach teams for visibility
   const allUserTeamIds = useMemo(() => [...new Set([...memberTeamIds, ...coachTeamIds])], [memberTeamIds, coachTeamIds])
   const { effectiveIsAdmin, effectiveIsVorstand } = useAdminMode()
@@ -292,8 +294,8 @@ export default function TrainingsPage() {
                   showRsvpTime: isFeatureEnabled(asObj<Team>(training.team)?.features_enabled, 'show_rsvp_time'),
                   excludedGuestLevels: Array.isArray(training.excluded_guest_levels) ? training.excluded_guest_levels : [],
                 })}
-                onEdit={(effectiveIsAdmin || isCoachOf(relId(training.team))) ? handleEdit : undefined}
-                onDelete={(effectiveIsAdmin || isCoachOf(relId(training.team))) ? setDeletingId : undefined}
+                onEdit={canManageTeam(relId(training.team)) ? handleEdit : undefined}
+                onDelete={canManageTeam(relId(training.team)) ? setDeletingId : undefined}
               />
             ))}
             </div>

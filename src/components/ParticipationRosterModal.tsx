@@ -18,6 +18,7 @@ import { useTeamParticipations, useAllEventParticipations } from '../hooks/usePa
 import { useFineRules } from '../hooks/useFines'
 import IssueFineModal from '../modules/fines/IssueFineModal'
 import { useAuth } from '../hooks/useAuth'
+import { useTeamPermissions } from '../hooks/useTeamPermissions'
 import { useAdminMode } from '../hooks/useAdminMode'
 import { useMutation } from '../hooks/useMutation'
 import { useCollection } from '../lib/query'
@@ -326,13 +327,14 @@ export default function ParticipationRosterModal({
     return m
   }, [teams])
 
-  const { user, isCoachOf, teamResponsibleIds } = useAuth()
+  const { user, teamResponsibleIds } = useAuth()
+  const { canManageTeam } = useTeamPermissions()
   const { effectiveIsAdmin } = useAdminMode()
   // Hoisted so the memo below can depend on the id itself rather than on the
   // whole (identity-unstable) `user` object.
   const currentUserId = user?.id
 
-  const isStaffForActivity = teamIds.some(id => isCoachOf(id) || teamResponsibleIds.includes(id))
+  const isStaffForActivity = teamIds.some(id => canManageTeam(id) || teamResponsibleIds.includes(id))
   const canEditRoster = isStaffForActivity || effectiveIsAdmin
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)

@@ -565,7 +565,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [teamSportById, isGlobalAdmin, hasAdminAccessToSport],
   )
-  const isCoachOf = useCallback(
+  /**
+   * ⚠ MODE-BLIND, and the name now says so. This folds `hasAdminAccessToTeam`
+   * in, so it is true for every sport admin regardless of the admin-mode
+   * toggle. It was called `isCoachOf`, which read as a pure coach check and
+   * hid 8 of the 15 bypasses a 2026-09-07 audit found.
+   *
+   * For "may this person manage this team", use `canManageTeam` from
+   * `useTeamPermissions()` — it honours the toggle. Reach for this one only
+   * where an admin genuinely should qualify with admin mode OFF.
+   */
+  const isCoachOfOrAdmin = useCallback(
     (teamId: string) => hasAdminAccessToTeam(teamId) || coachTeamIds.includes(teamId),
     [hasAdminAccessToTeam, coachTeamIds],
   )
@@ -617,7 +627,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     identityMemberId: user?.id ?? null,
     isSuperAdmin, isAdmin, isGlobalAdmin, isVbAdmin, isBbAdmin,
     hasAdminAccessToSport, hasAdminAccessToTeam, isApproved, isProfileComplete,
-    isCoach, isCoachOf, canParticipateIn, isStaffOnly, isStaffOnlyForTeams, coachTeamIds, coachTeamNames,
+    isCoach, isCoachOfOrAdmin, canParticipateIn, isStaffOnly, isStaffOnlyForTeams, coachTeamIds, coachTeamNames,
     teamResponsibleIds, captainTeamIds, spielplanerTeamIds, is_spielplaner: isSpielplaner, matchesRole,
     memberTeamIds, memberTeamNames, teamsLoading, memberSports, primarySport,
     canViewTeam, isVorstand, isFinance, canAccessFinance, getGuestLevel, isGuestIn, isLoading, login, logout,
@@ -627,7 +637,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     householdMembers, actingMember, switchTo,
     isSuperAdmin, isAdmin, isGlobalAdmin, isVbAdmin, isBbAdmin,
     hasAdminAccessToSport, hasAdminAccessToTeam, isApproved, isProfileComplete,
-    isCoach, isCoachOf, canParticipateIn, isStaffOnly, isStaffOnlyForTeams, coachTeamIds, coachTeamNames,
+    isCoach, isCoachOfOrAdmin, canParticipateIn, isStaffOnly, isStaffOnlyForTeams, coachTeamIds, coachTeamNames,
     teamResponsibleIds, captainTeamIds, spielplanerTeamIds, isSpielplaner, matchesRole,
     memberTeamIds, memberTeamNames, teamsLoading, memberSports, primarySport,
     canViewTeam, isVorstand, isFinance, canAccessFinance, getGuestLevel, isGuestIn, isLoading, login, logout,
