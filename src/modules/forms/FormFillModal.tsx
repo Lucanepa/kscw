@@ -80,6 +80,17 @@ export default function FormFillModal({ open, form, existing, onSubmitted, onCan
       setError(t('errorRequiredMissing', { field: resolveFieldLabel(missing, i18n.language) || missing.label }))
       return
     }
+    // Deadline / status are enforced in Postgres by the BEFORE INSERT + BEFORE
+    // UPDATE guards (migrations 086/088) — but a plpgsql RAISE reaches the
+    // browser as Directus's opaque 500 "An unexpected error occurred.", so the
+    // message-matching in the catch below can never recognise it. Check here so
+    // a modal left open across the deadline (or opened from a stale list) shows
+    // the real reason instead of the generic failure — and never fires a write
+    // that is certain to 500 and land in Sentry as a server error.
+    if (form.status !== 'open' || (form.closes_at && Date.now() > new Date(form.closes_at).getTime())) {
+      setError(t('errorClosed'))
+      return
+    }
     setSaving(true)
     try {
       if (isEdit) {
