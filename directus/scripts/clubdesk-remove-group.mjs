@@ -53,12 +53,53 @@ const gridCount = (page) => page.evaluate(() => { const o = (e) => { let t = '';
 const firstRowCell = (page) => page.evaluate(() => { const cells = []; for (const e of document.querySelectorAll('*')) { const t = (e.textContent || '').trim(); if (!t || t.length > 50) continue; const r = e.getBoundingClientRect(); if (r.width > 20 && r.height > 6 && r.top > 320 && r.top < 400 && r.left > 275 && r.left < 465) cells.push({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), area: r.width * r.height, top: Math.round(r.top) }) } if (!cells.length) return null; const mt = Math.min(...cells.map((c) => c.top)); const row = cells.filter((c) => c.top - mt < 15).sort((a, b) => a.area - b.area)[0]; return { x: row.x, y: row.y } })
 const clickExact = async (page, exact, ymin = 0, ymax = 99999) => { const pos = await page.evaluate(({ exact, ymin, ymax }) => { const o = (e) => { let t = ''; for (const n of e.childNodes) if (n.nodeType === 3) t += n.textContent; return t.trim() }; const c = [...document.querySelectorAll('*')].filter((e) => o(e) === exact).map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0 && r.top >= ymin && r.top <= ymax).sort((a, b) => b.top - a.top)[0]; return c ? { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height / 2) } : null }, { exact, ymin, ymax }); if (!pos) return false; await page.mouse.click(pos.x, pos.y); return true }
 
+// What the Filtern box currently holds — same predicate as the box finder, so it
+// reads the same element. ⚠⚠ This is what makes the count trustworthy: ClubDesk
+// filters INCREMENTALLY and matches as a substring across every column, so a single
+// leading character of a uuid matches nearly the whole register.
+const filterValue = (page) => page.evaluate(() => { const i = [...document.querySelectorAll('input')].map((e) => ({ e, r: e.getBoundingClientRect() })).filter(({ e, r }) => e.type !== 'hidden' && e.type !== 'password' && r.width > 60 && r.top > 230 && r.top < 320).sort((a, b) => b.r.width - a.r.width)[0]; return i ? i.e.value : null })
+
+/**
+ * Filter the grid to ONE contact by uuid. Twin of the same function in
+ * clubdesk-scrape-groups.mjs — fix both or neither.
+ *
+ * ⚠⚠ A count is believed only once the box holds the whole uuid AND two consecutive
+ * reads agree. Returning on the first reading above 1 is right about a settled grid
+ * and wrong about a settling one: on 08.09.2026 the add tool skipped a contact with
+ * `uuid did not resolve (cnt=1161)` out of 1162 contacts, which is what ClubDesk
+ * shows for the filter `3` — the first character of the uuid. ⚠ A settled 0 is
+ * returned as 0 (the contact does not carry the id) rather than falling through to
+ * -1 (the grid never showed a filtered header); they need different fixes.
+ */
+/**
+ * Why a uuid filter came back with something other than one row. The three answers
+ * need three different fixes and used to read as one number: 0 means the contact
+ * carries no Wiedisync ID (somebody must link it, or a push has not been read back
+ * yet), >1 means two contacts carry the same one (a data fault to resolve by hand,
+ * never to guess at), -1 means the grid never showed a filtered header at all.
+ */
+const uuidMiss = (cnt) => (
+  cnt === 0 ? 'not found in ClubDesk — the contact carries no Wiedisync ID'
+    : cnt > 1 ? `${cnt} contacts carry this Wiedisync ID — resolve the duplicate in ClubDesk`
+      : 'the contact grid never filtered — ClubDesk may be slow or the view changed'
+)
+
 async function selectRow(page, uuid) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const box = await page.evaluate(() => { const i = [...document.querySelectorAll('input')].map((e) => ({ e, r: e.getBoundingClientRect() })).filter(({ e, r }) => e.type !== 'hidden' && e.type !== 'password' && r.width > 60 && r.top > 230 && r.top < 320).sort((a, b) => b.r.width - a.r.width)[0]; return i ? { x: Math.round(i.r.left + i.r.width / 2), y: Math.round(i.r.top + i.r.height / 2) } : null })
     if (!box) { await sleep(700); continue }
     await page.mouse.click(box.x, box.y, { clickCount: 3 }); await sleep(180); await page.keyboard.press('Backspace'); await sleep(450); await page.keyboard.type(uuid, { delay: 25 })
-    for (let k = 0; k < 14; k++) { await sleep(300); const c = await gridCount(page); if (c === 1) { const cell = await firstRowCell(page); if (cell) return { cnt: 1, cell } } if (c > 1) return { cnt: c } }
+    let typed = false
+    for (let k = 0; k < 10 && !typed; k++) { if ((await filterValue(page)) === uuid) typed = true; else await sleep(200) }
+    if (!typed) { await sleep(400); continue }
+    let prev = null
+    for (let k = 0; k < 14; k++) {
+      await sleep(300)
+      const c = await gridCount(page)
+      if (c === 1) { const cell = await firstRowCell(page); if (cell) return { cnt: 1, cell }; prev = c; continue }
+      if (c >= 0 && c === prev) return { cnt: c }
+      prev = c
+    }
     await sleep(600)
   }
   return { cnt: -1 }
@@ -170,7 +211,7 @@ async function run() {
       const r = { name: row.name, uuid: row.uuid, group_label: row.group_label, status: 'error' }
       try {
         const f = await selectRow(page, row.uuid)
-        if (f.cnt !== 1 || !f.cell) { r.status = 'skip_filter_failed'; r.matched = f.cnt; results.push(r); log(`· ${row.name}: uuid → cnt=${f.cnt}`); continue }
+        if (f.cnt !== 1 || !f.cell) { r.status = 'skip_filter_failed'; r.matched = f.cnt; r.detail = uuidMiss(f.cnt); results.push(r); log(`· ${row.name}: ${r.detail} (cnt=${f.cnt})`); continue }
         // Open the detail AND confirm it's the target uuid (never edit an unconfirmed
         // detail — the stale-detail lag would otherwise strip the wrong contact's group).
         if (!(await openDetailConfirmed(page, row.uuid, f.cell))) { r.status = 'skip_identity_unconfirmed'; results.push(r); log(`· ${row.name}: could not confirm detail == uuid`); await closeDetail(page); continue }

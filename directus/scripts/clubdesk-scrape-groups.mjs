@@ -205,6 +205,56 @@ const firstRowCell = (page) => page.evaluate(() => {
 // Identify a contact by its Wiedisync ID (uuid) — unique, drift/accent-proof, and
 // resolves non-members in "Alle Kontakte" (the clubdesk [Id] is NOT filterable;
 // the uuid custom field IS — verified 2026-07-15). Returns { cnt:1, cell } on a hit.
+/**
+ * What the Filtern box currently holds. Same predicate as the box finder below, so
+ * it reads the same element.
+ *
+ * ⚠⚠ This is the check that makes the count trustworthy. ClubDesk filters the grid
+ * INCREMENTALLY and asynchronously, so between the first keystroke and the last the
+ * header legitimately reports large numbers — and its filter is a substring match
+ * across every column, so a single leading digit matches almost the whole register.
+ * Reading the count before the box holds the full uuid does not read a filtered
+ * grid, it reads a differently-filtered one.
+ */
+const filterValue = (page) => page.evaluate(() => {
+  const i = [...document.querySelectorAll('input')].map((e) => ({ e, r: e.getBoundingClientRect() }))
+    .filter(({ e, r }) => e.type !== 'hidden' && e.type !== 'password' && r.width > 60 && r.top > 230 && r.top < 320)
+    .sort((a, b) => b.r.width - a.r.width)[0]
+  return i ? i.e.value : null
+})
+
+/**
+ * Filter the grid to ONE contact by its wiedisync uuid and return the cell to click.
+ *
+ * ⚠⚠ A count is only believed once (a) the box holds the whole uuid and (b) two
+ * consecutive reads agree. The old loop returned on the FIRST reading above 1 —
+ * "uuid must be unique, >1 is a data problem, don't guess" — which is right about a
+ * settled grid and wrong about a settling one. Live case 08.09.2026: adding
+ * "VB HU20 · Trainer*in" to Luca Zbinden skipped with `uuid did not resolve
+ * (cnt=1161)` against 1162 contacts, and his contact carries the Wiedisync ID
+ * perfectly well. 1161 is what ClubDesk shows for the filter `3` — the first
+ * character of `37e646b5-…`, matched as a substring against every column of every
+ * contact. The scraper had read the grid one keystroke into a 36-character uuid and
+ * reported a data problem.
+ *
+ * ⚠ A settled 0 now returns 0 rather than falling through to -1 after four attempts:
+ * "the uuid is not in ClubDesk" and "the grid never showed a filtered header" are
+ * different faults and the first is the one that means somebody has to link a
+ * contact.
+ */
+/**
+ * Why a uuid filter came back with something other than one row. The three answers
+ * need three different fixes and used to read as one number: 0 means the contact
+ * carries no Wiedisync ID (somebody must link it, or a push has not been read back
+ * yet), >1 means two contacts carry the same one (a data fault to resolve by hand,
+ * never to guess at), -1 means the grid never showed a filtered header at all.
+ */
+const uuidMiss = (cnt) => (
+  cnt === 0 ? 'not found in ClubDesk — the contact carries no Wiedisync ID'
+    : cnt > 1 ? `${cnt} contacts carry this Wiedisync ID — resolve the duplicate in ClubDesk`
+      : 'the contact grid never filtered — ClubDesk may be slow or the view changed'
+)
+
 async function selectRow(page, uuid) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const box = await page.evaluate(() => {
@@ -217,11 +267,23 @@ async function selectRow(page, uuid) {
     await page.mouse.click(box.x, box.y, { clickCount: 3 }); await sleep(180)
     await page.keyboard.press('Backspace'); await sleep(450)
     await page.keyboard.type(uuid, { delay: 25 })
-    for (let k = 0; k < 12; k++) {
+    // The box must hold the whole uuid before any count means anything. A partial
+    // value is a keystroke that did not land — retype rather than read.
+    let typed = false
+    for (let k = 0; k < 10 && !typed; k++) {
+      if ((await filterValue(page)) === uuid) typed = true
+      else await sleep(200)
+    }
+    if (!typed) { await sleep(400); continue }
+    let prev = null
+    for (let k = 0; k < 14; k++) {
       await sleep(300)
       const c = await gridCount(page)
-      if (c === 1) { const cell = await firstRowCell(page); if (cell) return { cnt: 1, cell } }
-      if (c > 1) return { cnt: c } // uuid must be unique; >1 = data problem, don't guess
+      if (c === 1) { const cell = await firstRowCell(page); if (cell) return { cnt: 1, cell }; prev = c; continue }
+      // Stable across two reads = the grid has finished filtering. >1 is then a real
+      // duplicate (never guess which), 0 is a contact that does not carry the id.
+      if (c >= 0 && c === prev) return { cnt: c }
+      prev = c
     }
     await sleep(600)
   }
@@ -287,7 +349,7 @@ async function run() {
         const resolveCell = async () => {
           if (row.uuid) {
             const f = await selectRow(page, row.uuid)
-            if (f.cnt !== 1 || !f.cell) return { skip: 'skip_filter_failed', matched: f.cnt, msg: `uuid did not resolve (cnt=${f.cnt})` }
+            if (f.cnt !== 1 || !f.cell) return { skip: 'skip_filter_failed', matched: f.cnt, msg: uuidMiss(f.cnt) }
             return { cell: f.cell }
           }
           const f = await setFilter(page, row.last || row.name.split(' ')[0], row.name)
