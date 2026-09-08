@@ -4449,6 +4449,24 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
     return { add, remove, skipped_no_uuid }
   }
 
+  /**
+   * Identity of one worklist row, in the ONE shape both sides can produce.
+   *
+   * The scrapers echo back a subset of the worklist row (the add tool keeps
+   * `group`/`funktion`/`clubdesk_id`, the remove tool keeps `uuid`/`group_label`),
+   * so the key is built from exactly the fields that survive the round trip.
+   */
+  const addRowKey = (r) => `add|${String(r.clubdesk_id || '').trim()}|${r.group || ''}|${r.funktion || ''}`
+  const removeRowKey = (r) => `remove|${String(r.uuid || '').trim()}|${r.group_label || ''}`
+
+  /** Every row a preview reported — INCLUDING its skips, which were on screen too. */
+  function previewedRowKeys(result) {
+    const keys = new Set()
+    for (const r of result?.add?.results || []) keys.add(addRowKey(r))
+    for (const r of result?.remove?.results || []) keys.add(removeRowKey(r))
+    return keys
+  }
+
   router.get('/clubdesk-group-fix', async (req, res) => {
     try {
       if (!(await superGate(req))) return res.status(403).json({ error: 'Forbidden' })
@@ -4517,6 +4535,7 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       // POST mode=commit as its very first request and write straight to the legal
       // register with nothing reviewed. Mirrors the sync-up's dry-run-then-commit
       // gate (clubdesk-member-up-dispatch.sh).
+      let previewedKeys = null
       if (mode === 'commit') {
         const prev = typeof s?.grp_result === 'string'
           ? (() => { try { return JSON.parse(s.grp_result) } catch { return null } })()
@@ -4527,11 +4546,33 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
             code: 'preview_required',
           })
         }
+        previewedKeys = previewedRowKeys(prev)
       }
 
       const checks = await computeGroupChecks()
       const { add, remove, skipped_no_uuid } = buildGroupFixWorklist(checks, classes)
       const total = add.length + remove.length
+
+      // ⚠ A commit may only write rows the operator ACTUALLY SAW. The gate above
+      // asks "was the last run a preview", which is not the same question: the
+      // worklist is recomputed here from the CURRENT request, so ticking another
+      // class after a preview — or a roster edit landing in between — produced a
+      // commit of rows nobody had reviewed, with the confirm dialog still counting
+      // the old preview's rows. Comparing the recomputed worklist against the
+      // preview's own per-row result closes both, and is stricter than comparing
+      // the requested classes would be. A SHRUNK worklist is fine (those rows were
+      // fixed elsewhere); anything NEW means the preview no longer describes this
+      // run, so it has to be run again.
+      if (previewedKeys) {
+        const unseen = [...add.map(addRowKey), ...remove.map(removeRowKey)]
+          .filter((k) => !previewedKeys.has(k))
+        if (unseen.length) {
+          return res.status(409).json({
+            error: `${unseen.length} of these changes were not in the preview — run the preview again`,
+            code: 'preview_stale', unseen: unseen.length,
+          })
+        }
+      }
       if (!total) {
         return res.status(409).json({ error: 'Nothing to fix', code: 'empty_worklist', skipped_no_uuid })
       }
