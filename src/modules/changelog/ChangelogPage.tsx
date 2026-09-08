@@ -39,6 +39,7 @@ const CHANGELOG: ChangelogEntry[] = [
           "The progress bar measures the sync, not the step you are on. It moves with the scrape itself \u2014 logging in, opening the contact list, waiting for the export, loading it \u2014 instead of jumping a fifth at a time. A run that has stalled and a run that is nearly finished no longer look identical.",
           "The sync's own log is on screen while it runs, so a failure can be read where it happened instead of on the server. The same applies to the push and to the group fix, which reports contact by contact.",
           "The \"Fix groups\" button above the path is gone. It ran, out of order, the job the path already runs last \u2014 and last is where it has to be, because a contact created by a push can only be found in ClubDesk once the push has been read back.",
+          "Departed members can be deactivated in bulk. ClubDesk records an Austritt date and the sync board lists them; one button now sets them all to not-a-member and inactive and drops them from active rosters, instead of twelve trips through a table pressing the same button.",
         ],
       },
       {

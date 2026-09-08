@@ -11,7 +11,7 @@
 
 import { Fragment, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, Download, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Loader2, RefreshCw, UserMinus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -102,13 +102,25 @@ const TONE: Record<SyncStatus, string> = {
 // Presentational — the page owns the fetch and the single Rescan button in the
 // header, so this card deliberately has no refresh of its own.
 export default function ClubdeskNeedsSync({
-  rows, inSync, lastDown, lastUp, loading,
+  rows, inSync, lastDown, lastUp, loading, onDeactivateDeparted, deactivating,
 }: {
   rows: NeedsSyncRow[]
   inSync: number
   lastDown: string | null
   lastUp: string | null
   loading: boolean
+  /**
+   * Deactivate every departed row in view, in one go.
+   *
+   * ⚠ `departed` is the one status on this board that has a single correct answer:
+   * ClubDesk records an Austritt, so the member is not a member any more and the
+   * only question is when somebody gets round to saying so in wiedisync. It was a
+   * per-row button on the club-wide list, which for twelve departures means twelve
+   * trips through a table — hence one button, one confirm, one call (the server
+   * still re-checks every member individually before writing).
+   */
+  onDeactivateDeparted?: (rows: NeedsSyncRow[]) => void | Promise<void>
+  deactivating?: boolean
   // ⓘ No onFlag. "Keep ours" moved to the proposals queue as Refuse, which does
   // the same thing (flags the member for the next push) AND leaves a tombstone,
   // so the question is never asked again. A board row is no longer something you
@@ -131,6 +143,9 @@ export default function ClubdeskNeedsSync({
     () => STATUS_ORDER.filter((st) => (byStatus[st]?.length ?? 0) > 0),
     [byStatus],
   )
+  // Every departed row in view — the sport filter has already been applied by the
+  // page, so the button acts on exactly what the reader can see.
+  const departedRows = byStatus.departed ?? []
   // A tab can disappear between scans (the last push landed), so fall
   // back rather than render an empty table under a tab that no longer exists.
   const activeTab: string = statusTab !== 'all' && !presentStatuses.includes(statusTab as SyncStatus)
@@ -175,14 +190,32 @@ export default function ClubdeskNeedsSync({
               </span>
             </CardDescription>
           </div>
-          <Button
-            type="button" variant="outline" size="sm"
-            onClick={() => { void handleExport() }}
-            disabled={loading || rows.length === 0}
-            className="gap-1.5"
-          >
-            <Download className="h-3.5 w-3.5" />{t('explorerGridExport')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Only when there is something to do: a permanently-present button for
+                an empty class is a button people learn to ignore. */}
+            {onDeactivateDeparted && departedRows.length > 0 && (
+              <Button
+                type="button" variant="outline" size="sm"
+                onClick={() => { void onDeactivateDeparted(departedRows) }}
+                disabled={loading || !!deactivating}
+                aria-busy={deactivating}
+                className="gap-1.5"
+              >
+                {deactivating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  : <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />}
+                {t('cdNeedsSyncDeactivateBtn', { count: departedRows.length })}
+              </Button>
+            )}
+            <Button
+              type="button" variant="outline" size="sm"
+              onClick={() => { void handleExport() }}
+              disabled={loading || rows.length === 0}
+              className="gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5" />{t('explorerGridExport')}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

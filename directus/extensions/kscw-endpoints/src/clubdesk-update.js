@@ -4577,38 +4577,96 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
 
   // Deactivate a departed member: not-a-member + inactive, and drop their
   // current-season team assignments (keep prior-season history). Superadmin.
+  /**
+   * The departed check, re-run for ONE member at the moment of the write.
+   *
+   * ⚠ Never trust the list the caller acted on. Data Health is a scan taken minutes
+   * or hours ago, and this call deactivates a person and strips their rosters. Three
+   * conditions, all re-read here: the member is linked; the `clubdesk_id` maps 1:1
+   * (a shared id would deactivate the WRONG person); and the linked contact is STILL
+   * in a departed status with an Austritt date — the same predicate as
+   * /clubdesk-departed.
+   *
+   * Returns null when it may proceed, or a `{ code }` refusal. Lifted out of the
+   * route so the bulk form applies the identical gate per member rather than a
+   * looser one — a bulk action that checks less than its single-row twin is how a
+   * careful guard gets bypassed by the convenient button.
+   */
+  async function departureRefusal(memberId) {
+    const member = await database('members').where('id', memberId).first('id', 'clubdesk_id')
+    if (!member) return { code: 'not_found' }
+    if (!member.clubdesk_id) return { code: 'not_linked' }
+    const sharing = await database('members').where('clubdesk_id', member.clubdesk_id).count('id as n').first()
+    if (Number(sharing?.n) !== 1) return { code: 'ambiguous_link' }
+    const departed = await database('clubdesk_export')
+      .whereRaw('BTRIM(clubdesk_id) = ?', [member.clubdesk_id])
+      .whereIn(database.raw('BTRIM(status)'), DEPARTED_STATUSES)
+      .whereRaw("NULLIF(BTRIM(austritt), '') IS NOT NULL")
+      .first('clubdesk_id')
+    if (!departed) return { code: 'not_departed' }
+    return null
+  }
+
+  const DEACTIVATE_BULK_CAP = 200
+
+  const DEACTIVATE_REFUSALS = {
+    not_found: 'Member not found',
+    not_linked: 'Member is not linked to a ClubDesk contact',
+    ambiguous_link: 'clubdesk_id is shared by multiple members — resolve the duplicate link first',
+    not_departed: 'ClubDesk contact is not in a departed status — refresh Data Health',
+  }
+
+  /**
+   * Deactivate a member (or several) whose ClubDesk contact says they have left.
+   *
+   * Takes `member_id` (one) or `member_ids` (up to 200). ⚠ The bulk form is a LOOP,
+   * not a set-based write: every member goes through the same `departureRefusal`
+   * gate and the same `deactivateMemberRow` (which writes its own `user_logs` entry),
+   * so a bulk run is auditable member by member exactly like the single one.
+   *
+   * ⚠ Partial success is the normal outcome and is reported as such — a member whose
+   * link turned ambiguous since the scan is SKIPPED while the rest proceed. Failing
+   * the whole batch on one bad row would make the button useless on the day it
+   * matters; silently counting it as done would deactivate nobody and say it had.
+   */
   router.post('/clubdesk-deactivate', async (req, res) => {
     try {
       if (!(await superGate(req))) return res.status(403).json({ error: 'Forbidden' })
-      const memberId = Number(req.body?.member_id)
-      if (!Number.isInteger(memberId)) return res.status(400).json({ error: 'member_id required' })
-      const member = await database('members').where('id', memberId).first('id', 'clubdesk_id')
-      if (!member) return res.status(404).json({ error: 'Member not found' })
-      // Re-verify the departed condition server-side before mutating — the Data
-      // Health list the caller acted on can be stale, and a mis-linked clubdesk_id
-      // shared by two members must never deactivate the wrong person. Require: the
-      // member is linked, the clubdesk_id maps 1:1 (exactly one member holds it),
-      // and the linked ClubDesk contact is STILL in a departed status with an
-      // Austritt date (same predicate as /clubdesk-departed).
-      if (!member.clubdesk_id) {
-        return res.status(409).json({ error: 'Member is not linked to a ClubDesk contact', code: 'not_linked' })
+      const bulk = Array.isArray(req.body?.member_ids)
+      const ids = bulk
+        ? [...new Set(req.body.member_ids.map(Number).filter(Number.isInteger))]
+        : [Number(req.body?.member_id)].filter(Number.isInteger)
+      if (!ids.length) return res.status(400).json({ error: 'member_id or member_ids required' })
+      if (ids.length > DEACTIVATE_BULK_CAP) {
+        return res.status(400).json({ error: `Too many members (max ${DEACTIVATE_BULK_CAP})`, code: 'too_many' })
       }
-      const sharing = await database('members').where('clubdesk_id', member.clubdesk_id).count('id as n').first()
-      if (Number(sharing?.n) !== 1) {
-        return res.status(409).json({ error: 'clubdesk_id is shared by multiple members — resolve the duplicate link first', code: 'ambiguous_link' })
+
+      const deactivated = []
+      const skipped = []
+      let dropped = 0
+      for (const memberId of ids) {
+        const refusal = await departureRefusal(memberId)
+        if (refusal) {
+          // The single-member form keeps its original status codes, so the existing
+          // per-row button behaves exactly as before.
+          if (!bulk) {
+            const status = refusal.code === 'not_found' ? 404 : 409
+            return res.status(status).json({ error: DEACTIVATE_REFUSALS[refusal.code], code: refusal.code })
+          }
+          skipped.push({ member_id: memberId, code: refusal.code })
+          continue
+        }
+        // ⚠ Deletes rosters by MEMBERSHIP, not by season string — see
+        // deactivateMemberRow, which the broken-link flow shares.
+        dropped += await deactivateMemberRow(req, memberId, 'clubdesk_deactivate')
+        deactivated.push(memberId)
       }
-      const departed = await database('clubdesk_export')
-        .whereRaw('BTRIM(clubdesk_id) = ?', [member.clubdesk_id])
-        .whereIn(database.raw('BTRIM(status)'), DEPARTED_STATUSES)
-        .whereRaw("NULLIF(BTRIM(austritt), '') IS NOT NULL")
-        .first('clubdesk_id')
-      if (!departed) {
-        return res.status(409).json({ error: 'ClubDesk contact is not in a departed status — refresh Data Health', code: 'not_departed' })
+      if (!bulk) {
+        return res.json({ success: true, member_id: ids[0], rosters_dropped: dropped })
       }
-      // ⚠ Deletes rosters by MEMBERSHIP, not by season string — see
-      // deactivateMemberRow, which the broken-link flow shares.
-      const dropped = await deactivateMemberRow(req, memberId, 'clubdesk_deactivate')
-      return res.json({ success: true, member_id: memberId, rosters_dropped: dropped })
+      return res.json({
+        success: true, deactivated, skipped, rosters_dropped: dropped,
+      })
     } catch (err) {
       log.error({ msg: `clubdesk-deactivate: ${err.message}`, endpoint: 'clubdesk-deactivate', stack: err.stack })
       return res.status(500).json({ error: 'Internal error' })
