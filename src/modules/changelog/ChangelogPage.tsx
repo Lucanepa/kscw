@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.7.0'
+const APP_VERSION = '2.7.1'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,20 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.7.1',
+    date: '08.09.2026',
+    sections: [
+      {
+        title: "Fixes",
+        items: [
+          "Opening an activity from the home page no longer flashes an empty answer. Tapping a training, game or event opened its panel with all three Yes / Maybe / No buttons greyed and unselected, and your saved answer only snapped in a moment later \u2014 which read as \"you have not replied yet\" and invited a second tap. The home page already knows every answer before it draws a single row, so the panel now opens with yours already shown. The participation counters and the \"Absent\" note open filled in for the same reason.",
+          "Dates in News are written the same way everywhere. The same list showed 09.09.26, 03.10.2026 and 03.10.26 side by side \u2014 three parts of the app writing the same kind of line with different years. All of them now use the Swiss dd.mm.yyyy the rest of Wiedisync uses, and the notices already on the page were corrected too.",
+          "A new or updated event no longer announces the wrong time. The notice for an event starting at 19:00 said 17:00 in summer and 18:00 in winter, and an event just after midnight was announced on the day before.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.7.0',
     date: '08.09.2026',
