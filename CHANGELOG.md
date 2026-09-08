@@ -2,6 +2,13 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.7.2 — 2026-09-08
+
+### Fixes
+
+- **"Fix groups" no longer lists the rows it has just fixed.** *Superadmin tool — Admin → Data health → ClubDesk sync.* The group findings are read from the last sync down, so a run that wrote to ClubDesk left exactly the same rows on screen afterwards — which reads as "nothing happened" and invites another run. Wiedisync's copy of the register now takes on what was actually written, so a fixed row disappears when it is fixed. The unattended Sunday stray sweep had the same blind spot, for a week at a time, and is covered too.
+- **Junior basketball players are no longer listed in the Classics league squads.** Every junior sat in `H-Classics 1LR` or `Damen D-Classics 1LR` alongside their own team, which is a league umbrella rather than a squad — so a 10-year-old appeared to be on a men's team. Both squads are adults-only now, in the current and the previous season; a junior who really plays up keeps their place.
+
 ## v2.7.1 — 2026-09-08
 
 ### Fixes

@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.7.1'
+const APP_VERSION = '2.7.2'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,19 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.7.2',
+    date: '08.09.2026',
+    sections: [
+      {
+        title: "Fixes",
+        items: [
+          "\"Fix groups\" no longer lists the rows it has just fixed. Superadmin tool \u2014 Admin \u2192 Data health \u2192 ClubDesk sync. The group findings are read from the last sync down, so a run that wrote to ClubDesk left exactly the same rows on screen afterwards \u2014 which reads as \"nothing happened\" and invites another run. Wiedisync's copy of the register now takes on what was actually written, so a fixed row disappears when it is fixed. The unattended Sunday stray sweep had the same blind spot, for a week at a time, and is covered too.",
+          "Junior basketball players are no longer listed in the Classics league squads. Every junior sat in H-Classics 1LR or Damen D-Classics 1LR alongside their own team, which is a league umbrella rather than a squad \u2014 so a 10-year-old appeared to be on a men's team. Both squads are adults-only now, in the current and the previous season; a junior who really plays up keeps their place.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.7.1',
     date: '08.09.2026',
