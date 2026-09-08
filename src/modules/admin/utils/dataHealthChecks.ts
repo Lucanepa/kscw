@@ -24,6 +24,7 @@ export type IssueKey =
   | 'missingAwayTeam'
   | 'missingTime'
   | 'nonPaddedTime'
+  | 'duplicateFixture'
   | 'noTeamAssignment'
   | 'missingSex'
   | 'clubdeskNameMatch'
@@ -183,11 +184,97 @@ function gameLabel(record: Record<string, unknown>): string {
   return `${home} vs ${away}`
 }
 
+/**
+ * A hand-entered fixture standing next to the synced one it duplicates.
+ *
+ * Both sync sources are blind to `source='manual'` rows: `bp-sync` pairs on
+ * `bb_<gameNumber>` and `sv-sync` on `vb_<svrz_number>`, and each loads only
+ * its OWN source when looking for the existing row. So a fixture that reached
+ * `games` by hand before it reached the feed cannot be recognised by the sync
+ * that later publishes it, and both rows live on — duplicated in the calendar
+ * and team views, two sets of notifications, and (home games) the hall claimed
+ * twice.
+ *
+ * `bp-sync`'s sweep retires basketball placeholders automatically, but only the
+ * ones it can prove are placeholders: in the published date range AND created
+ * before the schedule arrived. This is the safety net for everything else —
+ * a fixture out of that range, one entered after the first publish, or a
+ * volleyball cup game typed in before Swiss Volley carried it.
+ *
+ * ⚠ Detection is `(team, date)`, deliberately NOT `(team, date, opponent)`.
+ * Opponent names drift badly between hand entry and the feed — "BC Winti" vs
+ * "BC Winterthur 2 H1", "St.  Othmar" vs "St. Othmar" — so matching on them
+ * would miss the real duplicates, which is the wrong way to be wrong for a
+ * detector. Both fixtures' opponents and times ride in the detail line so the
+ * admin adjudicates at a glance; a genuine tournament day or double-header
+ * reads as two different opponents and is dismissed in one look.
+ *
+ * ⚠ Never auto-fixable. Which of the two rows to keep is a judgement call —
+ * the manual one may carry a hand-set hall or a corrected time — and deleting
+ * a game takes its RSVPs with it (`trg_games_0_purge_polymorphic`).
+ *
+ * Pure and exported so the pairing is testable without a fetch.
+ */
+export function findDuplicateFixtures(games: Record<string, unknown>[]): DataIssue[] {
+  const SYNCED = new Set(['swiss_volley', 'basketplan'])
+  const teamOf = (g: Record<string, unknown>) => {
+    const t = g['kscw_team']
+    // M2O: a bare id here (explicit `fields`), but fetchItems stringifies
+    // integers, so normalise rather than compare mixed types.
+    if (t && typeof t === 'object') return String((t as { id?: unknown }).id ?? '')
+    return t == null ? '' : String(t)
+  }
+  const dayOf = (g: Record<string, unknown>) => String(g['date'] ?? '').slice(0, 10)
+
+  // Index the synced fixtures by team+day once, so this stays linear.
+  const syncedByKey = new Map<string, Record<string, unknown>[]>()
+  for (const g of games) {
+    if (!SYNCED.has(String(g['source'] ?? ''))) continue
+    const team = teamOf(g)
+    const day = dayOf(g)
+    if (!team || !day) continue
+    const key = `${team}|${day}`
+    const list = syncedByKey.get(key)
+    if (list) list.push(g)
+    else syncedByKey.set(key, [g])
+  }
+
+  const issues: DataIssue[] = []
+  for (const g of games) {
+    if (String(g['source'] ?? '') !== 'manual') continue
+    // A cancelled row is already out of every live view — flagging it is noise.
+    if (String(g['status'] ?? '') === 'cancelled') continue
+    const team = teamOf(g)
+    const day = dayOf(g)
+    if (!team || !day) continue
+    const twins = syncedByKey.get(`${team}|${day}`)
+    if (!twins?.length) continue
+
+    const t = String(g['time'] ?? '').slice(0, 5)
+    const twinText = twins
+      .map((s) => `${gameLabel(s)}${String(s['time'] ?? '').slice(0, 5) ? ` ${String(s['time']).slice(0, 5)}` : ''} (${s['game_id'] ?? s['id']})`)
+      .join(', ')
+    issues.push({
+      id: String(g['id']),
+      collection: 'games',
+      field: 'source',
+      severity: 'warning',
+      issueKey: 'duplicateFixture',
+      detail: `${formatDateZurich(day)} · ${gameLabel(g)}${t ? ` ${t}` : ''} (${g['game_id'] ?? g['id']}) ↔ ${twinText}`,
+      autoFixable: false,
+    })
+  }
+  return issues
+}
+
 // ── Checks ──
 
 async function checkGames(): Promise<CollectionHealth> {
   const games = await fetchAllItems<Record<string, unknown>>('games', {
-    fields: ['id', 'game_id', 'date', 'time', 'home_team', 'away_team', 'status'],
+    // kscw_team + source feed findDuplicateFixtures below; the rest are the
+    // per-row field checks.
+    fields: ['id', 'game_id', 'date', 'time', 'home_team', 'away_team', 'status',
+      'kscw_team', 'source'],
     sort: ['date', 'time'],
   })
 
@@ -262,6 +349,8 @@ async function checkGames(): Promise<CollectionHealth> {
       })
     }
   }
+
+  issues.push(...findDuplicateFixtures(games))
 
   return { collection: 'games', total: games.length, issues }
 }

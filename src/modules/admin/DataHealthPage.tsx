@@ -72,6 +72,7 @@ const ISSUE_LABEL_KEY: Record<IssueKey, string> = {
   missingAwayTeam: 'dhIssueMissingAwayTeam',
   missingTime: 'dhIssueMissingTime',
   nonPaddedTime: 'dhIssueNonPaddedTime',
+  duplicateFixture: 'dhIssueDuplicateFixture',
   noTeamAssignment: 'dhIssueNoTeamAssignment',
   missingSex: 'dhIssueMissingSex',
   clubdeskNameMatch: 'dhIssueClubdeskNameMatch',

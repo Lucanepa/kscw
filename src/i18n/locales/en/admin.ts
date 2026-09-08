@@ -159,6 +159,7 @@ export default {
   dhIssueMissingAwayTeam: 'Missing away team',
   dhIssueMissingTime: 'Missing time',
   dhIssueNonPaddedTime: 'Non-padded time',
+  dhIssueDuplicateFixture: 'Possible duplicate fixture (manual + synced)',
   dhIssueNoTeamAssignment: 'No team assignment',
   dhIssueMissingSex: 'Missing sex',
   dhSetMale: 'Male',

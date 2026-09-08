@@ -639,6 +639,7 @@ export default {
   dhIssueMissingAwayTeam: 'Équipe adverse manquante',
   dhIssueMissingTime: 'Heure manquante',
   dhIssueNonPaddedTime: 'Heure sans zéro initial',
+  dhIssueDuplicateFixture: 'Match en double possible (manuel + synchronisé)',
   dhIssueNoTeamAssignment: 'Aucune affectation d’équipe',
   dhIssueMissingSex: 'Sexe manquant',
   dhSetMale: 'Homme',
