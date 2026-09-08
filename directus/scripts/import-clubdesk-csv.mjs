@@ -487,6 +487,8 @@ const psqlInput =
   // detection predicate plus a `rule` label the reviewer sees:
   //   fill      — our cell is empty and ClubDesk has something
   //   overwrite — both hold a value, they differ, and ClubDesk's used to win
+  //               (⚠ "both hold a value" is a predicate, not a description — see
+  //               the five overwrite/fill pairs below)
   //   set_true  — a group/licence-derived boolean the register asserts
   // The value parsing is carried over verbatim (calendar-valid dd.mm.yyyy only,
   // canonical phone only, EAN-13-checked AHV only, country aliases, the trainer
@@ -625,17 +627,49 @@ const psqlInput =
   "  UNION ALL SELECT id, cdid, 'trainer_licences', NULL, cd_trainer, 'fill'\n" +
   '    FROM mem WHERE trainer_licences IS NULL AND cd_trainer IS NOT NULL\n' +
   // ── overwrite: both sides hold a value and they differ ──
+  //
+  // ⚠ `cd IS DISTINCT FROM ours` is ALSO true when ours is NULL, so each of these
+  // five carries an explicit "and we hold a value" clause and a `fill` twin below.
+  // Without it a column we simply never filled staged as `overwrite`, which the
+  // queue renders "Values disagree" — announcing a conflict against a blank. It
+  // read as a broken sync at the moment the sync had worked: the two contacts our
+  // CREATE push made on 03.09.2026 came back carrying ClubDesk's own Eintritt,
+  // Mitgliederstatus and Sektion — the register answering the create, exactly what
+  // step 4 is for — and the operator was shown six disagreements over six empty
+  // cells (migration 356 relabelled the rows already queued).
+  //
+  // The `rule` is the ONLY thing that differs between each pair: the accept path
+  // writes the same value either way. It is a label for the human deciding, and
+  // "ours is empty" and "we disagree" are not the same question.
   "  UNION ALL SELECT id, cdid, 'beitragskategorie', beitragskategorie, cd_categ, 'overwrite'\n" +
-  "    FROM mem WHERE cd_categ IS NOT NULL AND cd_categ IS DISTINCT FROM NULLIF(btrim(beitragskategorie),'')\n" +
+  "    FROM mem WHERE cd_categ IS NOT NULL AND NULLIF(btrim(beitragskategorie),'') IS NOT NULL\n" +
+  "      AND cd_categ IS DISTINCT FROM NULLIF(btrim(beitragskategorie),'')\n" +
+  "  UNION ALL SELECT id, cdid, 'beitragskategorie', NULL, cd_categ, 'fill'\n" +
+  "    FROM mem WHERE cd_categ IS NOT NULL AND NULLIF(btrim(beitragskategorie),'') IS NULL\n" +
   "  UNION ALL SELECT id, cdid, 'sektion', sektion, cd_sektion, 'overwrite'\n" +
-  "    FROM mem WHERE cd_sektion IS NOT NULL AND cd_sektion IS DISTINCT FROM NULLIF(btrim(sektion),'')\n" +
+  "    FROM mem WHERE cd_sektion IS NOT NULL AND NULLIF(btrim(sektion),'') IS NOT NULL\n" +
+  "      AND cd_sektion IS DISTINCT FROM NULLIF(btrim(sektion),'')\n" +
+  "  UNION ALL SELECT id, cdid, 'sektion', NULL, cd_sektion, 'fill'\n" +
+  "    FROM mem WHERE cd_sektion IS NOT NULL AND NULLIF(btrim(sektion),'') IS NULL\n" +
   "  UNION ALL SELECT id, cdid, 'register_status', register_status, cd_reg_status, 'overwrite'\n" +
-  '    FROM mem WHERE cd_reg_status IS NOT NULL AND cd_reg_status IS DISTINCT FROM register_status\n' +
+  "    FROM mem WHERE cd_reg_status IS NOT NULL AND NULLIF(btrim(register_status),'') IS NOT NULL\n" +
+  '      AND cd_reg_status IS DISTINCT FROM register_status\n' +
+  "  UNION ALL SELECT id, cdid, 'register_status', NULL, cd_reg_status, 'fill'\n" +
+  "    FROM mem WHERE cd_reg_status IS NOT NULL AND NULLIF(btrim(register_status),'') IS NULL\n" +
   "  UNION ALL SELECT id, cdid, 'eintritt', eintritt::text, cd_eintritt::text, 'overwrite'\n" +
-  '    FROM mem WHERE cd_eintritt IS NOT NULL AND cd_eintritt IS DISTINCT FROM eintritt\n' +
-  // Austritt travels only with a departed status — see the ⚠ above.
+  '    FROM mem WHERE cd_eintritt IS NOT NULL AND eintritt IS NOT NULL\n' +
+  '      AND cd_eintritt IS DISTINCT FROM eintritt\n' +
+  "  UNION ALL SELECT id, cdid, 'eintritt', NULL, cd_eintritt::text, 'fill'\n" +
+  '    FROM mem WHERE cd_eintritt IS NOT NULL AND eintritt IS NULL\n' +
+  // Austritt travels only with a departed status — see the ⚠ above. The departed
+  // clause guards BOTH halves: an exit date under a still-active status aborts on
+  // members_austritt_needs_departed_status, whether we hold one already or not.
   "  UNION ALL SELECT id, cdid, 'austritt', austritt::text, cd_austritt::text, 'overwrite'\n" +
-  '    FROM mem WHERE cd_austritt IS NOT NULL AND cd_austritt IS DISTINCT FROM austritt\n' +
+  '    FROM mem WHERE cd_austritt IS NOT NULL AND austritt IS NOT NULL\n' +
+  '      AND cd_austritt IS DISTINCT FROM austritt\n' +
+  "      AND COALESCE(cd_reg_status, register_status) IN ('Kein Mitglied','Ehemaliges Mitglied','Verstorben')\n" +
+  "  UNION ALL SELECT id, cdid, 'austritt', NULL, cd_austritt::text, 'fill'\n" +
+  '    FROM mem WHERE cd_austritt IS NOT NULL AND austritt IS NULL\n' +
   "      AND COALESCE(cd_reg_status, register_status) IN ('Kein Mitglied','Ehemaliges Mitglied','Verstorben')\n" +
   // ── set_true: the register asserts a qualification we do not hold ──
   // Never a clearing rule: ClubDesk holds ONE value per contact while a member can

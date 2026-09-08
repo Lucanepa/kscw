@@ -28,7 +28,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { formatTimeZurich, formatDateTimeCompact } from '../../utils/dateHelpers'
+import { formatTimeZurich } from '../../utils/dateHelpers'
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronRight,
   Wrench, XCircle, RefreshCcw, ScrollText, Download, ArrowUpFromLine,
@@ -38,15 +38,12 @@ import { Checkbox } from '../../components/ui/checkbox'
 import { useConfirm } from '../../components/ConfirmProvider'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import ClubdeskSyncUpModal from './components/ClubdeskSyncUpModal'
-import ClubdeskProposals from './components/ClubdeskProposals'
 import ClubdeskSyncPath from './components/ClubdeskSyncPath'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 /** Top-level page section. Functional, unlike the sport axis it replaced. */
 type Section = 'clubdesk' | 'club'
 import ClubdeskGroupCheck from './components/ClubdeskGroupCheck'
-import ClubdeskFixGroups from './components/ClubdeskFixGroups'
 import {
   EMPTY_GROUP_CHECK, type FixClass, type GroupCheckResp,
 } from './utils/clubdeskFindings'
@@ -638,7 +635,6 @@ export default function DataHealthPage() {
   // immediately rather than flashing the empty state for a frame.
   const [loading, setLoading] = useState(true)
   const [lastCheck, setLastCheck] = useState('')
-  const [syncUpOpen, setSyncUpOpen] = useState(false)
   const [tab, setTab] = useState<SportTab>('all')
   // Which half of the page: everything ClubDesk, or the club-wide generic checks.
   const [section, setSection] = useState<Section>('clubdesk')
@@ -650,7 +646,6 @@ export default function DataHealthPage() {
   // its mount-time snapshot. `runChecks` alone does not reach it — that table
   // owns its own fetch.
   const [proposalsReload, setProposalsReload] = useState(0)
-  const [fixGroupsOpen, setFixGroupsOpen] = useState(false)
 
   // ── ClubDesk findings, owned here ──────────────────────────────────────────
   // One fetch feeds the group-check table AND the "Fix groups" button, so the
@@ -785,9 +780,6 @@ export default function DataHealthPage() {
         </div>
       </div>
 
-      {/* Rescan after a push so pushed members drop off the drift list. */}
-      <ClubdeskSyncUpModal open={syncUpOpen} onOpenChange={setSyncUpOpen} onDone={runChecks} />
-
       {/* Initial scan — branded "load everything then render" spinner */}
       {initialScan ? null : (
         <>
@@ -851,33 +843,23 @@ export default function DataHealthPage() {
                 your decision), what is queued to go UP, and the group allocations.
                 The registrations page no longer carries any of it. */}
             <TabsContent value="clubdesk" className="space-y-4">
-              {/* ⚠ Sync down / sync up are DELIBERATELY not buttons here — the path
-                  below owns them. The three ClubDesk jobs share one login and one
-                  server-side lock, so a manual button next to the runner is a way
-                  to 409 yourself out of the step the runner is mid-way through.
-                  Fix groups stays: it is the one job with its own preview→commit
-                  gate, and the path hands off to this very dialog for step 5. */}
-              <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/30">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <Wrench className="h-4 w-4" aria-hidden="true" />
-                  {t('dhClubdeskActions')}
-                </span>
-                <ClubdeskFixGroups
-                  available={fixAvailable}
-                  onDone={runChecks}
-                  open={fixGroupsOpen}
-                  onOpenChange={setFixGroupsOpen}
-                />
-                <p className="w-full text-xs text-gray-500 dark:text-gray-400">
-                  {t('cdNeedsSyncLastUp', { time: syncMeta.lastUp ? formatDateTimeCompact(syncMeta.lastUp) : '—' })}
-                </p>
-              </div>
-
-              {/* The order is forced by how the jobs read each other — the path
+              {/* ⚠ NO manual job buttons here, at all (08.09.2026). There was one
+                  left — a "ClubDesk · Fix groups" bar above the path — and it was
+                  the last second door onto a job the path already owns. The three
+                  ClubDesk jobs share one login and one server-side lock, and step 5
+                  is LAST for a reason (the scraper needs the wiedisync UUID to be
+                  on the contact, which only a pushed-and-linked create carries), so
+                  a button offering it out of order could only run it too early or
+                  409 the step the runner was mid-way through. The "last sync up"
+                  line went with it: the same timestamp heads the sync board below.
+                  The order is forced by how the jobs read each other — the path
                   runs what can be run and stops where a person is required. */}
               <ClubdeskSyncPath
                 pendingProposals={pendingProposals}
-                fixableCount={Object.values(fixAvailable).reduce((a, b) => a + b, 0)}
+                fixAvailable={fixAvailable}
+                proposalsReload={proposalsReload}
+                onProposalCountChange={setPendingProposals}
+                onRefresh={runChecks}
                 // ⚠ From the server, computed with the up-preview's own
                 // predicate — NOT re-derived from the worklist rows. Counting
                 // `not_linked` here was the 25.08.2026 dead end: it also holds
@@ -897,16 +879,7 @@ export default function DataHealthPage() {
                 pendingPush={syncMeta.pendingPush ?? needsSync.filter(
                   (r) => r.status === 'pending' || r.status === 'not_linked',
                 ).length}
-                onRunUp={() => setSyncUpOpen(true)}
-                onRunGroups={() => setFixGroupsOpen(true)}
                 onDone={afterSyncJob}
-              />
-
-              {/* Sync down produces proposals, never writes — see migration 321. */}
-              <ClubdeskProposals
-                onDone={runChecks}
-                onCountChange={setPendingProposals}
-                reloadKey={proposalsReload}
               />
 
               <div className="flex items-center gap-2">

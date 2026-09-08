@@ -64,6 +64,17 @@ flock -n 9 || exit 0   # a previous up-dispatcher (same env) is still running
 
 psqlc() { docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -tAc "$1"; }
 
+# Live progress + log tail (migration 355). Best effort: a /opt/clubdesk-sync that
+# clubdesk:deploy has not reached yet has no helper, and a push must never fail
+# because it could not report on itself.
+CDP_JOB=up
+if [ -r "$DIR/clubdesk-progress.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$DIR/clubdesk-progress.sh"
+else
+  cdp() { :; }; cdp_reset() { :; }; cdp_fail() { :; }; cdp_stream() { cat; }; cdp_cleanup() { :; }
+fi
+
 # Pre-173 DBs lack the create-set columns — detect once and degrade gracefully
 # (single update-set flow, and never reference the missing columns in SQL).
 HAS_CREATE=$(psqlc "SELECT 1 FROM information_schema.columns WHERE table_name='clubdesk_member_sync' AND column_name='up_csv_create'" 2>/dev/null || true)
@@ -77,9 +88,11 @@ claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET up_state='running' WHE
 [ "$claim" = "1" ] || exit 0
 
 echo "=== up-dispatch: sync-up requested — running $(date -u +%FT%TZ) (db=$DB) ==="
+cdp_reset
+cdp 4 "Reading the push payload…"
 CSVUTF_U="$DIR/up-import-update.utf8.csv"; CSV_U="$DIR/up-import-update.csv"
 CSVUTF_C="$DIR/up-import-create.utf8.csv"; CSV_C="$DIR/up-import-create.csv"
-cleanup() { rm -f "$CSVUTF_U" "$CSV_U" "$CSVUTF_C" "$CSV_C"; }   # member PII — never linger
+cleanup() { rm -f "$CSVUTF_U" "$CSV_U" "$CSVUTF_C" "$CSV_C"; cdp_cleanup; }   # member PII — never linger
 trap cleanup EXIT
 
 # 1. Pull the stashed CSVs → files (UTF-8 from psql), transcode to CP1252 for ClubDesk.
@@ -118,8 +131,14 @@ if [ "$COMMIT_ENABLED" = "1" ] && [ "$CLUBDESK_ENV" != "prod" ]; then
 fi
 
 scrape() { # scrape <csv-file> <preview|commit> → JSON line on stdout
+  # ⚠ stdout stays JSON-ONLY — `| tail -1` downstream is the result, and a progress
+  # line printed there would be parsed as one. The scraper's human output is on
+  # stderr, so that is what gets mirrored into the live log (and, as before,
+  # appended to up-run.log). The phase and the bar are owned by this dispatcher,
+  # which is the only thing that knows which of the four scrapes is running.
   flock "$DIR/.sync.lock" docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" "$PW_IMG" \
-    node /work/clubdesk-scrape-import.mjs "/work/$(basename "$1")" "$2" 2>>"$DIR/up-run.log" | tail -1
+    node /work/clubdesk-scrape-import.mjs "/work/$(basename "$1")" "$2" \
+    2> >(cdp_stream >> "$DIR/up-run.log") | tail -1
 }
 scrape_ok() { # preview/commit result sanity: reached a numeric summary, no error
   printf '%s' "$1" | grep -q '"total":[0-9]' && ! printf '%s' "$1" | grep -q '"error"'
@@ -140,6 +159,7 @@ merge_results() { # merge_results <committed:true|false> <json-update|''> <json-
     "$t" "$n" "$v" "$committed" "${ju:-null}" "${jc:-null}"
 }
 fail_run() { # fail_run <message> <result-json|''>
+  cdp_fail "$1"
   local MSG_ESC=${1//\'/\'\'} RESSQL='NULL'
   if [ -n "${2:-}" ]; then local RES_ESC=${2//\'/\'\'}; RESSQL="'${RES_ESC}'::jsonb"; fi
   psqlc "UPDATE clubdesk_member_sync SET up_state='failed', up_requested_at=NULL, up_finished_at=now(), up_message='${MSG_ESC}', up_result=${RESSQL}, ${CLEAR_COLS} WHERE id=1"
@@ -147,6 +167,7 @@ fail_run() { # fail_run <message> <result-json|''>
 
 PREVIEW_U=''; PREVIEW_C=''
 if [ -s "$CSVUTF_U" ]; then
+  cdp 18 "Dry-run of the changed members…"
   PREVIEW_U=$(scrape "$CSV_U" preview)
   echo "preview (update set): $PREVIEW_U"
   if ! scrape_ok "$PREVIEW_U"; then
@@ -182,6 +203,7 @@ if [ -s "$CSVUTF_U" ]; then
   fi
 fi
 if [ -s "$CSVUTF_C" ]; then
+  cdp 38 "Dry-run of the new contacts…"
   PREVIEW_C=$(scrape "$CSV_C" preview)
   echo "preview (create set): $PREVIEW_C"
   if ! scrape_ok "$PREVIEW_C"; then
@@ -200,6 +222,7 @@ if [ "$COMMIT_ENABLED" != "1" ]; then
   RES=$(merge_results false "$PREVIEW_U" "$PREVIEW_C"); RES_ESC=${RES//\'/\'\'}
   # Dry-run only: nothing was written, so clubdesk_push_pending stays set for a real
   # commit later. Do NOT touch members here.
+  cdp 100 "$DRY_MSG"
   psqlc "UPDATE clubdesk_member_sync SET up_state='done', up_requested_at=NULL, up_finished_at=now(), up_message='${DRY_MSG_ESC}', up_result='${RES_ESC}'::jsonb, ${CLEAR_COLS} WHERE id=1"
   echo "=== up-dispatch: dry-run OK, commit disabled ==="; exit 0
 fi
@@ -209,6 +232,7 @@ fi
 # idempotent — so commit the risky set first and stamp its members immediately.
 RES_C=''
 if [ -s "$CSVUTF_C" ]; then
+  cdp 58 "Writing the new contacts to ClubDesk…"
   RES_C=$(scrape "$CSV_C" commit)
   echo "commit (create set): $RES_C"
   if ! printf '%s' "$RES_C" | grep -q '"committed":true'; then
@@ -234,6 +258,7 @@ fi
 
 RES_U=''
 if [ -s "$CSVUTF_U" ]; then
+  cdp 78 "Writing the changed members to ClubDesk…"
   RES_U=$(scrape "$CSV_U" commit)
   echo "commit (update set): $RES_U"
   if ! printf '%s' "$RES_U" | grep -q '"committed":true'; then
@@ -255,6 +280,7 @@ if [ -s "$CSVUTF_U" ]; then
   fi
 fi
 
+cdp 92 "Clearing the push flags…"
 RES=$(merge_results true "$RES_U" "$RES_C"); RES_ESC=${RES//\'/\'\'}
 # 3a. Stamp EVERY pushed member with clubdesk_pushed_at (creates were already
 #     stamped right after their commit; this re-stamp is harmless and also covers
@@ -265,5 +291,6 @@ psqlc "UPDATE members SET clubdesk_pushed_at=now() WHERE id IN (SELECT jsonb_arr
 #     has a newer date_updated, so we KEEP clubdesk_push_pending=true and their newer
 #     edit is picked up on the next run instead of being silently dropped.
 psqlc "UPDATE members m SET clubdesk_push_pending=false, clubdesk_push_changes=NULL FROM clubdesk_member_sync s WHERE s.id=1 AND m.id IN (SELECT jsonb_array_elements_text(s.up_member_ids)::int) AND (m.date_updated IS NULL OR m.date_updated <= s.up_requested_at)" >/dev/null 2>&1 || true
+cdp 100 "Pushed to ClubDesk"
 psqlc "UPDATE clubdesk_member_sync SET up_state='done', up_requested_at=NULL, up_finished_at=now(), up_message='Pushed to ClubDesk', up_result='${RES_ESC}'::jsonb, ${CLEAR_COLS} WHERE id=1"
 echo "=== up-dispatch: done ==="

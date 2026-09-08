@@ -2,6 +2,21 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.7.0 — 2026-09-08
+
+### The ClubDesk sync tells you what it is doing
+
+*Superadmin tool — Admin → Data health → ClubDesk sync.*
+
+- **Every step of the sync path now opens the same window.** Which step it is, what it does, a progress bar, a live log, and one button to move on. Before, the two "sync down" steps ran under the card, deciding happened in a table further down the page, and "Sync up" and "Fix groups" each opened a different-looking dialog.
+- **The progress bar measures the sync, not the step you are on.** It moves with the scrape itself — logging in, opening the contact list, waiting for the export, loading it — instead of jumping a fifth at a time. A run that has stalled and a run that is nearly finished no longer look identical.
+- **The sync's own log is on screen while it runs,** so a failure can be read where it happened instead of on the server. The same applies to the push and to the group fix, which reports contact by contact.
+- **The "Fix groups" button above the path is gone.** It ran, out of order, the job the path already runs last — and last is where it has to be, because a contact created by a push can only be found in ClubDesk once the push has been read back.
+
+### Fixes
+
+- **A blank on our side is no longer reported as a disagreement.** Two members created in ClubDesk by a push came back with their joining date, membership status and section, and the review queue announced six "values disagree" against six empty cells. It now says "Ours is empty", which is what it is.
+
 ## v2.6.1 — 2026-09-08
 
 ### Fixes

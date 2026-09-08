@@ -678,6 +678,24 @@ export default {
   dhPathStep5Empty: '5. Fix groups (nothing to fix)',
   dhPathStep4: '4. Sync down again',
   dhPathStep5: '5. Fix groups ({{count}})',
+
+  // ── The step dialog: one shell for all five steps (08.09.2026) ──
+  // Sentence case throughout, and written for the person pressing the button, not
+  // for the log: these strings sit next to a live progress bar and a terminal log,
+  // so they answer "what is this step for" and never restate what the bar shows.
+  dhStepClose: 'Close',
+  dhStepNext: 'Next step',
+  dhStepCloseHint: 'You can close this — the sync keeps running on the server.',
+  dhStepDecideFirst: 'Decide the open proposals first',
+  dhStepHintDown1: 'Reads ClubDesk into wiedisync and stages every change as a proposal. Nothing is written to members yet.',
+  dhStepHintDecide: 'Pick the side that wins. Keeping ours queues a correction back to ClubDesk, which is why this comes before the push.',
+  dhStepHintUp: 'Pushes the changed members and the new contacts to ClubDesk.',
+  dhStepHintDown2: 'Required after a push: a new contact only gets its ClubDesk ID — and its link back to wiedisync — here.',
+  dhStepHintGroups: 'Writes the missing and stale group allocations into ClubDesk. Preview first, then commit.',
+  // The live bar and log, shared by all three ClubDesk jobs.
+  dhJobStarting: 'Starting…',
+  dhJobIdle: 'Not running',
+  dhJobLogLabel: 'Sync log',
   dhSportFilter: 'Sport',
   // Sync-down review queue (migration 321)
   dhProposalTitle: 'Waiting for your decision ({{count}})',

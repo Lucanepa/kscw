@@ -27,6 +27,20 @@ const WORKLIST = process.argv[2], MODE = process.argv[3] || 'preview'
 const SHOTS = process.env.CLUBDESK_GROUP_SHOTS || ''
 const START = 'https://app.clubdesk.com/clubdesk/start'
 const log = (...a) => console.error(`[${new Date().toISOString().slice(11, 19)}]`, ...a)
+/**
+ * Progress marker for the in-app bar (see clubdesk-progress.sh).
+ *
+ * `@@STEP <pct> <sentence>` on stderr — stdout is the JSON summary and the
+ * dispatcher reads it with `tail -1`, so a progress line there would be parsed as
+ * the result. The percentage is ABSOLUTE for the whole group-fix run, which this
+ * tool cannot know on its own: the dispatcher passes its slice in CDP_BASE /
+ * CDP_SPAN. Run from a terminal without them it simply spans 0-100.
+ */
+const CDP_BASE = Number(process.env.CDP_BASE || 0)
+const CDP_SPAN = Number(process.env.CDP_SPAN || 100)
+const step = (i, n, msg) =>
+  console.error(`@@STEP ${Math.round(CDP_BASE + CDP_SPAN * (n ? i / n : 1))} ${msg}`)
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const shot = async (p, n) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/rmg-${n}.png` }).catch(() => {}) }
 if (!USER || !PASS) { log('Missing CLUBDESK_USER/PASS'); process.exit(1) }
@@ -150,7 +164,9 @@ async function run() {
     const ctx = await browser.newContext({ locale: 'de-CH', timezoneId: 'Europe/Zurich', viewport: { width: 1500, height: 950 } })
     const page = await ctx.newPage(); page.setDefaultTimeout(45000)
     log('Login…'); await openKontakte(page); log('Kontakte open.')
+    let done = 0
     for (const row of rows) {
+      step(done++, rows.length, `Removing groups — ${done} of ${rows.length}: ${row.name}`)
       const r = { name: row.name, uuid: row.uuid, group_label: row.group_label, status: 'error' }
       try {
         const f = await selectRow(page, row.uuid)

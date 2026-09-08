@@ -1609,7 +1609,9 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
     try {
       if (!(await superGate(req))) return res.status(403).json({ error: 'Forbidden' })
       const s = await database('clubdesk_member_sync').where('id', 1)
-        .first('down_state', 'down_message', 'down_requested_at', 'down_finished_at', 'down_last_success_at', 'up_state')
+        .first('down_state', 'down_message', 'down_requested_at', 'down_finished_at',
+          'down_last_success_at', 'down_phase', 'down_progress', 'down_log',
+          'up_state', 'up_phase', 'up_progress', 'up_log')
       return res.json({
         state: s?.down_state || 'idle',
         message: s?.down_message || null,
@@ -1620,9 +1622,27 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
         // label "last sync": finished_at is stamped on failure too, and showing
         // that as the last sync is how a three-failure outage read as success.
         last_success_at: s?.down_last_success_at || null,
+        // ── Live progress (migration 355) ──
+        // Written by clubdesk-member-dispatch.sh as the run goes, so the bar can
+        // show where the SYNC is instead of where the path is. Until this existed
+        // the frontend filled the bar from the step index — a five-minute scrape
+        // and a hung login looked identical, which is the complaint that produced
+        // the whole feature.
+        //
+        // ⚠ All three are advisory and may be null: a dispatcher that predates the
+        // helper (or could not reach the DB for a progress write) still runs and
+        // still reports state correctly. The UI must fall back, never blank out.
+        phase: s?.down_phase || null,
+        progress: s?.down_progress == null ? null : Number(s.down_progress),
+        log: s?.down_log || null,
         // The button greys itself out while a sync-up holds the pipeline (the
         // POST below refuses it anyway — this just makes the block visible).
         up_state: s?.up_state || 'idle',
+        // Carried so a step dialog watching the up job can render the same bar
+        // without a second poll against a different route.
+        up_phase: s?.up_phase || null,
+        up_progress: s?.up_progress == null ? null : Number(s.up_progress),
+        up_log: s?.up_log || null,
       })
     } catch (err) {
       log.error({ msg: `clubdesk-member-sync status: ${err.message}`, endpoint: 'clubdesk-member-sync', stack: err.stack })
@@ -2103,7 +2123,8 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
     try {
       if (!(await superGate(req))) return res.status(403).json({ error: 'Forbidden' })
       const s = await database('clubdesk_member_sync').where('id', 1)
-        .first('up_state', 'up_message', 'up_requested_at', 'up_finished_at', 'up_result')
+        .first('up_state', 'up_message', 'up_requested_at', 'up_finished_at', 'up_result',
+          'up_phase', 'up_progress', 'up_log')
       let result = null
       try { result = s?.up_result ? (typeof s.up_result === 'object' ? s.up_result : JSON.parse(s.up_result)) : null } catch { result = null }
       return res.json({
@@ -2112,6 +2133,11 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
         requested_at: s?.up_requested_at || null,
         finished_at: s?.up_finished_at || null,
         result,
+        // Live progress (migration 355) — advisory, may be null. See the note on
+        // the sync-down status route.
+        phase: s?.up_phase || null,
+        progress: s?.up_progress == null ? null : Number(s.up_progress),
+        log: s?.up_log || null,
       })
     } catch (err) {
       log.error({ msg: `up-status: ${err.message}`, endpoint: 'clubdesk-member-sync/up-status', stack: err.stack })
@@ -4429,6 +4455,7 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       const s = await database('clubdesk_member_sync').where('id', 1).first(
         'grp_state', 'grp_message', 'grp_mode', 'grp_requested_at', 'grp_finished_at',
         'grp_worklist', 'grp_result', 'grp_requested_by_name',
+        'grp_phase', 'grp_progress', 'grp_log',
         'down_state', 'up_state')
       const parse = (v) => (typeof v === 'string' ? (() => { try { return JSON.parse(v) } catch { return null } })() : (v ?? null))
       const worklist = parse(s?.grp_worklist)
@@ -4444,6 +4471,11 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
           : null,
         worklist,
         result: parse(s?.grp_result),
+        // Live progress (migration 355) — advisory, may be null. The group tools
+        // report per CONTACT, so this bar actually crawls through the worklist.
+        phase: s?.grp_phase || null,
+        progress: s?.grp_progress == null ? null : Number(s.grp_progress),
+        log: s?.grp_log || null,
         // The other two directions block this one and vice versa (see below).
         down_state: s?.down_state || 'idle',
         up_state: s?.up_state || 'idle',

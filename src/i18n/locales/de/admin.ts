@@ -678,6 +678,20 @@ export default {
   dhPathStep5Empty: '5. Gruppen korrigieren (nichts zu tun)',
   dhPathStep4: '4. Nochmals Sync down',
   dhPathStep5: '5. Gruppen korrigieren ({{count}})',
+
+  // ── Der Schritt-Dialog: eine Hülle für alle fünf Schritte (08.09.2026) ──
+  dhStepClose: 'Schliessen',
+  dhStepNext: 'Nächster Schritt',
+  dhStepCloseHint: 'Du kannst schliessen — der Sync läuft auf dem Server weiter.',
+  dhStepDecideFirst: 'Entscheide zuerst die offenen Vorschläge',
+  dhStepHintDown1: 'Liest ClubDesk nach wiedisync und legt jede Änderung als Vorschlag ab. Es wird noch nichts an den Mitgliedern geändert.',
+  dhStepHintDecide: 'Wähle die Seite, die gewinnt. Bleibt unsere stehen, wird eine Korrektur an ClubDesk vorgemerkt — deshalb kommt das vor dem Push.',
+  dhStepHintUp: 'Überträgt die geänderten Mitglieder und die neuen Kontakte nach ClubDesk.',
+  dhStepHintDown2: 'Nach einem Push nötig: Ein neuer Kontakt bekommt erst hier seine ClubDesk-ID — und die Verknüpfung zurück nach wiedisync.',
+  dhStepHintGroups: 'Schreibt fehlende und veraltete Gruppenzuteilungen nach ClubDesk. Zuerst Vorschau, dann übernehmen.',
+  dhJobStarting: 'Startet…',
+  dhJobIdle: 'Läuft nicht',
+  dhJobLogLabel: 'Sync-Protokoll',
   dhSportFilter: 'Sportart',
   // Sync-down Prüfliste (Migration 321)
   dhProposalTitle: 'Wartet auf deinen Entscheid ({{count}})',
