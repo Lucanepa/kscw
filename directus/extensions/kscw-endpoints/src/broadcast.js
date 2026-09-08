@@ -83,6 +83,37 @@ function getMailService(services, schema, database) {
   return new MailService({ schema, knex: database })
 }
 
+// ─── In-flight broadcast guard ───────────────────────────────────────────────
+
+/**
+ * Process-local guard against two overlapping sends on the SAME activity.
+ *
+ * `checkRateLimit` (step 5) reads the `broadcasts` table, but the audit row is
+ * only written at step 10 — after the sequential per-recipient mail loop and
+ * the push fan-out, which run for tens of seconds on a large audience. Until
+ * that row lands the rate limit sees an empty window, so a second request that
+ * starts inside it (the coach reloading the PWA and pressing send again on a
+ * request the client abandoned but the server is still running; or a coach and
+ * a team responsible both reacting to the same last-minute hall change) races
+ * straight past the 3-per-hour cap AND the 20-minute spacing rule and re-runs
+ * the whole fan-out — every recipient gets the email twice plus a second push
+ * (the push `tag` carries `Date.now()`, so the two do not collapse on the
+ * device).
+ *
+ * `broadcasts` is an append-only audit log with no unique constraint, and this
+ * change ships without a migration, so there is nothing for Postgres to
+ * arbitrate on the way `finance_email_jobs` does. Directus runs as a single
+ * container here, so a module-level in-flight set genuinely covers both actor
+ * pairs. It would NOT survive multi-instance scaling — a second replica needs a
+ * DB-arbitrated claim (a claim row inserted before the fan-out, backed by a
+ * partial unique index) to close this properly.
+ *
+ * The claim is taken before the rate-limit read and always released in the
+ * route's `finally`, so a failed or crashed send cannot wedge an activity; the
+ * set also dies with the process.
+ */
+const broadcastsInFlight = new Set()
+
 // ─── Route registration ──────────────────────────────────────────────────────
 
 export function registerBroadcastRoutes(router, ctx) {
@@ -96,6 +127,9 @@ export function registerBroadcastRoutes(router, ctx) {
     let audience = null
     let memberRecords = []
     let externals = []
+    // Key held in `broadcastsInFlight`; non-null only once WE claimed it, so
+    // the `finally` never releases another request's claim.
+    let claimKey = null
     const channels = req.body?.channels ?? {}
     const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim() : null
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
@@ -125,6 +159,19 @@ export function registerBroadcastRoutes(router, ctx) {
           'In-app channel is only available for events',
           { activityType: activity.type })
       }
+
+      // 4.6 in-flight claim — see `broadcastsInFlight` above. Taken BEFORE the
+      //     rate-limit read (this check-and-add is synchronous, so it cannot
+      //     interleave) so that check → fan-out → audit insert runs alone for
+      //     this activity. Released in the `finally` at the end of the route.
+      const inFlightKey = `${activity.type}:${activity.id}`
+      if (broadcastsInFlight.has(inFlightKey)) {
+        throw new BroadcastError(409, 'broadcast/already_in_flight',
+          'A broadcast for this activity is already being sent — please wait',
+          { activityType: activity.type, activityId: activity.id })
+      }
+      broadcastsInFlight.add(inFlightKey)
+      claimKey = inFlightKey
 
       // 5. rate limit (per-activity soft limit + per-sender global limit)
       const rate = await checkRateLimit(database, type, activityId, sender?.id)
@@ -420,6 +467,9 @@ export function registerBroadcastRoutes(router, ctx) {
     } catch (err) {
       // BroadcastError → typed JSON; everything else → 500 (helper handles both)
       return sendBroadcastError(res, log, err)
+    } finally {
+      // Always release — a failed send must not wedge the activity.
+      if (claimKey !== null) broadcastsInFlight.delete(claimKey)
     }
   })
 
