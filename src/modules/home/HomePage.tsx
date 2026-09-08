@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
 import { useTeamPermissions } from '../../hooks/useTeamPermissions'
 import { useCollection } from '../../lib/query'
+import { useMyAbsences } from '../../hooks/useMyCoveringAbsence'
 import { fetchSeasons } from '../../lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useNotificationsContext } from '../../hooks/NotificationsContext'
@@ -443,6 +444,12 @@ export default function HomePage() {
   // popping in one-by-one after reveal.
   const { getParticipations, isLoading: bulkRsvpLoading } = useBulkParticipations(allActivities)
 
+  // Warms the shared `absences` query key (member-filtered, one key for the whole
+  // app) so a detail modal opened from a row already knows whether an absence
+  // covers it. Without it the modal's "Absent" line — and the note it pre-fills
+  // from that absence — arrive a round-trip AFTER it opens.
+  const { isLoading: myAbsencesLoading } = useMyAbsences()
+
   // Combined loading: wait for all primary data + participation statuses + RSVP counters
   // For logged-in users, we need member_teams + all dependent queries + participation statuses
   // For guests, just the public queries (games, results, events)
@@ -458,7 +465,7 @@ export default function HomePage() {
   // it lands showed a ticker that then re-scoped itself.
   const isInitialLoading = memberTeamsLoading || gamesLoading
     || resultsLoading || eventIdsLoading || eventsLoading || (hasTeams && trainingsLoading)
-    || bulkPartLoading || bulkRsvpLoading
+    || bulkPartLoading || bulkRsvpLoading || myAbsencesLoading
 
   // Report loading to the app-level boot gate (Layout) instead of rendering our
   // own spinner. While true, Layout's single fullscreen spinner masks the chrome
@@ -854,8 +861,20 @@ export default function HomePage() {
         onClose={() => setSelectedGame(null)}
         participations={selectedGame ? getParticipations('game', selectedGame.id) : undefined}
       />
-      <TrainingDetailModal training={selectedTraining} onClose={() => setSelectedTraining(null)} />
-      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      {/* The page does not reveal until `bulkRsvpLoading` clears (see
+          `isInitialLoading`), so by the time a row is clickable these lists are
+          complete — the modals open with the counters AND the viewer's own RSVP
+          already painted instead of querying again on open. */}
+      <TrainingDetailModal
+        training={selectedTraining}
+        onClose={() => setSelectedTraining(null)}
+        participations={selectedTraining ? getParticipations('training', selectedTraining.id) : undefined}
+      />
+      <EventDetailModal
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        participations={selectedEvent ? getParticipations('event', selectedEvent.id) : undefined}
+      />
 
       {notifPanelOpen && (
         <NotificationPanel

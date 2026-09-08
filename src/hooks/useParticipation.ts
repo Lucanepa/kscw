@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { fetchItems } from '../lib/api'
@@ -15,11 +15,26 @@ export function useParticipation(
   activityDate?: string,
   sessionId?: string,
   isStaff?: boolean,
+  /**
+   * Every participation row the opening surface already holds for this activity
+   * (the home page's `useBulkParticipations` result, i.e. ALL members' rows —
+   * the caller does not pre-filter to the viewer). Passing it makes this hook
+   * read the viewer's own row out of that list instead of opening its own
+   * request, so a detail modal paints the Yes/Maybe/No selection on its FIRST
+   * frame. Without it `isLoading` is true for a round-trip and the buttons open
+   * disabled-and-unselected, which reads as an unanswered activity.
+   *
+   * Live updates then come from the parent's realtime subscription (it refetches
+   * the bulk query), so this hook's own subscription is switched off — one
+   * subscription per surface instead of one per mounted row.
+   */
+  prefetched?: Participation[],
 ) {
   const { user } = useAuth()
   const { t } = useTranslation('common')
 
-  const { data: participationsRaw, refetch, isLoading } = useCollection<Participation>('participations', {
+  const skipFetch = !!prefetched
+  const { data: participationsRaw, refetch, isLoading: fetchLoading } = useCollection<Participation>('participations', {
     filter: user && activityId
       ? { _and: [
           { member: { _eq: user.id } },
@@ -29,9 +44,9 @@ export function useParticipation(
         ] }
       : { id: { _eq: -1 } },
     limit: 1,
-    enabled: !!user && !!activityId,
+    enabled: !!user && !!activityId && !skipFetch,
   })
-  const participations = participationsRaw ?? []
+  const isLoading = skipFetch ? false : fetchLoading
 
   // Covering-absence lookup lives in one place (useMyCoveringAbsence) — reused by
   // the game/training/event cards + detail modals so the rule can't drift.
@@ -44,7 +59,7 @@ export function useParticipation(
     if (e.record.activity_id === activityId && e.record.member === user?.id) {
       refetch()
     }
-  })
+  }, undefined, skipFetch)
 
   // Optimistic status: shown immediately while the API call is in-flight.
   // Scoped to the current activity via `activityKey` so a previously-opened
@@ -56,7 +71,20 @@ export function useParticipation(
   const [optimistic, setOptimistic] = useState<{ key: string; status: Participation['status'] } | null>(null)
   const [saveConfirmed, setSaveConfirmed] = useState(false)
 
-  const participation = participations[0] ?? null
+  // `prefetched` is the whole activity's roster, so the viewer's own row has to
+  // be picked out of it. Session leg included: a whole-activity RSVP is the row
+  // with no `session_id`, and adopting a per-day row here would show the wrong
+  // answer AND make `setStatus` update the wrong record.
+  const participation = useMemo(() => {
+    if (!prefetched) return participationsRaw?.[0] ?? null
+    if (!user) return null
+    return prefetched.find((p) => (
+      String(p.member) === String(user.id)
+      && p.activity_type === activityType
+      && String(p.activity_id) === String(activityId)
+      && (sessionId ? String(p.session_id) === String(sessionId) : !p.session_id)
+    )) ?? null
+  }, [prefetched, participationsRaw, user, activityType, activityId, sessionId])
 
   // The row this hook last wrote for the current activity. `participations` is a
   // cached read that only catches up on the next refetch/realtime tick, so a second

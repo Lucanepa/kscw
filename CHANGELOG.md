@@ -2,6 +2,14 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.7.1 — 2026-09-08
+
+### Fixes
+
+- **Opening an activity from the home page no longer flashes an empty answer.** Tapping a training, game or event opened its panel with all three Yes / Maybe / No buttons greyed and unselected, and your saved answer only snapped in a moment later — which read as "you have not replied yet" and invited a second tap. The home page already knows every answer before it draws a single row, so the panel now opens with yours already shown. The participation counters and the "Absent" note open filled in for the same reason.
+- **Dates in News are written the same way everywhere.** The same list showed `09.09.26`, `03.10.2026` and `03.10.26` side by side — three parts of the app writing the same kind of line with different years. All of them now use the Swiss `dd.mm.yyyy` the rest of Wiedisync uses, and the notices already on the page were corrected too.
+- **A new or updated event no longer announces the wrong time.** The notice for an event starting at 19:00 said 17:00 in summer and 18:00 in winter, and an event just after midnight was announced on the day before.
+
 ## v2.7.0 — 2026-09-08
 
 ### The ClubDesk sync tells you what it is doing

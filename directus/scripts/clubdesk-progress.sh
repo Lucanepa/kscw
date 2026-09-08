@@ -21,13 +21,20 @@
 # that failed because it could not report its own progress would be a strictly
 # worse dispatcher. The state columns remain the only correctness signal.
 #
-# ⚠ The log column is a TAIL (last CDP_KEEP lines, hard-capped), not an archive.
-# The full run output stays in the host log files. It exists so the superadmin who
-# pressed the button can read the scraper's own words without SSH — the same gap
-# that made a failed sync say only "see the member sync log" until 2026-08-25.
+# ⚠ The log column carries the WHOLE run's output, not a tail (08.09.2026 — it was
+# the last 25 lines, and 25 lines is enough to lose the line you are looking for:
+# the psql block at the end of a sync-down alone is longer than that, so the scrape
+# steps had already scrolled out by the time it finished). The host log files stay
+# the archive across runs; this is one run, entire, so the superadmin who pressed
+# the button can read what the scraper actually said without SSH — the same gap that
+# made a failed sync say only "see the member sync log" until 2026-08-25.
+#
+# ⚠ CDP_MAX_BYTES is a runaway guard, NOT a display choice: a scraper stuck in a
+# retry loop must not grow a row (and a 3-second poll response) without bound. It
+# keeps the END when it trips, because the last lines are the ones that explain a
+# failure. 100 KB is ~40× the longest run ever observed.
 
-CDP_KEEP=${CDP_KEEP:-25}          # lines kept in the DB column
-CDP_MAX_BYTES=${CDP_MAX_BYTES:-6000}
+CDP_MAX_BYTES=${CDP_MAX_BYTES:-100000}    # runaway guard only — see the note above
 CDP_MIN_INTERVAL=${CDP_MIN_INTERVAL:-2}   # seconds between throttled writes
 CDP_BUF="$(mktemp)"
 CDP_LAST_WRITE=0
@@ -48,7 +55,7 @@ cdp_cleanup() { rm -f "$CDP_BUF"; }
 # succeeds, the bar simply never moves. Caught only by reading the column back.
 cdp_write() {
   local lg
-  lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
+  lg="$(tail -c "$CDP_MAX_BYTES" "$CDP_BUF" 2>/dev/null)"
   printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_progress = NULLIF(:'pct','')::smallint, ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
     | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
       -v pct="$CDP_PCT" -v phase="$CDP_PHASE" -v lg="$lg" \
@@ -67,7 +74,7 @@ cdp_write() {
 # owns the words.
 cdp_write_log() {
   local lg
-  lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
+  lg="$(tail -c "$CDP_MAX_BYTES" "$CDP_BUF" 2>/dev/null)"
   printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
     | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q -v lg="$lg" \
     >/dev/null 2>&1 || true
@@ -116,7 +123,7 @@ cdp_fail() {
   CDP_PHASE="Failed: $*"
   cdp_append "$CDP_PHASE"
   local lg
-  lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
+  lg="$(tail -c "$CDP_MAX_BYTES" "$CDP_BUF" 2>/dev/null)"
   printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
     | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
       -v phase="$CDP_PHASE" -v lg="$lg" \

@@ -29,7 +29,7 @@ export interface JobProgress {
   progress: number | null
   /** What it is doing, in the dispatcher's own words. */
   phase: string | null
-  /** The last ~25 output lines. */
+  /** The run's output, whole — see clubdesk-progress.sh. */
   log: string | null
   /** Terminal failure — rendered instead of the phase. */
   error?: string | null
@@ -45,11 +45,16 @@ export default function SyncJobProgress({
   const { t } = useTranslation('admin')
   const logRef = useRef<HTMLPreElement>(null)
 
-  // Follow the tail. A log box that has to be scrolled by hand to see the line
-  // that just arrived is a log box nobody reads.
+  // Follow the tail — but only while the reader is AT the tail. The box carries the
+  // whole run now, so scrolling up to read an earlier line is a thing people do, and
+  // yanking them back to the bottom every three seconds would make that impossible.
+  // 40px of slack, because "at the bottom" after a render is rarely exact.
   useEffect(() => {
     const el = logRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [log])
 
   const pct = progress == null ? null : Math.max(0, Math.min(100, progress))
@@ -116,7 +121,7 @@ export default function SyncJobProgress({
           ref={logRef}
           aria-live="polite"
           aria-label={t('dhJobLogLabel')}
-          className="max-h-44 overflow-auto rounded-md bg-gray-900 px-3 py-2 font-mono text-[11px] leading-relaxed text-gray-100 dark:bg-gray-950"
+          className="max-h-72 overflow-auto rounded-md bg-gray-900 px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-gray-100 dark:bg-gray-950"
         >
           {log}
         </pre>

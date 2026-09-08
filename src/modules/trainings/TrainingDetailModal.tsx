@@ -15,7 +15,7 @@ import BroadcastButton from '../broadcast/BroadcastButton'
 import ShareActivityButton from '../../components/ShareActivityButton'
 import { sanitizeUrl } from '../../utils/sanitizeUrl'
 import { isFeatureEnabled } from '../../utils/featureToggles'
-import type { Training, Team, Hall, Member } from '../../types'
+import type { Training, Team, Hall, Member, Participation } from '../../types'
 import { asObj, relId, teamCoachIds, memberDisplayName } from '../../utils/relations'
 import CancelActivityButton from '../../components/CancelActivityButton'
 import { MapPin, Clock, MessageSquare, User, Users, Calendar, Check, UserPlus, AlarmClock } from 'lucide-react'
@@ -29,9 +29,15 @@ type TrainingExpanded = Training & {
 interface TrainingDetailModalProps {
   training: TrainingExpanded | null
   onClose: () => void
+  /**
+   * Every participation row the opening surface already fetched for this
+   * training — see the same prop on EventDetailModal. Passing it means the
+   * counters and the viewer's own RSVP are on the modal's first frame.
+   */
+  participations?: Participation[]
 }
 
-export default function TrainingDetailModal({ training, onClose }: TrainingDetailModalProps) {
+export default function TrainingDetailModal({ training, onClose, participations }: TrainingDetailModalProps) {
   const { t } = useTranslation('trainings')
   const { t: tc } = useTranslation('common')
   const { user, canParticipateIn, isStaffOnly, coachTeamIds, teamResponsibleIds } = useAuth()
@@ -191,13 +197,13 @@ export default function TrainingDetailModal({ training, onClose }: TrainingDetai
             <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
               {/* Participation buttons */}
               {canParticipate && (
-                <TrainingParticipation training={training} isStaff={isStaff} isStaffParticipant={!!teamId && isStaffOnly(teamId)} />
+                <TrainingParticipation training={training} isStaff={isStaff} isStaffParticipant={!!teamId && isStaffOnly(teamId)} participations={participations} />
               )}
 
               {/* Summary + roster button */}
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <ParticipationSummary activityType="training" activityId={training.id} bars coachMemberIds={teamCoachIds(team)} />
+                  <ParticipationSummary activityType="training" activityId={training.id} bars coachMemberIds={teamCoachIds(team)} participations={participations} />
                 </div>
                 <button
                   onClick={() => setRosterOpen(true)}
@@ -237,7 +243,7 @@ export default function TrainingDetailModal({ training, onClose }: TrainingDetai
   )
 }
 
-function TrainingParticipation({ training, isStaff, isStaffParticipant }: { training: TrainingExpanded; isStaff: boolean; isStaffParticipant: boolean }) {
+function TrainingParticipation({ training, isStaff, isStaffParticipant, participations }: { training: TrainingExpanded; isStaff: boolean; isStaffParticipant: boolean; participations?: Participation[] }) {
   const { t } = useTranslation('participation')
   const { t: tTrainings } = useTranslation('trainings')
   const { getGuestLevel } = useAuth()
@@ -255,6 +261,7 @@ function TrainingParticipation({ training, isStaff, isStaffParticipant }: { trai
     training.date,
     undefined,
     isStaffParticipant,
+    participations,
   )
   const { absence } = useMyCoveringAbsence('training', training.date)
   const absenceLabel = absence?.type === 'weekly' ? 'declinedUnavailable' : 'absent'
