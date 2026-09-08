@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.6.0'
+const APP_VERSION = '2.6.1'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,20 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.6.1',
+    date: '08.09.2026',
+    sections: [
+      {
+        title: "Fixes",
+        items: [
+          "A form whose deadline has passed no longer appears under \"Forms to fill\". A tournament sign-up that closed in July still had a live Edit button on the home page, and tapping it failed with a generic error every time.",
+          "A form that has closed now says so. Submitting to one that closed while you had it open reported only \"Could not submit. Please try again.\" \u2014 advice that could not have worked.",
+          "A public form link for a form past its deadline now says the form is not available, instead of letting you fill the whole thing in and refusing it at the end.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.6.0',
     date: '07.09.2026',

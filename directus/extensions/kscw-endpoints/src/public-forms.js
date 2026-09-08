@@ -96,6 +96,13 @@ export function registerPublicForms(router, { database, logger }, helpers) {
       const slug = String(req.params.slug || '').slice(0, 80)
       const form = await database('forms')
         .where({ slug, is_public: true, status: 'open' })
+        // ⚠ `status` is only half the gate — `closes_at` is a second, independent
+        // deadline, and the submit handler below already enforces it. Without the
+        // same test HERE a form past its deadline rendered in full and rejected
+        // only on submit, i.e. after the visitor had typed the whole thing. A
+        // past-deadline form now 404s exactly like a closed or draft one, which
+        // the page already renders as "This form is not available."
+        .where((q) => q.whereNull('closes_at').orWhere('closes_at', '>', database.fn.now()))
         .select(PUBLIC_FORM_FIELDS).first()
       if (!form) return res.status(404).json({ error: 'Form not found' })
       res.set('Cache-Control', 'public, max-age=120')

@@ -122,9 +122,9 @@ See `INFRA.md → Domains & Hosting Overview` for full map.
 <!-- Last few dev/deploy entries only, for at-a-glance recent context. Full history → docs/DEVLOG.md
      (append new dev/deploy entries THERE, not here). User-facing release notes → CHANGELOG.md.
      Keep this list pruned to ~5 entries. -->
+- **2026-09-08** Basketplan has not published 26/27 yet, and the day it does every fixture would have landed twice (no migration, dev)
+- **2026-09-08** A tournament that closed in July still had a live Edit button, and a finance cron that never ran once (no migration, dev+prod)
+- **2026-09-08** Two doors onto one ClubDesk login, and a toast that said `API /clubdesk-member-sync: 409` (no migration, dev)
 - **2026-09-07** Basketball games announced to the school as volleyball, and the agreed dates not announced at all (no migration, dev+prod)
 - **2026-09-06** The bilingual scorer-course feedback export, committed three weeks after it was written (no migration, dev+prod)
-- **2026-09-06** The Hallenplan drew five empty hours at full scale — the time axis is piecewise now (no migration, dev+prod)
-- **2026-09-06** A date box one day early, but only on a device east of Zurich (no migration, dev+prod)
-- **2026-09-06** Four icon buttons, a nowrap title, and a card that clipped rather than wrapped — plus a hall delete that cascades (migration 353, dev+prod)
 **Full history → [`docs/DEVLOG.md`](docs/DEVLOG.md)** · **pre-1.0 → [`docs/DEVLOG-archive.md`](docs/DEVLOG-archive.md)** (v1.0.0 baseline consolidated 2026-06-19).

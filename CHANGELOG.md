@@ -2,6 +2,14 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.6.1 — 2026-09-08
+
+### Fixes
+
+- **A form whose deadline has passed no longer appears under "Forms to fill".** A tournament sign-up that closed in July still had a live Edit button on the home page, and tapping it failed with a generic error every time.
+- **A form that has closed now says so.** Submitting to one that closed while you had it open reported only "Could not submit. Please try again." — advice that could not have worked.
+- **A public form link for a form past its deadline now says the form is not available,** instead of letting you fill the whole thing in and refusing it at the end.
+
 ## v2.6.0 — 2026-09-07
 
 ### The SQL console suggests the right thing

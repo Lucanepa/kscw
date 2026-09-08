@@ -233,7 +233,198 @@ export function buildGameIntents(g, hallId, awayHallJson) {
   }]
 }
 
-export async function syncBpGames(db, log) {
+// ── Superseded manual games ─────────────────────────────────────────
+//
+// Until ProBasket publishes a season into Basketplan there is nothing to sync,
+// so the BB planner enters the fixtures agreed at the Spielplansitzung by hand
+// (`ManualGameModal` → source='manual', game_id `manual_<uuid>`). Those rows are
+// PLACEHOLDERS for a schedule that does not exist upstream yet.
+//
+// The day Basketplan publishes, bp-sync inserts the real fixtures as
+// `bb_<gameNumber>` / source='basketplan' and — before this — left every
+// placeholder standing beside them. That is not a cosmetic duplicate: each
+// fixture would appear twice in the calendar and the team views, fan out two
+// sets of push/email notifications from `trg_games_notify`, and (home games)
+// claim the KWI floor twice through `basketball_game_floor_claims` →
+// `bb_floor_claims_all`, taking volleyball slots away for a game that exists
+// once.
+//
+// WHAT COUNTS AS SUPERSEDED — three conditions, all required. The rule is
+// deliberately narrow: this deletes rows, and the failure mode of being too
+// eager (wiping a schedule nobody can reconstruct) is far worse than the
+// failure mode of being too shy (a duplicate somebody deletes by hand).
+//
+//   1. Same (kscw_team, season) as a published Basketplan fixture. A team
+//      ProBasket has not published yet keeps its manual schedule untouched —
+//      leagues go live at different times (the junior 1. Phase and the senior
+//      season do not even share a date window), so a whole-club sweep keyed on
+//      "some team got fixtures" would wipe schedules that are still the only
+//      copy the club has.
+//
+//   2. The manual game's date falls INSIDE the published date range for that
+//      team+season. A partial publish (Vorrunde only) therefore clears only the
+//      part it actually covers; the manual Rückrunde survives until the rest
+//      lands, and the next nightly run picks it up as the range grows.
+//
+//   3. The manual row was created BEFORE the team's first published fixture
+//      arrived. This is what makes the rule mean "placeholder", not "manual".
+//      A friendly, a tournament or a cup fixture Basketplan does not carry —
+//      anything a planner adds AFTER the real schedule is in — is never
+//      touched, however well its date lines up.
+//
+// Idempotent by construction: once swept there is nothing left in range, so
+// every subsequent run is two indexed reads and a no-op.
+//
+// ⚠ A swept game takes its RSVPs with it. `trg_games_0_purge_polymorphic`
+// (migration 246) deletes the `participations` and `notifications` that hang
+// off it polymorphically — there is no FK, so nothing else would. That is the
+// right outcome (the placeholder's date/venue is exactly what the real fixture
+// is about to correct, so the answers were given about a different game), but
+// it is member data, so the count rides in the return value, the log line and
+// the `user_logs` entry rather than disappearing quietly. bp-sync's own
+// `sweepGameAutoConfirm` re-asks the squad on the published rows.
+
+/** Local-midnight-safe YYYY-MM-DD for a pg date or a feed string. */
+function dateKey(v) {
+  if (v == null) return ''
+  return v instanceof Date
+    ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`
+    : String(v).slice(0, 10)
+}
+
+/** ms since epoch for a pg timestamp; null-safe per the caller's fail direction. */
+function stamp(v, fallback) {
+  if (v == null) return fallback
+  const t = v instanceof Date ? v.getTime() : new Date(v).getTime()
+  return Number.isFinite(t) ? t : fallback
+}
+
+/**
+ * Decide which manual rows a published schedule supersedes.
+ *
+ * Pure — the whole delete decision is testable without a database or the feed,
+ * which is the point: this is the function that removes data.
+ *
+ * @param published rows {kscw_team, season, date, date_created} source='basketplan'
+ * @param manual    rows {id, kscw_team, season, date, date_created, ...} source='manual'
+ * @returns {{ deleteIds:number[], byTeam:Map, rows:object[] }}
+ */
+export function planManualSweep(published, manual) {
+  // Published envelope per team+season: date range + when the first fixture landed.
+  const env = new Map()
+  for (const p of published) {
+    const key = `${p.kscw_team}|${p.season ?? ''}`
+    const d = dateKey(p.date)
+    if (!d) continue
+    // A published row with no date_created cannot establish WHEN the schedule
+    // arrived, and condition 3 is "the manual row predates it". Unknown must
+    // therefore push the cutoff to -Infinity, which nothing predates, so the
+    // team is simply not swept. +Infinity would do the exact opposite — every
+    // manual row counts as earlier and the whole schedule goes. Because the
+    // cutoff is a min(), one undated published row makes its team unsweepable;
+    // that is the intended direction (skip, never over-delete), and bp-sync
+    // always stamps date_created so it should not arise in practice.
+    const created = stamp(p.date_created, Number.NEGATIVE_INFINITY)
+    const cur = env.get(key)
+    if (!cur) env.set(key, { min: d, max: d, firstCreated: created })
+    else {
+      if (d < cur.min) cur.min = d
+      if (d > cur.max) cur.max = d
+      if (created < cur.firstCreated) cur.firstCreated = created
+    }
+  }
+
+  const rows = []
+  for (const m of manual) {
+    const key = `${m.kscw_team}|${m.season ?? ''}`
+    const e = env.get(key)
+    if (!e) continue // (1) team+season not published yet
+    const d = dateKey(m.date)
+    if (!d || d < e.min || d > e.max) continue // (2) outside the published range
+    // (3) added after the real schedule arrived → a friendly/cup, not a placeholder.
+    // A manual row with no date_created cannot be shown to predate it, so it stays.
+    if (stamp(m.date_created, Number.POSITIVE_INFINITY) >= e.firstCreated) continue
+    rows.push(m)
+  }
+
+  const byTeam = new Map()
+  for (const r of rows) {
+    const k = `${r.kscw_team}|${r.season ?? ''}`
+    byTeam.set(k, (byTeam.get(k) || 0) + 1)
+  }
+  return { deleteIds: rows.map((r) => r.id), byTeam, rows }
+}
+
+/**
+ * Delete the manual placeholders a published Basketplan schedule has replaced.
+ *
+ * `dryRun` returns exactly what a real run would delete, having changed nothing —
+ * the preview the planner sees before the first sweep of a season.
+ */
+export async function sweepSupersededManualGames(db, log, { dryRun = false } = {}) {
+  const published = await db('games')
+    .where('source', 'basketplan')
+    .whereNotNull('kscw_team')
+    .select('kscw_team', 'season', 'date', 'date_created')
+
+  if (published.length === 0) {
+    return { deleted: 0, rsvpsRemoved: 0, teams: 0, dryRun, rows: [] }
+  }
+
+  const teamIds = [...new Set(published.map((p) => p.kscw_team))]
+  const manual = await db('games')
+    .where('source', 'manual')
+    .whereIn('kscw_team', teamIds)
+    .select('id', 'kscw_team', 'season', 'date', 'time', 'type',
+      'game_id', 'home_team', 'away_team', 'date_created')
+
+  const { deleteIds, byTeam, rows } = planManualSweep(published, manual)
+  if (deleteIds.length === 0) {
+    return { deleted: 0, rsvpsRemoved: 0, teams: 0, dryRun, rows: [] }
+  }
+
+  // RSVPs the delete will take with it (polymorphic — no FK, purged by
+  // trg_games_0_purge_polymorphic). Counted BEFORE the delete so the number is
+  // reportable either way; `activity_id` is text, `games.id` an integer.
+  const rsvpRow = await db('participations')
+    .where('activity_type', 'game')
+    .whereIn('activity_id', deleteIds.map(String))
+    .count({ n: '*' })
+    .first()
+  const rsvpsRemoved = Number(rsvpRow?.n) || 0
+
+  const teamNames = Object.fromEntries(
+    (await db('teams').whereIn('id', [...new Set(rows.map((r) => r.kscw_team))]).select('id', 'name'))
+      .map((t) => [t.id, t.name]),
+  )
+  const detail = rows.map((r) => ({
+    id: r.id, game_id: r.game_id, team: teamNames[r.kscw_team] ?? r.kscw_team,
+    season: r.season, date: dateKey(r.date), time: String(r.time ?? '').slice(0, 5),
+    type: r.type, home_team: r.home_team, away_team: r.away_team,
+  }))
+
+  if (dryRun) {
+    log.info(`[BP Sync] Manual sweep (DRY RUN): ${deleteIds.length} superseded placeholder(s) across ${byTeam.size} team(s), ${rsvpsRemoved} RSVP(s) would be removed`)
+    return { deleted: 0, wouldDelete: deleteIds.length, rsvpsRemoved, teams: byTeam.size, dryRun: true, rows: detail }
+  }
+
+  // One transaction, notifications silenced: this is a bulk tidy-up of rows the
+  // squad is about to be re-asked about on the published fixtures, not 59
+  // separate "game deleted" pushes. GUC is txn-local (migration 095).
+  let deleted = 0
+  await db.transaction(async (trx) => {
+    await trx.raw("SELECT set_config('kscw.skip_games_notify', 'on', true)")
+    deleted = await trx('games').whereIn('id', deleteIds).del()
+  })
+
+  log.info(`[BP Sync] Manual sweep: deleted ${deleted} superseded placeholder(s) across ${byTeam.size} team(s), ${rsvpsRemoved} RSVP(s) removed`)
+  for (const d of detail) {
+    log.info(`[BP Sync]   superseded: ${d.team} ${d.date} ${d.time} ${d.home_team} vs ${d.away_team} (${d.game_id})`)
+  }
+  return { deleted, rsvpsRemoved, teams: byTeam.size, dryRun: false, rows: detail }
+}
+
+export async function syncBpGames(db, log, { sweepManual = 'on' } = {}) {
   log.info('[BP Sync] Starting games sync...')
 
   // Build lookups
@@ -399,8 +590,26 @@ export async function syncBpGames(db, log) {
   }
 
   log.info(`[BP Sync] Games: ${created} created, ${updated} updated, ${skipped} unchanged, ${errors} errors`)
+
+  // Retire the hand-entered placeholders the published schedule has replaced.
+  // Runs even when nothing was created: a range that GREW on this run (ProBasket
+  // publishing the Rückrunde) supersedes manual rows the earlier partial publish
+  // did not cover. Idempotent, so a steady-state night is two indexed reads.
+  let manualSweep = { deleted: 0, rsvpsRemoved: 0, teams: 0, skipped: true }
+  if (sweepManual !== 'off') {
+    try {
+      manualSweep = await sweepSupersededManualGames(db, log, { dryRun: sweepManual === 'dry' })
+    } catch (e) {
+      // Never let the tidy-up fail the sync — the fixtures are the point, a
+      // surviving duplicate is visible and the next run retries.
+      errors++
+      log.warn(`[BP Sync] Manual sweep failed: ${e.message}`)
+      manualSweep = { deleted: 0, rsvpsRemoved: 0, teams: 0, error: e.message }
+    }
+  }
+
   if (created > 0) await sweepGameAutoConfirm(db, log)
-  return { created, updated, skipped, errors, leagueHoldingIds: allLhIds }
+  return { created, updated, skipped, errors, manualSweep, leagueHoldingIds: allLhIds }
 }
 
 export async function syncBpRankings(db, log, leagueHoldingIds = {}) {

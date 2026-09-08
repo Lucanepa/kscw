@@ -18,7 +18,7 @@
  * Hermetic — pure functions, no DB or network.
  */
 import { describe, it, expect } from 'vitest'
-import { applyLocalGuards, cmpVal, buildGameIntents } from '../bp-sync.js'
+import { applyLocalGuards, cmpVal, buildGameIntents, planManualSweep } from '../bp-sync.js'
 
 // bp-sync's COMPARE_FIELDS (module-internal; mirrored here as the contract).
 const COMPARE_FIELDS = [
@@ -201,5 +201,137 @@ describe('buildGameIntents', () => {
   it('treats a missing isGuestOurs as not-intra-club (feeds predating the flag)', () => {
     const out = buildGameIntents({ ...HOME_AWAY, isHome: true }, 7, null)
     expect(out).toHaveLength(1)
+  })
+})
+
+// ── planManualSweep ─────────────────────────────────────────────────
+//
+// The delete decision, tested without a database because it is the part that
+// removes data. Scenario throughout: ProBasket publishes the 26/27 schedule
+// into Basketplan weeks after the Spielplansitzung, by which time the BB
+// planner has hand-entered the agreed fixtures as `manual_<uuid>` placeholders.
+// Those must go; anything else must not.
+describe('planManualSweep — retiring superseded placeholders', () => {
+  // The real shape: manual rows entered on 06.09, Basketplan publishing on 20.09.
+  const ENTERED = new Date('2026-09-06T10:00:00Z')
+  const PUBLISHED = new Date('2026-09-20T06:05:00Z')
+
+  const pub = (team, date, created = PUBLISHED) =>
+    ({ kscw_team: team, season: '2026/27', date, date_created: created })
+  const man = (id, team, date, created = ENTERED) =>
+    ({ id, kscw_team: team, season: '2026/27', date, date_created: created })
+
+  it('deletes a placeholder the published schedule covers', () => {
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10')],
+      [man(578, 75, '2026-10-03')],
+    )
+    expect(out.deleteIds).toEqual([578])
+  })
+
+  it('leaves a team ProBasket has NOT published alone', () => {
+    // The junior 1. Phase and the senior season go live at different times —
+    // sweeping the whole club off one team's publish would wipe the only copy
+    // of a schedule that is still hand-kept.
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10')],
+      [man(578, 75, '2026-10-03'), man(628, 72, '2026-11-15')],
+    )
+    expect(out.deleteIds).toEqual([578])
+  })
+
+  it('leaves a placeholder OUTSIDE the published date range (partial publish)', () => {
+    // Vorrunde published, Rückrunde not yet: the March game is still the only
+    // record of that fixture.
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10')],
+      [man(578, 75, '2026-11-19'), man(583, 75, '2027-03-27')],
+    )
+    expect(out.deleteIds).toEqual([578])
+  })
+
+  it('picks up the rest once the range grows on a later run', () => {
+    // Same manual rows, Rückrunde now published — idempotent re-run reaches it.
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2027-05-07')],
+      [man(578, 75, '2026-11-19'), man(583, 75, '2027-03-27')],
+    )
+    expect(out.deleteIds).toEqual([578, 583])
+  })
+
+  it('NEVER touches a game added after the real schedule arrived', () => {
+    // A friendly / cup fixture Basketplan does not carry. Dead centre of the
+    // published range, and it must survive — this is the condition that makes
+    // the rule mean "placeholder" rather than "manual".
+    const friendly = man(999, 75, '2026-11-19', new Date('2026-10-01T09:00:00Z'))
+    const out = planManualSweep([pub(75, '2026-10-03'), pub(75, '2026-12-10')], [friendly])
+    expect(out.deleteIds).toEqual([])
+  })
+
+  it('does not cross seasons', () => {
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10')],
+      [{ ...man(500, 75, '2026-11-19'), season: '2025/26' }],
+    )
+    expect(out.deleteIds).toEqual([])
+  })
+
+  it('compares pg Date objects and feed strings alike', () => {
+    // pg hands dates back as local-midnight Date objects; a naive compare
+    // against the 'YYYY-MM-DD' bounds would silently never match.
+    const out = planManualSweep(
+      [pub(75, new Date(2026, 9, 3)), pub(75, new Date(2026, 11, 10))],
+      [man(578, 75, new Date(2026, 10, 19))],
+    )
+    expect(out.deleteIds).toEqual([578])
+  })
+
+  it('includes the range endpoints', () => {
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10')],
+      [man(1, 75, '2026-10-03'), man(2, 75, '2026-12-10')],
+    )
+    expect(out.deleteIds).toEqual([1, 2])
+  })
+
+  it('fails SAFE when the published row has no date_created', () => {
+    // Nothing can be shown to predate an unknown arrival, so nothing is swept —
+    // the null must not read as "epoch", which would license deleting everything.
+    const out = planManualSweep(
+      [{ ...pub(75, '2026-10-03'), date_created: null }],
+      [man(578, 75, '2026-10-03')],
+    )
+    expect(out.deleteIds).toEqual([])
+  })
+
+  it('fails SAFE when the manual row has no date_created', () => {
+    const out = planManualSweep([pub(75, '2026-10-03')], [man(578, 75, '2026-10-03', null)])
+    expect(out.deleteIds).toEqual([])
+  })
+
+  it('uses the EARLIEST publish as the cutoff when fixtures arrive in waves', () => {
+    // A row added between the two waves is not a placeholder for wave one.
+    const between = man(999, 75, '2026-12-05', new Date('2026-10-05T09:00:00Z'))
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10', new Date('2026-11-01T06:05:00Z'))],
+      [man(578, 75, '2026-11-19'), between],
+    )
+    expect(out.deleteIds).toEqual([578])
+  })
+
+  it('groups the summary by team', () => {
+    const out = planManualSweep(
+      [pub(75, '2026-10-03'), pub(75, '2026-12-10'), pub(86, '2026-10-21'), pub(86, '2026-12-04')],
+      [man(1, 75, '2026-11-19'), man(2, 75, '2026-12-10'), man(3, 86, '2026-10-28')],
+    )
+    expect(out.deleteIds).toEqual([1, 2, 3])
+    expect(out.byTeam.get('75|2026/27')).toBe(2)
+    expect(out.byTeam.get('86|2026/27')).toBe(1)
+  })
+
+  it('is a no-op when nothing is published', () => {
+    // Today's real state: 59 placeholders, zero Basketplan fixtures.
+    const out = planManualSweep([], [man(578, 75, '2026-10-03'), man(628, 72, '2026-09-19')])
+    expect(out.deleteIds).toEqual([])
   })
 })

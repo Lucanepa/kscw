@@ -40,6 +40,16 @@
  * ⚠ The three jobs are mutually exclusive server-side (409 down_in_progress /
  * up_in_progress / grp_in_progress) — one ClubDesk login, one lock. The runner
  * therefore polls one step to completion before offering the next.
+ *
+ * ⚠ …and the lock is club-wide, not tab-wide: the nightly cron, a second admin,
+ * or this admin's other tab can hold it. So the runner does not merely *react*
+ * to a 409, it WATCHES the lock (GET /clubdesk-member-sync every 15s) and says
+ * so before you click. When a 409 does land it is never re-thrown as
+ * "API /clubdesk-member-sync: 409" — that string was the entire user-facing
+ * explanation until 08.09.2026, on a page whose own second button was the thing
+ * causing it (four such 409s on 07.09.2026, both doors fired within 12 seconds).
+ * A down-busy 409 is now ADOPTED: the job the runner wanted is already running,
+ * so it follows that run to completion instead of failing the step.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -47,7 +57,9 @@ import { toast } from 'sonner'
 import { ArrowDownToLine, ArrowUpFromLine, Check, ListChecks, Loader2, RotateCcw, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { kscwApi } from '../../../lib/api'
+import { formatDateTimeCompact } from '../../../utils/dateHelpers'
 import { detectClubdeskConflicts } from '../utils/clubdeskConflicts'
+import { classifySyncFailure, SYNC_FAILURE_KEY } from '../utils/syncFailure'
 
 export type PathStep = 'down1' | 'decide' | 'up' | 'down2' | 'groups' | 'done'
 
@@ -62,7 +74,46 @@ const ICON: Record<PathStep, typeof Check> = {
   done: Check,
 }
 
-interface SyncStatus { state: string; up_state?: string }
+interface SyncStatus {
+  state: string
+  message: string | null
+  /** ⚠ Last SUCCESS, never merely the last finish — see migration 336. */
+  last_success_at?: string | null
+  up_state?: string
+}
+
+/** The two states that hold the ClubDesk lock. */
+const BUSY = ['queued', 'running']
+const isBusy = (state?: string | null) => BUSY.includes(state || '')
+
+/** How long a sync-down is given before the runner calls it stalled. */
+const DOWN_TIMEOUT_MS = 300_000
+
+/**
+ * A 409 the server raised because the ClubDesk lock is held, told apart by
+ * WHICH direction holds it.
+ *
+ * ⚠ Two shapes, deliberately both handled. The sync-up block carries
+ * `code: 'up_in_progress'`; the sync-down block predates the code field and
+ * answers with `state` alone (`{ error, state: 'running' }`). Reading only the
+ * code would silently mis-file the commonest case of all as "unknown error".
+ */
+function lockConflict(e: unknown): 'down' | 'up' | null {
+  const err = e as { status?: number; body?: { code?: string; state?: string } }
+  if (err?.status !== 409) return null
+  // `code` first: the down-block response also carries a state, and a bare state
+  // check would name the wrong direction.
+  if (err.body?.code === 'up_in_progress') return 'up'
+  if (err.body?.code === 'down_in_progress') return 'down'
+  if (isBusy(err.body?.state)) return 'down'
+  return null
+}
+
+/** Readable text for any other failure — never the bare `API <path>: <status>`. */
+function apiMessage(e: unknown): string {
+  const err = e as { body?: { error?: string } }
+  return err?.body?.error || (e instanceof Error ? e.message : String(e))
+}
 
 export default function ClubdeskSyncPath({
   pendingProposals, fixableCount, pendingPush, onRunUp, onRunGroups, onDone,
@@ -101,29 +152,114 @@ export default function ClubdeskSyncPath({
   const [step, setStep] = useState<PathStep>('down1')
   const [running, setRunning] = useState(false)
   const [active, setActive] = useState(false)
+  /** Wall-clock start of the step this runner is polling — drives the elapsed read-out. */
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  /** Ticks only while a step is in flight — `elapsed` is derived from it below. */
+  const [now, setNow] = useState(() => Date.now())
+  /**
+   * The server-side lock, as last seen. Held by the nightly cron, another admin,
+   * or this admin's other tab just as easily as by this runner — which is why it
+   * is watched rather than merely reacted to.
+   */
+  const [lock, setLock] = useState<{ down: string; up: string; message: string | null; lastSuccess: string | null }>(
+    { down: 'idle', up: 'idle', message: null, lastSuccess: null },
+  )
   const alive = useRef(true)
   useEffect(() => () => { alive.current = false }, [])
+
+  // ⚠ Best-effort and silent on failure: a non-superadmin, or a backend that
+  // predates the fields, must not paint an error onto a page that is fine. The
+  // 15s cadence matches how long a queued run takes to be claimed by the host
+  // dispatcher cron, so "someone else is syncing" appears within one tick.
+  useEffect(() => {
+    let on = true
+    const poll = () => {
+      kscwApi<SyncStatus>('/clubdesk-member-sync')
+        .then((s) => {
+          if (!on) return
+          setLock({
+            down: s.state || 'idle',
+            up: s.up_state || 'idle',
+            // Carried, not toasted: the failure an operator most needs to read is
+            // the one they navigated away from and came back to.
+            message: s.state === 'failed' ? (s.message || null) : null,
+            lastSuccess: s.last_success_at || null,
+          })
+        })
+        .catch(() => { /* not a superadmin, or transient — leave the panel blank */ })
+    }
+    poll()
+    const id = setInterval(poll, 15_000)
+    return () => { on = false; clearInterval(id) }
+  }, [])
+
+  // Elapsed seconds while a step is in flight. Ticks only then, so an idle page
+  // holds no timer. ⚠ The clock is a ticking `now` and the elapsed value is
+  // DERIVED, never written back from the effect — a setElapsed(0) in the effect
+  // body is the cascading-render write react-hooks/set-state-in-effect rejects.
+  useEffect(() => {
+    if (startedAt === null) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+  // Clamped: `now` is one tick stale at the instant a run starts.
+  const elapsed = startedAt === null ? 0 : Math.max(0, Math.round((now - startedAt) / 1000))
+
+  /** A ClubDesk job is running that this runner did not start. */
+  const foreignDown = !running && isBusy(lock.down)
+  const upHolding = isBusy(lock.up)
 
   // Poll a job to completion. The server refuses concurrent jobs, so the runner
   // must not offer the next step until this settles.
   const runSyncDown = useCallback(async (): Promise<boolean> => {
     setRunning(true)
+    setStartedAt(Date.now())
     try {
-      await kscwApi('/clubdesk-member-sync', { method: 'POST' })
-      const deadline = Date.now() + 300_000
+      try {
+        await kscwApi('/clubdesk-member-sync', { method: 'POST' })
+      } catch (e) {
+        const held = lockConflict(e)
+        // The sync-up holds the lock, and a down run landing between the push's
+        // dry-run preview and its commit would swap the ClubDesk snapshot out
+        // from under a set that already passed review. Nothing to adopt — the
+        // wrong job is running. Say which one, and stop.
+        if (held === 'up') { toast.info(t('clubdeskSyncBlockedByUp')); return false }
+        // ADOPTED, not failed. A sync-down is already queued or running — the
+        // nightly cron, another admin, or this admin's other tab — and it is the
+        // very job this step wanted. Refusing here would leave the runner parked
+        // on step 1 while the thing it asked for completes in the background.
+        // Fall through to the same poll loop and follow that run home.
+        if (held === 'down') toast.info(t('dhPathAdoptedRun'))
+        // ⚠ Anything else is a real failure and must carry the server's own
+        // sentence, never `API /clubdesk-member-sync: 409`.
+        else { toast.error(apiMessage(e)); return false }
+      }
+      const deadline = Date.now() + DOWN_TIMEOUT_MS
       for (;;) {
         await new Promise((r) => setTimeout(r, 5000))
         if (!alive.current) return false
         const s = await kscwApi<SyncStatus>('/clubdesk-member-sync')
+        // Keep the panel (and the bar) live off the same poll — no second timer.
+        setLock((l) => ({
+          ...l, down: s.state || 'idle', up: s.up_state || 'idle',
+          message: s.state === 'failed' ? (s.message || null) : null,
+          lastSuccess: s.last_success_at ?? l.lastSuccess,
+        }))
         if (s.state === 'done') return true
-        if (s.state === 'failed') { toast.error(t('dhPathFailed')); return false }
+        // ⚠ The raw line, classified — 'Sync failed' alone cannot tell "ClubDesk
+        // is down, try later" from "our scraper is broken", which is the whole
+        // difference between waiting and calling for help.
+        if (s.state === 'failed') {
+          toast.error(t(SYNC_FAILURE_KEY[classifySyncFailure(s.message)]))
+          return false
+        }
         if (Date.now() > deadline) { toast.error(t('dhPathTimeout')); return false }
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
+      toast.error(apiMessage(e))
       return false
     } finally {
-      if (alive.current) setRunning(false)
+      if (alive.current) { setRunning(false); setStartedAt(null) }
     }
   }, [t])
 
@@ -187,6 +323,27 @@ export default function ClubdeskSyncPath({
   const stepIndex = current === 'done' ? STEPS.length : STEPS.indexOf(current)
   const blocked = current === 'decide' && pendingProposals > 0
 
+  // Path progress. The completed steps fill the bar; the step in flight adds
+  // half of its own slice so a long sync-down visibly sits INSIDE step 1 rather
+  // than reading as "0%, nothing happening" for five minutes.
+  const slice = 100 / STEPS.length
+  const pct = Math.min(100, Math.round(stepIndex * slice + (running ? slice / 2 : 0)))
+
+  /** mm:ss for the elapsed read-out — the same 24-hour, dot-free shape as everywhere. */
+  const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+
+  // ⚠ "Step 5 of 5" is wrong at the end — the fifth step is finished, not open.
+  const progressText = current === 'done'
+    ? t('dhPathDone')
+    : t('dhPathProgress', { step: stepIndex + 1, total: STEPS.length })
+
+  // The "Do the next step" button must not fire into a held lock — that is the
+  // 409 this whole panel exists to stop producing. Only the two sync-down steps
+  // touch it directly; step 3 and step 5 hand off to modals that carry their own
+  // block, so they stay clickable.
+  const stepUsesLock = current === 'down1' || current === 'down2'
+  const lockHeld = stepUsesLock && (foreignDown || upHolding)
+
   return (
     <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -207,15 +364,19 @@ export default function ClubdeskSyncPath({
           <Button
             type="button" size="sm"
             variant={active ? 'default' : 'outline'}
-            disabled={running || blocked}
+            disabled={running || blocked || lockHeld}
             aria-busy={running}
             onClick={() => void advance()}
             className="gap-1.5"
           >
-            {running
+            {running || lockHeld
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
               : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
-            {running ? t('dhPathRunning') : blocked ? t('dhPathWaiting') : t('dhPathNext')}
+            {running
+              ? t('dhPathRunning')
+              : lockHeld
+                ? t('dhPathLocked')
+                : blocked ? t('dhPathWaiting') : t('dhPathNext')}
           </Button>
         )}
       </div>
@@ -250,6 +411,60 @@ export default function ClubdeskSyncPath({
           )
         })}
       </ol>
+
+      {/* Progress + status. The bar answers "where am I", the line under it
+          answers "and is anything happening right now" — the two questions a
+          409 used to answer with `API /clubdesk-member-sync: 409`. */}
+      <div
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={STEPS.length}
+        aria-valuenow={stepIndex}
+        aria-valuetext={progressText}
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ${
+            current === 'done'
+              ? 'bg-green-500'
+              : running || foreignDown
+                ? 'animate-pulse bg-blue-500'
+                : 'bg-gray-400 dark:bg-gray-500'
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <p className="mt-1.5 text-xs" aria-live="polite">
+        {running ? (
+          // This runner is driving it — name the step and count, so a five-minute
+          // sync-down never looks like a hung page.
+          <span className="text-blue-700 dark:text-blue-300">
+            {t('dhPathRunningStep', { step: label[current], elapsed: clock })}
+          </span>
+        ) : upHolding ? (
+          <span className="text-amber-700 dark:text-amber-300">{t('clubdeskSyncBlockedByUp')}</span>
+        ) : foreignDown ? (
+          // ⚠ Not "you did something wrong". Someone or something else holds the
+          // one ClubDesk login — the nightly cron most often — and the only
+          // correct action is to wait, which is what the sentence says.
+          <span className="text-amber-700 dark:text-amber-300">{t('dhPathForeignRun')}</span>
+        ) : lock.message ? (
+          // Explanation AND the raw line: a classifier that swallowed the
+          // original would be a prettier version of the problem it exists to fix.
+          <span className="text-red-600 dark:text-red-400">
+            {t(SYNC_FAILURE_KEY[classifySyncFailure(lock.message)])}
+            <span className="ml-1 break-words text-[11px] text-gray-500 dark:text-gray-400" title={lock.message}>
+              {lock.message}
+            </span>
+          </span>
+        ) : (
+          <span className="text-gray-500 dark:text-gray-400">
+            {progressText}
+            {lock.lastSuccess ? ` · ${t('clubdeskLastSync', { time: formatDateTimeCompact(lock.lastSuccess) })}` : ''}
+          </span>
+        )}
+      </p>
     </div>
   )
 }
