@@ -1738,6 +1738,42 @@ export function registerFinance(router, { database, logger, services, getSchema 
         }
       }
 
+      // ── Claim the level BEFORE the irreversible send ─────────────────────
+      // finance_dunning_notices_invoice_level_uq UNIQUE (invoice, level) already decides
+      // who owns level N — but it used to be consulted AFTER mail.send, so two treasurers
+      // on the same overdue row (canManageFinance admits the whole board; the QR-bill
+      // render + SES send is allowed 60s, and dunning_level was only bumped last) both
+      // passed the level check above, both rendered the QR bill and both mailed the
+      // Mahnung; the loser then hit 23505 and was answered "Level N already issued" —
+      // after its letter had left. Stake the index FIRST, under a row lock on the invoice
+      // and in one transaction, the way the dues bulk send stakes finance_email_jobs.
+      // The claim is written as channel 'manual' / sent_at null — byte-for-byte the row
+      // this handler already writes when a send fails — and is patched to 'email' below
+      // once the send succeeds. So it is a record, never a lock: a crash between the
+      // commit and the send leaves a legible "level recorded, not emailed" notice (the
+      // state a failed send has always produced), nothing is stranded, and level N+1
+      // stays available.
+      let claim
+      try {
+        claim = await database.transaction(async (trx) => {
+          const cur = await trx('finance_invoices').where('id', id).andWhere('source', 'native').forUpdate().first()
+          if (!cur) return { code: 404, msg: 'Not found (native invoice expected)' }
+          if (!['open', 'partial'].includes(cur.status)) return { code: 409, msg: `Invoice is ${cur.status}` }
+          if (level !== (cur.dunning_level || 0) + 1) return { code: 409, msg: `Next level is ${(cur.dunning_level || 0) + 1}` }
+          const ins = await trx('finance_dunning_notices').insert({
+            invoice: id, level, reminder_fee: fee, channel: 'manual', recipient_email: inv.recipient_email || null,
+            sent_at: null, created_by_name: mem?.name || null, created_by_email: mem?.email || null,
+          }).returning('id')
+          await trx('finance_invoices').where('id', id).update({ dunning_level: level, dunning_status: `Mahnung ${level}`, date_updated: new Date() })
+          return { noticeId: ins[0]?.id ?? ins[0] }
+        })
+      } catch (e) {
+        if (e?.code === '23505') return res.status(409).json({ error: `Level ${level} already issued` })
+        throw e
+      }
+      if (claim.code) return res.status(claim.code).json({ error: claim.msg })
+      const noticeId = claim.noticeId
+
       let channel = 'manual', sentAt = null, sendResult = 'not_sent'
       if (sendEmail && (inv.recipient_email || '').trim()) {
         const settings = await emailSettings()
@@ -1763,13 +1799,12 @@ export function registerFinance(router, { database, logger, services, getSchema 
         }
       }
 
-      try {
-        await database('finance_dunning_notices').insert({
-          invoice: id, level, reminder_fee: fee, channel, recipient_email: inv.recipient_email || null,
-          sent_at: sentAt, created_by_name: mem?.name || null, created_by_email: mem?.email || null,
-        })
-      } catch (e) { if (e?.code === '23505') return res.status(409).json({ error: `Level ${level} already issued` }); throw e }
-      await database('finance_invoices').where('id', id).update({ dunning_level: level, dunning_status: `Mahnung ${level}`, date_updated: new Date() })
+      // Record the send outcome on the already-claimed notice. 'manual' / sent_at null
+      // stands as written when nothing was sent or the send failed — unchanged behaviour.
+      if (channel === 'email') {
+        try { await database('finance_dunning_notices').where('id', noticeId).update({ channel, sent_at: sentAt }) }
+        catch (e) { log.warn?.({ msg: `mahnung notice patch failed: ${e.message}`, invoice: inv.number }) }
+      }
       await writeUserLog(database, log, { accountability: req.accountability, action: 'update', collection: 'finance_dunning_notices', recordId: id, data: { kind: 'dunning_escalate', invoice: id, level, fee, channel, send_result: sendResult, ...(forcedNeverDun ? { forced_never_dun: true, member: inv.member } : {}) } })
       return res.json({ ok: true, level, channel, send_result: sendResult })
     } catch (e) { return err(res, req, 'dunning-escalate', e) }

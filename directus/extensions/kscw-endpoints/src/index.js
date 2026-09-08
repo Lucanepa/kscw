@@ -5,6 +5,7 @@
  */
 
 import crypto from 'crypto'
+import { claimVmAccount, vmAccountHeldBy } from './vm-account-lock.js'
 import fs from 'fs'
 import { currentSeasonShort, currentSeasonLong } from './season.js'
 import path from 'path'
@@ -1188,6 +1189,13 @@ export default {
 
     async function triggerChildSync(source, script, extraEnv = {}) {
       if (childSyncRunning.has(source)) return { started: false, reason: 'already-running' }
+      // Both of these scripts drive the ONE shared Volleymanager account, and
+      // `childSyncRunning` is keyed per SOURCE — so it never stopped vm_sync and
+      // svrz_sync running at once, nor either racing the crons in kscw-hooks.
+      const releaseVm = claimVmAccount(`endpoint:${source}`)
+      if (!releaseVm) {
+        return { started: false, reason: 'already-running', holder: vmAccountHeldBy() }
+      }
       if (!process.env.VM_USERNAME || !process.env.VM_PASSWORD) {
         return { started: false, reason: 'vm-credentials-missing' }
       }
@@ -1211,6 +1219,7 @@ export default {
       const finish = async (status, errorMessage) => {
         clearTimeout(timer)
         childSyncRunning.delete(source)
+        releaseVm()
         try {
           await logCronRun(database, source, { status, durationMs: Date.now() - startedAt, errorMessage: errorMessage || null })
         } catch (e) { log.error(`${source} logCronRun failed: ${e.message}`) }
