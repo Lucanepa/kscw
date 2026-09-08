@@ -35,9 +35,16 @@ const VOLLEY_POSITIONS: VolleyPosition[] = ['Setter', 'Outside', 'Middle', 'Oppo
 interface EventDetailModalProps {
   event: Event | null
   onClose: () => void
+  /**
+   * Every participation row the opening surface already fetched for this event.
+   * Passing it means the modal opens with the counters AND the viewer's own
+   * Yes/Maybe/No selection already painted, instead of firing two queries on
+   * open and settling a round-trip later.
+   */
+  participations?: Participation[]
 }
 
-export default function EventDetailModal({ event, onClose }: EventDetailModalProps) {
+export default function EventDetailModal({ event, onClose, participations }: EventDetailModalProps) {
   const { t } = useTranslation('events')
   const { t: tP } = useTranslation('participation')
   const { t: tc } = useTranslation('common')
@@ -388,13 +395,13 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
                 )}
               </>
             ) : canParticipate ? (
-              <EventParticipation event={event} isStaff={isStaff} isStaffParticipant={isStaffParticipant} />
+              <EventParticipation event={event} isStaff={isStaff} isStaffParticipant={isStaffParticipant} participations={participations} />
             ) : null}
 
             {/* Summary + roster button */}
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <ParticipationSummary activityType="event" activityId={event.id} bars coachMemberIds={teams.flatMap(t => teamCoachIds(t))} />
+                <ParticipationSummary activityType="event" activityId={event.id} bars coachMemberIds={teams.flatMap(t => teamCoachIds(t))} participations={participations} />
               </div>
               <button
                 onClick={() => setRosterOpen(true)}
@@ -449,7 +456,7 @@ export default function EventDetailModal({ event, onClose }: EventDetailModalPro
   )
 }
 
-function EventParticipation({ event, isStaff, isStaffParticipant }: { event: Event; isStaff: boolean; isStaffParticipant: boolean }) {
+function EventParticipation({ event, isStaff, isStaffParticipant, participations }: { event: Event; isStaff: boolean; isStaffParticipant: boolean; participations?: Participation[] }) {
   const { t } = useTranslation('participation')
   const { participation, effectiveStatus, hasAbsence, note: savedNote, setStatus, saveConfirmed, dismissConfirmed, isLoading: rsvpLoading } = useParticipation(
     'event',
@@ -457,6 +464,7 @@ function EventParticipation({ event, isStaff, isStaffParticipant }: { event: Eve
     event.start_date?.split('T')[0],
     undefined,
     isStaffParticipant,
+    participations,
   )
   const { absence } = useMyCoveringAbsence('event', event.start_date)
   const absenceLabel = absence?.type === 'weekly' ? 'declinedUnavailable' : 'absent'

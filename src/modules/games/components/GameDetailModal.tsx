@@ -200,6 +200,7 @@ export default function GameDetailModal({ game, onClose, readOnly, participation
     game?.date,
     undefined,
     isStaffParticipant,
+    participations,
   )
   const { absence } = useMyCoveringAbsence('game', game?.date)
   const absenceLabel = absence?.type === 'weekly' ? 'participation:declinedUnavailable' : 'participation:absent'
