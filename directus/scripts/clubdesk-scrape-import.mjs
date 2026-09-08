@@ -36,7 +36,17 @@ const MODE = process.argv[3] || 'preview'
 const SHOTS = process.env.CLUBDESK_IMPORT_SHOTS || '' // optional dir for debug screenshots
 const START = 'https://app.clubdesk.com/clubdesk/start'
 
-const log = (...a) => console.error(`[${new Date().toISOString().slice(11, 19)}]`, ...a) // logs → stderr; result → stdout
+// Log stamp: Swiss date AND time, in Europe/Zurich. It used to be
+// `toISOString().slice(11,19)` — a bare UTC clock, so a line read `[15:05:03]`
+// while the operator's screen said 17:05 and nothing said which DAY, on a log the
+// admin page now shows in full (08.09.2026). de-CH + hour12:false is the app-wide
+// rule; the comma de-CH puts between date and time is dropped so the stamp is one
+// token.
+const stamp = () => new Intl.DateTimeFormat('de-CH', {
+  timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+}).format(new Date()).replace(', ', ' ')
+const log = (...a) => console.error(`[${stamp()}]`, ...a) // logs → stderr; result → stdout
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 if (!USER || !PASS) { log('Missing CLUBDESK_USER/PASS'); process.exit(1) }

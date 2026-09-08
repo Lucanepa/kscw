@@ -87,7 +87,7 @@ psqlc() { docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -tAc "$1"; }
 Y=$(date -u +%Y); M=$(date -u +%-m)
 if [ "$M" -ge 6 ]; then SEASON="$Y/$(printf '%02d' $(( (Y + 1) % 100 )))"; else SEASON="$((Y - 1))/$(printf '%02d' $(( Y % 100 )))"; fi
 
-echo "=== group-cleanup $(date -u +%FT%TZ) (db=$DB, season=$SEASON, cap=$CAP) ==="
+echo "=== group-cleanup $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') (db=$DB, season=$SEASON, cap=$CAP) ==="
 
 # Runaway guard 1: the season must be populated, else strays = the whole club
 # (and the stale-Funktion join has nothing to anchor on either).
@@ -201,4 +201,4 @@ if [ "$MODE" = "commit" ] && [ -n "$SUMMARY" ]; then
     cd_mirror_patch "$(printf '{"mode":"commit","add":null,"remove":%s}' "$SUMMARY")" | sed 's/^/  /'
   fi
 fi
-echo "=== group-cleanup done $(date -u +%FT%TZ) ==="
+echo "=== group-cleanup done $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="
