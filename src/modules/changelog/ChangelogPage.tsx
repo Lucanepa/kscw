@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.6.1'
+const APP_VERSION = '2.7.0'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,28 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.7.0',
+    date: '08.09.2026',
+    sections: [
+      {
+        title: "The ClubDesk sync tells you what it is doing",
+        items: [
+          "Superadmin tool \u2014 Admin \u2192 Data health \u2192 ClubDesk sync.",
+          "Every step of the sync path now opens the same window: which step it is, what it does, a progress bar, a live log, and one button to move on. Before, the two \"sync down\" steps ran under the card, deciding happened in a table further down the page, and \"Sync up\" and \"Fix groups\" each opened a different-looking dialog.",
+          "The progress bar measures the sync, not the step you are on. It moves with the scrape itself \u2014 logging in, opening the contact list, waiting for the export, loading it \u2014 instead of jumping a fifth at a time. A run that has stalled and a run that is nearly finished no longer look identical.",
+          "The sync's own log is on screen while it runs, so a failure can be read where it happened instead of on the server. The same applies to the push and to the group fix, which reports contact by contact.",
+          "The \"Fix groups\" button above the path is gone. It ran, out of order, the job the path already runs last \u2014 and last is where it has to be, because a contact created by a push can only be found in ClubDesk once the push has been read back.",
+        ],
+      },
+      {
+        title: "Fixes",
+        items: [
+          "A blank on our side is no longer reported as a disagreement. Two members created in ClubDesk by a push came back with their joining date, membership status and section, and the review queue announced six \"values disagree\" against six empty cells. It now says \"Ours is empty\", which is what it is.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.6.1',
     date: '08.09.2026',
