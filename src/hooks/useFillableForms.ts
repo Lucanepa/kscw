@@ -33,8 +33,20 @@ export interface FillableForm {
 export function useFillableForms() {
   const { user, memberTeamIds, teamsLoading } = useAuth()
 
+  // ⚠ `status: 'open'` is NOT the whole gate — `closes_at` is a second,
+  // independent deadline that the BEFORE INSERT/UPDATE guards (migrations
+  // 086/088) enforce in Postgres. Without it a form left at status=open kept its
+  // "Fill in" / "Edit" button here forever: tapping it sent a write the trigger
+  // rejected, and the RAISE reached the member as Directus's opaque 500 "An
+  // unexpected error occurred." Evaluated server-side via `$NOW` so the cutoff
+  // comes from the same clock as the trigger — and so render stays pure.
   const { data: formsRaw, isLoading: formsLoading, refetch: refetchForms } = useCollection<FormDef>('forms', {
-    filter: { status: { _eq: 'open' } },
+    filter: {
+      _and: [
+        { status: { _eq: 'open' } },
+        { _or: [{ closes_at: { _null: true } }, { closes_at: { _gt: '$NOW' } }] },
+      ],
+    },
     fields: ['*', 'teams.teams_id.id'],
     sort: ['-date_created'],
     limit: 200,
