@@ -4063,7 +4063,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         SELECT mt.member, 'deadline_reminder',
                'deadline_training',
                json_build_object(
-                 'date', COALESCE(to_char(t.date, 'DD.MM.YY'), ''),
+                 'date', COALESCE(to_char(t.date, 'DD.MM.YYYY'), ''),
                  'hall', COALESCE(h.name, '')
                )::text,
                'training', t.id::text, t.team, false
@@ -4204,7 +4204,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
                json_build_object(
                  'home_team', COALESCE(g.home_team, ''),
                  'away_team', COALESCE(g.away_team, ''),
-                 'date', COALESCE(to_char(g.date, 'DD.MM.YY'), ''),
+                 'date', COALESCE(to_char(g.date, 'DD.MM.YYYY'), ''),
                  'time', COALESCE(to_char(g.time, 'HH24:MI'), ''),
                  'hall', COALESCE(h.name, '')
                )::text,
@@ -4222,7 +4222,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         SELECT mt.member, 'upcoming_activity',
                'upcoming_training',
                json_build_object(
-                 'date', COALESCE(to_char(t.date, 'DD.MM.YY'), ''),
+                 'date', COALESCE(to_char(t.date, 'DD.MM.YYYY'), ''),
                  'time', COALESCE(to_char(t.start_time, 'HH24:MI'), ''),
                  'hall', COALESCE(h.name, '')
                )::text,
@@ -4243,7 +4243,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
                'upcoming_event',
                json_build_object(
                  'title', COALESCE(e.title, 'Event'),
-                 'date', COALESCE(to_char(e.start_date AT TIME ZONE 'Europe/Zurich', 'DD.MM.YY'), ''),
+                 'date', COALESCE(to_char(e.start_date AT TIME ZONE 'Europe/Zurich', 'DD.MM.YYYY'), ''),
                  'time', COALESCE(to_char(e.start_date AT TIME ZONE 'Europe/Zurich', 'HH24:MI'), ''),
                  'location', COALESCE(NULLIF(h.name, ''), e.location, '')
                )::text,
