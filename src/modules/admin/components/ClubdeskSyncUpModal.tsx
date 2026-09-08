@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Loader2, ArrowUpFromLine, ArrowDownToLine, AlertTriangle, CheckCircle2, EyeOff, RefreshCw } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { kscwApi } from '../../../lib/api'
 import { MEMBER_FIELD_LABELS } from './memberFieldLabels'
+import ClubdeskStepDialog from './ClubdeskStepDialog'
 
 interface FieldChange { field: string; old_value?: string | null; new_value?: string | null }
 // stale = the linked ClubDesk contact no longer exists (deleted CD-side): /up's
@@ -22,7 +22,11 @@ interface UnlinkedMember { id: number; first_name: string; last_name: string; em
 // in the middle of replacing, and /up refuses the push anyway.
 interface Preview { changed: ChangedMember[]; unlinked: UnlinkedMember[]; blocked_by_down?: string }
 interface UpResult { total?: number | null; neu?: number | null; veraendert?: number | null; unveraendert?: number | null; committed?: boolean }
-interface UpStatus { state: 'idle' | 'queued' | 'running' | 'done' | 'failed'; message: string | null; result: UpResult | null }
+interface UpStatus {
+  state: 'idle' | 'queued' | 'running' | 'done' | 'failed'; message: string | null; result: UpResult | null
+  /** Live progress of the push itself (migration 355) — advisory, may be null. */
+  phase?: string | null; progress?: number | null; log?: string | null
+}
 
 type Phase = 'loading' | 'review' | 'pushing' | 'done' | 'error' | 'blocked'
 
@@ -49,10 +53,28 @@ function ChangeChip({ change }: { change: FieldChange }) {
   )
 }
 
-export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
+/**
+ * Step 3 of the sync path: review what would be pushed, then push it.
+ *
+ * ⚠ The chrome is ClubdeskStepDialog, not a Dialog of its own (08.09.2026). This
+ * used to be one of three different-looking answers to "what is happening right
+ * now" — and the only thing it could say during the push itself was a spinner and
+ * "this takes a few minutes". It now carries the same header, the same live bar and
+ * the same log tail as every other step, fed by the push's own dispatcher.
+ */
+export default function ClubdeskSyncUpModal({
+  open, onOpenChange, onDone, step, total, title, description, onNext,
+}: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onDone?: () => void | Promise<void>
+  /** Position in the sync path — the shell's eyebrow reads "Step 3 of 5". */
+  step: number
+  total: number
+  title: string
+  description?: string
+  /** Advance the path once the push has landed. */
+  onNext?: () => void
 }) {
   const { t } = useTranslation('admin')
   const [phase, setPhase] = useState<Phase>('loading')
@@ -67,9 +89,24 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
     ?? Math.max(0, (result?.total ?? 0) - (result?.neu ?? 0) - (result?.veraendert ?? 0))
   const [error, setError] = useState('')
   const openRef = useRef(false)
+  /** The dispatcher's own progress for this push — read off every status poll. */
+  const [job, setJob] = useState<{ progress: number | null; phase: string | null; log: string | null }>(
+    { progress: null, phase: null, log: null })
+  // Elapsed read-out while the push runs. ⚠ Derived from a ticking `now`, never
+  // written back from the effect — a setElapsed(0) in an effect body is the
+  // cascading-render write react-hooks/set-state-in-effect rejects.
+  const [pushStartedAt, setPushStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (pushStartedAt === null) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [pushStartedAt])
+  const elapsed = pushStartedAt === null ? 0 : Math.max(0, Math.round((now - pushStartedAt) / 1000))
 
   const resetState = useCallback(() => {
     setPhase('loading'); setPreview({ changed: [], unlinked: [] }); setSelected(new Set()); setResult(null); setError('')
+    setJob({ progress: null, phase: null, log: null }); setPushStartedAt(null)
   }, [])
 
   // Reset on close (an event handler, not an effect — avoids synchronous setState in
@@ -147,7 +184,7 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
   const push = useCallback(async () => {
     const ids = [...selected]
     if (!ids.length) return
-    setPhase('pushing'); setError('')
+    setPhase('pushing'); setError(''); setPushStartedAt(Date.now())
     try {
       // Surface server-side skips (stale link / blank risk): the push proceeds
       // for the rest, but the operator must know these members were NOT pushed
@@ -162,11 +199,14 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
       // false timeout while the push keeps running.
       const deadline = Date.now() + 240_000 + ids.length * 2_000
       for (;;) {
-        await new Promise((r) => setTimeout(r, 5_000))
+        // 3s: the dialog now shows the push's own phase and log, and a five-second
+        // gap between lines reads as a stall in a live log.
+        await new Promise((r) => setTimeout(r, 3_000))
         const s = await kscwApi<UpStatus>('/clubdesk-member-sync/up-status')
-        if (s.state === 'done') { setResult(s.result); setPhase('done'); break }
-        if (s.state === 'failed') throw new Error(s.message || t('clubdeskUpFailed'))
-        if (Date.now() > deadline) throw new Error(t('clubdeskUpTimeout'))
+        setJob({ progress: s.progress ?? null, phase: s.phase ?? null, log: s.log ?? null })
+        if (s.state === 'done') { setResult(s.result); setPhase('done'); setPushStartedAt(null); break }
+        if (s.state === 'failed') { setPushStartedAt(null); throw new Error(s.message || t('clubdeskUpFailed')) }
+        if (Date.now() > deadline) { setPushStartedAt(null); throw new Error(t('clubdeskUpTimeout')) }
       }
       toast.success(t('clubdeskUpDoneToast'))
       await onDone?.()
@@ -188,13 +228,30 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
   const nothing = preview.changed.length === 0 && preview.unlinked.length === 0
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ArrowUpFromLine className="h-5 w-5" />{t('clubdeskUpTitle')}
-          </DialogTitle>
-        </DialogHeader>
+    <ClubdeskStepDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      step={step}
+      total={total}
+      title={title}
+      description={description}
+      icon={ArrowUpFromLine}
+      // ⚠ Only while the push is actually in flight (or has just landed). A bar
+      // over the REVIEW would be a progress claim about a person reading a table.
+      job={phase === 'pushing' || phase === 'done'
+        ? {
+          running: phase === 'pushing',
+          done: phase === 'done',
+          progress: job.progress,
+          phase: job.phase,
+          log: job.log,
+          elapsed: phase === 'pushing' ? elapsed : undefined,
+        }
+        : undefined}
+      // Closing mid-push would suggest the push stops with it. It does not, but the
+      // review it would drop back to is stale the moment the CSVs are stashed.
+      dismissible={phase !== 'pushing'}
+    >
 
         {phase === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500 dark:text-gray-400">
@@ -363,12 +420,10 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
           </div>
         )}
 
+        {/* The bar above IS the push status now — this only adds the sentence the
+            bar cannot: closing the dialog does not stop it. */}
         {phase === 'pushing' && (
-          <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-600" />
-            <p className="text-sm font-medium">{t('clubdeskUpPushing')}</p>
-            <p className="max-w-sm text-xs text-gray-500 dark:text-gray-400">{t('clubdeskUpPushingNote')}</p>
-          </div>
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400">{t('clubdeskUpPushingNote')}</p>
         )}
 
         {phase === 'done' && (
@@ -387,7 +442,17 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
               </p>
             )}
             <p className="max-w-sm text-xs text-gray-500 dark:text-gray-400">{t('clubdeskUpReadback')}</p>
-            <Button variant="outline" onClick={() => handleOpenChange(false)}>{t('clubdeskUpClose')}</Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => handleOpenChange(false)}>{t('clubdeskUpClose')}</Button>
+              {/* ⚠ Step 4 is not optional after a push — a CREATE only closes its
+                  loop there (the new contact's [Id] is read back and linked). The
+                  path knows that; this is the button that hands control back to it. */}
+              {onNext && (
+                <Button onClick={() => { handleOpenChange(false); onNext() }} className="gap-1.5">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />{t('dhStepNext')}
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -398,7 +463,6 @@ export default function ClubdeskSyncUpModal({ open, onOpenChange, onDone }: {
             <Button variant="outline" onClick={() => handleOpenChange(false)}>{t('clubdeskUpClose')}</Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </ClubdeskStepDialog>
   )
 }

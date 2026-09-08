@@ -50,6 +50,20 @@ if (!USER || !PASS) {
 }
 
 const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a)
+/**
+ * A progress marker for the in-app bar.
+ *
+ * `@@STEP <pct> <sentence>` is read off this process's stdout by
+ * clubdesk-member-dispatch.sh (via clubdesk-progress.sh) and written to
+ * clubdesk_member_sync, so a superadmin watching the sync sees the scrape's own
+ * sub-steps instead of an indeterminate bar. The percentages are this scraper's
+ * slice of the whole sync-down (4→58); the transform and load own the rest.
+ *
+ * ⚠ Sentence case and no ClubDesk jargon: this string is USER-FACING, it is not a
+ * log line. ⚠ Never printed after the final OUT path — the last stdout line is the
+ * file path, for shell chaining.
+ */
+const step = (pct, msg) => { console.log(`@@STEP ${pct} ${msg}`); log(msg) }
 const fail = (msg) => { console.error('✗', msg); process.exitCode = 1 }
 
 /** Rect (viewport coords) of the first zero-child element whose trimmed text equals `text`. */
@@ -80,7 +94,7 @@ async function run() {
     page.setDefaultTimeout(45000)
 
     // ── 1. Login ──────────────────────────────────────────────────────
-    log('Opening ClubDesk login…')
+    step(6, 'Opening the ClubDesk login…')
     await page.goto(START, { waitUntil: 'networkidle' })
     await page.fill('#userId', USER)
     await page.fill('#password', PASS)
@@ -93,10 +107,10 @@ async function run() {
       throw new Error('Still on the login form after submit — wrong credentials, or login blocked (2FA/CAPTCHA?).')
     }
     const me = (await page.locator('body').innerText().catch(() => '')).match(/Benutzer:\s*([^\n]+)/)
-    log(`Logged in${me ? ` as ${me[1].trim()}` : ''}.`)
+    step(16, `Logged in${me ? ` as ${me[1].trim()}` : ''}.`)
 
     // ── 2. Open Kontakte (2nd toolbar button) ─────────────────────────
-    log('Opening Kontakte…')
+    step(24, 'Opening the contact list…')
     const navBtn = await page.evaluate(() => {
       const btns = [...document.querySelectorAll('div')]
         .map((e) => ({ e, r: e.getBoundingClientRect() }))
@@ -114,7 +128,7 @@ async function run() {
     await page.getByText(/\(\d+\s*Eintr/).first().waitFor({ timeout: 20000 })
     await page.waitForTimeout(1500)
     const count = (await page.locator('body').innerText()).match(/Mitglieder\s*\((\d+)\s*Eintr/)
-    log(`Kontakte open${count ? ` — ${count[1]} members in the default group` : ''}.`)
+    step(30, `Contact list open${count ? ` — ${count[1]} members in the default group` : ''}.`)
 
     // ── 2b. Switch to the "Alle Kontakte" group ───────────────────────
     // Kontakte opens on the "Mitglieder" group (active members only), which
@@ -123,7 +137,7 @@ async function run() {
     // can never be matched/linked, and wiedisync never learns they left. Select
     // "Alle Kontakte" (the full contact set) so the export carries everyone with
     // their membership status, enabling exit detection downstream.
-    log('Selecting the "Alle Kontakte" group…')
+    step(34, 'Switching to all contacts…')
     const alleKontakte = page.getByText('Alle Kontakte', { exact: true }).first()
     if (!(await alleKontakte.count())) throw new Error('"Alle Kontakte" sidebar entry not found.')
     await alleKontakte.click()
@@ -132,10 +146,10 @@ async function run() {
     // click missed, the header still says "Mitglieder (…)" and this throws).
     await page.getByText(/Alle Kontakte\s*\(\d+\s*Eintr/).first().waitFor({ timeout: 20000 })
     const allCount = (await page.locator('body').innerText()).match(/Alle Kontakte\s*\((\d+)\s*Eintr/)
-    log(`"Alle Kontakte" selected${allCount ? ` — ${allCount[1]} contacts` : ''}.`)
+    step(40, `All contacts selected${allCount ? ` — ${allCount[1]} contacts` : ''}.`)
 
     // ── 3. Export dialog ──────────────────────────────────────────────
-    log('Opening Export dialog…')
+    step(44, 'Opening the export dialog…')
     await page.getByText('Export', { exact: true }).first().click()
     await page.getByText('Tabelle exportieren', { exact: true }).waitFor({ timeout: 20000 })
     await page.waitForTimeout(800)
@@ -150,17 +164,18 @@ async function run() {
     if (!(await alle.count())) throw new Error('"Alle Spalten" option not found in the Spalten combo.')
     await alle.click()
     await page.waitForTimeout(500)
-    log('Columns set to "Alle Spalten" (Format stays "CSV (Excel)").')
+    step(48, 'All columns selected (CSV).')
 
     // ── 4. Trigger download (OK) ──────────────────────────────────────
     const ok = await leafRect(page, 'OK')
     if (!ok) throw new Error('OK button not found in export dialog.')
-    log('Exporting…')
+    step(52, 'Waiting for ClubDesk to build the export…')
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 60000 }),
       page.mouse.click(ok.x, ok.y),
     ])
     await download.saveAs(OUT)
+    step(56, 'Export downloaded.')
     log(`Downloaded via ${download.url()}`)
 
     // ── 5. Sanity-check the file ──────────────────────────────────────
@@ -175,6 +190,7 @@ async function run() {
       throw new Error(`Export looks wrong (${cols} cols; expected ≥50 incl. E-Mail and [Id]). ` +
         `Did "Alle Spalten" apply? Header: ${header.slice(0, 120)}…`)
     }
+    step(58, `Export checked — ${rawLines} contacts, ${cols} columns.`)
     log(`✓ Wrote ${OUT} — ~${rawLines} data lines, ${cols} columns (${buf.length} bytes).`)
     console.log(OUT) // last line = path, for shell chaining
   } finally {

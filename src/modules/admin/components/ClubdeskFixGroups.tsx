@@ -1,6 +1,7 @@
 // src/modules/admin/components/ClubdeskFixGroups.tsx
 //
-// "Fix groups" — the one button that WRITES ClubDesk group allocations from the app.
+// "Fix groups" — step 5 of the sync path, and the one job that WRITES ClubDesk
+// group allocations from the app.
 //
 // ClubDesk has no API and its CSV import treats `Gruppen` as a no-op, so the only
 // way to set an allocation is to drive the real UI. Two proven Playwright tools do
@@ -13,6 +14,13 @@
 // on-screen findings. A client-supplied worklist would turn this component into an
 // arbitrary write channel into the club's LEGAL member register.
 //
+// ⚠ NO TRIGGER OF ITS OWN (08.09.2026). It used to also sit as a button in a
+// "ClubDesk" actions bar above the path — a second door onto the same job, on a page
+// whose whole point is that the five steps happen in order. Fix groups is LAST for a
+// reason (the scraper finds a contact by the wiedisync UUID, which a freshly created
+// contact only carries after the push and the read-back), so a button offering it
+// out of order could only ever be a way to run it too early. The path opens it now.
+//
 // ⚠ TWO-STEP BY DESIGN. Preview drives every UI step and then cancels (no write);
 // only after a preview succeeds does the server accept a commit, and the operator
 // has to click again with the per-row outcome in front of them. The 2026-07-16
@@ -24,14 +32,12 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, Loader2, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { kscwApi } from '../../../lib/api'
 import { useConfirm } from '../../../components/ConfirmProvider'
 import { FIX_CLASSES, type FixClass } from '../utils/clubdeskFindings'
+import ClubdeskStepDialog from './ClubdeskStepDialog'
 
 type JobState = 'idle' | 'queued' | 'running' | 'done' | 'failed'
 const BUSY: JobState[] = ['queued', 'running']
@@ -60,6 +66,10 @@ interface FixStatus {
   result: { mode?: string; add: ScrapeSummary | null; remove: ScrapeSummary | null } | null
   down_state: JobState
   up_state: JobState
+  /** Live progress of the group fix itself (migration 355) — advisory, may be null. */
+  phase?: string | null
+  progress?: number | null
+  log?: string | null
 }
 
 /** Statuses the scrapers report for a row that did NOT do what was asked. */
@@ -70,26 +80,22 @@ interface Props {
   available: Record<FixClass, number>
   /** Re-run the page's checks once a commit settles. */
   onDone?: () => void | Promise<void>
-  /**
-   * Optional external open control, so the sync path can hand the user straight
-   * into this dialog at its last step. Uncontrolled (own button) when omitted —
-   * which is how it is still mounted in the ClubDesk actions bar.
-   */
-  open?: boolean
-  onOpenChange?: (v: boolean) => void
-  /** Hide the component's own trigger when something else opens it. */
-  hideTrigger?: boolean
+  /** Open state — owned by the sync path, which is the only thing that opens it. */
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  /** Position in the sync path — the shell's eyebrow reads "Step 5 of 5". */
+  step: number
+  total: number
+  title: string
+  description?: string
 }
 
-export default function ClubdeskFixGroups({ available, onDone, open: openProp, onOpenChange, hideTrigger }: Props) {
+export default function ClubdeskFixGroups({
+  available, onDone, open, onOpenChange, step, total, title, description,
+}: Props) {
   const { t } = useTranslation('admin')
   const confirm = useConfirm()
-  const [openSelf, setOpenSelf] = useState(false)
-  const open = openProp ?? openSelf
-  const setOpen = (v: boolean) => {
-    if (onOpenChange) onOpenChange(v)
-    else setOpenSelf(v)
-  }
+  const setOpen = onOpenChange
   const [status, setStatus] = useState<FixStatus | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [classes, setClasses] = useState<Set<FixClass>>(new Set(FIX_CLASSES))
@@ -122,9 +128,11 @@ export default function ClubdeskFixGroups({ available, onDone, open: openProp, o
       }
     }
     void tick()
-    const id = setInterval(() => { void tick() }, 10_000)
+    // 3s while the dialog is open — it is showing this job's own phase and log now,
+    // and a ten-second gap between lines reads as a stall in a live log.
+    const id = setInterval(() => { void tick() }, open ? 3_000 : 10_000)
     return () => { alive = false; clearInterval(id) }
-  }, [poll, onDone])
+  }, [poll, onDone, open])
 
   const busy = BUSY.includes(status?.state as JobState)
   const blockedBy = BUSY.includes(status?.down_state as JobState)
@@ -201,29 +209,28 @@ export default function ClubdeskFixGroups({ available, onDone, open: openProp, o
   }
 
   return (
-    <>
-      {!hideTrigger && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-          disabled={busy}
-          className="gap-1.5"
-        >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-          {busy ? t('cdFixRunning') : t('cdFixButton')}
-        </Button>
-      )}
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wrench className="h-4 w-4" />{t('cdFixTitle')}
-            </DialogTitle>
-            <DialogDescription>{t('cdFixDescription')}</DialogDescription>
-          </DialogHeader>
+    <ClubdeskStepDialog
+      open={open}
+      onOpenChange={setOpen}
+      step={step}
+      total={total}
+      title={title}
+      description={description || t('cdFixDescription')}
+      icon={Wrench}
+      // ⚠ Only while a run is in flight or has just finished. A bar over the class
+      // checkboxes would be a progress claim about a person choosing what to fix.
+      job={busy || status?.state === 'done' || status?.state === 'failed'
+        ? {
+          running: busy,
+          done: status?.state === 'done',
+          progress: status?.progress ?? null,
+          phase: status?.phase ?? null,
+          log: status?.log ?? null,
+          error: status?.state === 'failed' ? (status.message || t('cdFixFailed')) : null,
+        }
+        : undefined}
+      dismissible={!busy}
+    >
 
           {/* What to act on. Counts come from the findings already on screen; the
               server recomputes the actual rows, so these are an estimate, not the
@@ -260,16 +267,11 @@ export default function ClubdeskFixGroups({ available, onDone, open: openProp, o
             <p className="text-xs text-amber-700 dark:text-amber-300">{t('cdFixBlockedBySync')}</p>
           )}
 
+          {/* The bar above carries the phase and the log; this says which of the
+              two runs it is, which the phase alone does not make obvious. */}
           {busy && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <p className="text-xs text-muted-foreground">
               {status?.mode === 'commit' ? t('cdFixRunningCommit') : t('cdFixRunningPreview')}
-            </p>
-          )}
-
-          {status?.state === 'failed' && (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {status.message || t('cdFixFailed')}
             </p>
           )}
 
@@ -331,7 +333,7 @@ export default function ClubdeskFixGroups({ available, onDone, open: openProp, o
             </div>
           )}
 
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -357,9 +359,7 @@ export default function ClubdeskFixGroups({ available, onDone, open: openProp, o
                 {t('cdFixCommitButton')}
               </Button>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          </div>
+  </ClubdeskStepDialog>
   )
 }

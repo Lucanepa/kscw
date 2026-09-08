@@ -40,6 +40,17 @@ flock -n 9 || exit 0   # a previous dispatcher (same env) is still running
 
 psqlc() { docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -tAc "$1"; }
 
+# Live progress + log tail (migration 355). Best effort throughout: if the helper is
+# missing — an older /opt/clubdesk-sync that clubdesk:deploy has not reached yet —
+# the run must still work, so every call becomes a no-op rather than an error.
+CDP_JOB=down
+if [ -r "$DIR/clubdesk-progress.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$DIR/clubdesk-progress.sh"
+else
+  cdp() { :; }; cdp_reset() { :; }; cdp_fail() { :; }; cdp_stream() { cat; }; cdp_cleanup() { :; }
+fi
+
 # Recover a stuck 'running' (a dispatch that died mid-sync) so it can't block forever.
 # Set 'failed' but KEEP down_requested_at: a superadmin who queued a sync while the run
 # was stuck still has down_requested_at set, and the claim below requires it IS NOT NULL
@@ -53,6 +64,8 @@ claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET down_state='running' W
 [ "$claim" = "1" ] || exit 0
 
 echo "=== dispatch: member sync requested — running $(date -u +%FT%TZ) ==="
+cdp_reset
+cdp 2 "Waiting for the ClubDesk session lock…"
 # Serialise the ClubDesk login against the up/finance/weekly scrapes (one session
 # per account) — blocking, so a concurrent scrape makes us wait, not collide.
 # ⚠ The run output is TEE'd, not just streamed. Until 2026-08-25 a failure wrote
@@ -67,12 +80,18 @@ echo "=== dispatch: member sync requested — running $(date -u +%FT%TZ) ==="
 # ⚠ `set -uo pipefail` is set at the top, so `if … | tee` still tests the SYNC's
 # exit status and not tee's. Do not remove pipefail without revisiting this.
 RUNLOG="$(mktemp)"
-trap 'rm -f "$RUNLOG"' EXIT
-if flock "$DIR/.sync.lock" /opt/clubdesk-sync/clubdesk-sync.sh 2>&1 | tee "$RUNLOG"; then
+trap 'rm -f "$RUNLOG"; cdp_cleanup' EXIT
+# ⚠ cdp_stream sits BETWEEN the run and the tee, and passes every line through
+# untouched — the host log and the ✗ parsing below still see exactly what they saw
+# before. It only mirrors the lines into the DB and lifts the `@@STEP` markers the
+# sync script and the scraper emit, so the bar moves with the SCRAPE rather than
+# with the path step. Returns 0 always, so pipefail still reports the sync's status.
+if flock "$DIR/.sync.lock" /opt/clubdesk-sync/clubdesk-sync.sh 2>&1 | cdp_stream | tee "$RUNLOG"; then
   # ⚠ down_last_success_at (migration 336) is stamped HERE and only here.
   # down_finished_at is written by both branches, so it can never answer
   # "when did a sync last succeed" — reading it as such painted a fresh
   # timestamp under the button after a FAILED run.
+  cdp 100 "Synced from ClubDesk"
   psqlc "UPDATE clubdesk_member_sync SET down_state='done', down_requested_at=NULL, down_finished_at=now(), down_last_success_at=now(), down_message='Synced from ClubDesk' WHERE id=1"
   echo "=== dispatch: done ==="
 else
@@ -87,6 +106,10 @@ else
   # of every error the scraper has ever produced.
   ERR="$(printf '%s' "$ERR" | tr -d '\r' | cut -c1-300)"
   ERRQ="$(printf '%s' "$ERR" | sed "s/'/''/g")"
+  # ⚠ The bar is left where it stopped and the phase says what it was doing —
+  # "Failed: page.goto: net::ERR_TIMED_OUT" at 12% is a diagnosis, a bar reset to
+  # zero is the blank the log tail exists to replace.
+  cdp_fail "${ERR}"
   psqlc "UPDATE clubdesk_member_sync SET down_state='failed', down_requested_at=NULL, down_finished_at=now(), down_message='${ERRQ}' WHERE id=1"
   echo "=== dispatch: FAILED ==="
 fi

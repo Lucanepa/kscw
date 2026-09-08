@@ -38,15 +38,31 @@ trap cleanup EXIT
 
 echo "=== ClubDesk sync start $(date -u +%FT%TZ) (env=$ENVNAME db=$DB) ==="
 
+# `@@STEP <pct> <what it is doing>` lines are progress markers. clubdesk-member-
+# dispatch.sh reads them off this script's output (see clubdesk-progress.sh) and
+# writes them to clubdesk_member_sync, which is what the in-app bar and the live
+# log show. Anything else printed here is just log. They are plain stdout on
+# purpose: a run from a terminal shows them, and no caller parses this script's
+# output for anything else.
+#
+# The three phases are weighted by how long they actually take: the scrape is
+# minutes (and reports its own sub-steps from inside the container, 5→58), the
+# transform is seconds, the load is one psql script.
+step() { echo "@@STEP $1 $2"; }
+
 # 1. Scrape (headless chromium in container) -> CSV on the mounted host dir
+step 4 "Starting the ClubDesk scrape…"
 docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" "$IMG" \
   node /work/clubdesk-scrape-export.mjs /work/export.csv
 
 # 2. Transform CSV -> psql script (node, zero deps; no DB access from container)
+step 62 "Reading the export and building the import…"
 docker run --rm -w /work -v "$DIR":/work "$IMG" \
   node /work/import-clubdesk-csv.mjs "$ENVNAME" /work/export.csv --emit-sql > "$SQL"
 
 # 3. Load into Postgres from the host
+step 78 "Loading the register and staging proposals…"
 docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -v ON_ERROR_STOP=1 < "$SQL"
 
+step 96 "Finishing up…"
 echo "=== ClubDesk sync done $(date -u +%FT%TZ) ==="

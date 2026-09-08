@@ -85,8 +85,15 @@ function display(v: string | null, t: (k: string) => string): string {
   return ISO_DATE.test(s) ? formatDateZurich(s) : s
 }
 
-export default function ClubdeskProposals({ onDone, onCountChange, reloadKey = 0 }: {
+export default function ClubdeskProposals({ onDone, onCountChange, reloadKey = 0, embedded = false }: {
   onDone?: () => void | Promise<void>
+  /**
+   * Rendered inside the sync path's step 2 dialog, which already carries the
+   * step's own title and description — so the card border and the heading are
+   * dropped and the table alone is shown. It is the same component either way:
+   * a second "compact proposals" table is how two lists start disagreeing.
+   */
+  embedded?: boolean
   /** Reported upward so the sync path can gate its decision step on the count. */
   onCountChange?: (n: number) => void
   /**
@@ -243,16 +250,20 @@ export default function ClubdeskProposals({ onDone, onCountChange, reloadKey = 0
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
-        <div>
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            {t('dhProposalTitle', { count: rows.length })}
-          </h3>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-            {t('dhProposalHint')}
-          </p>
-        </div>
+    <div className={embedded ? '' : 'rounded-lg border border-gray-200 dark:border-gray-700'}>
+      <div className={`flex flex-wrap items-center justify-between gap-2 ${
+        embedded ? 'pb-2' : 'border-b border-gray-200 px-4 py-3 dark:border-gray-700'
+      }`}>
+        {embedded ? <span /> : (
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+              {t('dhProposalTitle', { count: rows.length })}
+            </h3>
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              {t('dhProposalHint')}
+            </p>
+          </div>
+        )}
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
             <Button

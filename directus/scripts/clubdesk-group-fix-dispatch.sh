@@ -58,6 +58,17 @@ flock -n 9 || exit 0
 
 psqlc() { docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -tAc "$1"; }
 
+# Live progress + log tail (migration 355). Best effort: an /opt/clubdesk-sync that
+# clubdesk:deploy has not reached yet has no helper, and a group fix must never fail
+# because it could not report on itself.
+CDP_JOB=grp
+if [ -r "$DIR/clubdesk-progress.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$DIR/clubdesk-progress.sh"
+else
+  cdp() { :; }; cdp_reset() { :; }; cdp_fail() { :; }; cdp_stream() { cat; }; cdp_cleanup() { :; }
+fi
+
 # Recover a stuck 'running' so it can't block the button forever. KEEP
 # grp_requested_at: the claim below requires it IS NOT NULL, so nulling it here
 # would silently drop a request that was queued while the run was wedged.
@@ -70,8 +81,11 @@ claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET grp_state='running' WH
 
 MODE=$(psqlc "SELECT COALESCE(grp_mode,'preview') FROM clubdesk_member_sync WHERE id=1")
 echo "=== group-fix: requested (mode=$MODE, db=$DB) $(date -u +%FT%TZ) ==="
+cdp_reset
+cdp 3 "Reading the worklist…"
 
 fail() {
+  cdp_fail "$1"
   psqlc "UPDATE clubdesk_member_sync SET grp_state='failed', grp_requested_at=NULL, grp_finished_at=now(), grp_message=\$m\$$1\$m\$ WHERE id=1"
   echo "=== group-fix: FAILED — $1 ==="
   exit 0
@@ -106,7 +120,7 @@ fi
 # column after the run so it never lingers on the singleton row.
 WL_ADD="$DIR/group-fix-add.json"
 WL_REM="$DIR/group-fix-remove.json"
-cleanup() { rm -f "$WL_ADD" "$WL_REM"; }
+cleanup() { rm -f "$WL_ADD" "$WL_REM"; cdp_cleanup; }
 trap cleanup EXIT
 
 psqlc "SELECT COALESCE(grp_worklist->>'add','[]') FROM clubdesk_member_sync WHERE id=1" > "$WL_ADD" || fail "could not read add worklist"
@@ -128,15 +142,22 @@ echo "Worklist: $N_ADD add, $N_REM remove (mode=$MODE)"
 # REMOVALS RUN FIRST: the stale-Funktion class is a swap (drop the wrong token, add
 # the right one), and doing it in this order never leaves a member holding two
 # contradictory allocations if the second half fails.
-run_tool() { # run_tool <script> <worklist-file> → JSON summary on stdout
-  flock "$DIR/.sync.lock" docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" "$PW_IMG" \
-    node "$1" "$(basename "$2")" "$MODE" | tail -1
+# ⚠ stdout stays the JSON summary alone (`tail -1` is the result). The tool's own
+# log — including its per-contact `@@STEP` markers — is on stderr, which is piped
+# through cdp_stream so the bar and the live log move with the CONTACTS rather than
+# with the two coarse remove/add phases. CDP_BASE/CDP_SPAN hand the tool its slice
+# of the run: removals run first and own 10-50%, additions 50-92%.
+run_tool() { # run_tool <script> <worklist-file> <base> <span> → JSON summary on stdout
+  flock "$DIR/.sync.lock" docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" \
+    -e "CDP_BASE=$3" -e "CDP_SPAN=$4" "$PW_IMG" \
+    node "$1" "$(basename "$2")" "$MODE" 2> >(cdp_stream >&2) | tail -1
 }
 
 RES_REM='null'
 if [ "$N_REM" -gt 0 ]; then
   echo "--- remove ($N_REM) ---"
-  RES_REM=$(run_tool clubdesk-remove-group.mjs "$WL_REM")
+  cdp 10 "Removing $N_REM group allocation(s)…"
+  RES_REM=$(run_tool clubdesk-remove-group.mjs "$WL_REM" 10 40)
   [ -z "$RES_REM" ] && RES_REM='null'
   echo "remove result: $RES_REM"
 fi
@@ -144,7 +165,8 @@ fi
 RES_ADD='null'
 if [ "$N_ADD" -gt 0 ]; then
   echo "--- add ($N_ADD) ---"
-  RES_ADD=$(run_tool clubdesk-scrape-groups.mjs "$WL_ADD")
+  cdp 50 "Adding $N_ADD group allocation(s)…"
+  RES_ADD=$(run_tool clubdesk-scrape-groups.mjs "$WL_ADD" 50 42)
   [ -z "$RES_ADD" ] && RES_ADD='null'
   echo "add result: $RES_ADD"
 fi
@@ -153,6 +175,7 @@ fi
 # A tool that produced no parseable summary is a FAILURE, not an empty success: the
 # button would otherwise report "done · 0 changes" for a run that crashed on login.
 if [ "$RES_ADD" = "null" ] && [ "$RES_REM" = "null" ]; then
+  cdp_fail "Scraper produced no result — see group-fix.log"
   psqlc "UPDATE clubdesk_member_sync SET grp_state='failed', grp_requested_at=NULL, grp_finished_at=now(), grp_message='Scraper produced no result — see group-fix.log', grp_worklist=NULL WHERE id=1"
   echo "=== group-fix: FAILED (no scraper output) ==="
   exit 0
@@ -162,6 +185,7 @@ RESULT=$(printf '{"mode":"%s","add":%s,"remove":%s}' "$MODE" "$RES_ADD" "$RES_RE
 MSG="$MODE: $N_ADD add, $N_REM remove"
 # Say so on the row the operator reads, not only in a log nobody opens.
 [ -n "$DOWNGRADED" ] && MSG="$MSG — $DOWNGRADED"
+cdp 100 "$MSG"
 psqlc "UPDATE clubdesk_member_sync SET grp_state='done', grp_requested_at=NULL, grp_finished_at=now(), grp_message=\$m\$$MSG\$m\$, grp_result=\$r\$$RESULT\$r\$, grp_worklist=NULL WHERE id=1" \
   || fail "write-back failed"
 echo "=== group-fix: done ($MSG) $(date -u +%FT%TZ) ==="
