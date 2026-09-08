@@ -63,7 +63,7 @@ psqlc "UPDATE clubdesk_member_sync SET down_state='failed', down_message='Reset 
 claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET down_state='running' WHERE id=1 AND down_requested_at IS NOT NULL AND down_state <> 'running' RETURNING 1) SELECT count(*) FROM u" 2>/dev/null || echo 0)
 [ "$claim" = "1" ] || exit 0
 
-echo "=== dispatch: member sync requested — running $(date -u +%FT%TZ) ==="
+echo "=== dispatch: member sync requested — running $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="
 cdp_reset
 cdp 2 "Waiting for the ClubDesk session lock…"
 # Serialise the ClubDesk login against the up/finance/weekly scrapes (one session

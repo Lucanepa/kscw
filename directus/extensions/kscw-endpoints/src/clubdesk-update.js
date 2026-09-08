@@ -1670,6 +1670,14 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       }
       await database('clubdesk_member_sync').where('id', 1).update({
         down_requested_at: new Date(), down_state: 'queued', down_message: null, down_finished_at: null,
+        // ⚠ The progress trio is cleared HERE, not only by the dispatcher's
+        // cdp_reset. The dispatchers run on a one-minute cron, so between the
+        // click and the claim a queued job rendered the PREVIOUS run's phase, its
+        // 100% bar and its whole log — a dialog that opens on "Synced from
+        // ClubDesk · 100%" two seconds after you asked for a fresh sync
+        // (08.09.2026). cdp_reset stays as the belt-and-braces for a run the
+        // dispatcher picks up some other way.
+        down_phase: null, down_progress: 0, down_log: null,
       })
       await writeUserLog(database, log, {
         accountability: req.accountability, action: 'update',
@@ -2101,6 +2109,14 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       const countryNames = await loadCountryPushNames(database)
       await database('clubdesk_member_sync').where('id', 1).update({
         up_requested_at: new Date(), up_state: 'queued', up_message: null, up_finished_at: null,
+        // ⚠ The progress trio is cleared HERE, not only by the dispatcher's
+        // cdp_reset. The dispatchers run on a one-minute cron, so between the
+        // click and the claim a queued job rendered the PREVIOUS run's phase, its
+        // 100% bar and its whole log — a dialog that opens on "Synced from
+        // ClubDesk · 100%" two seconds after you asked for a fresh sync
+        // (08.09.2026). cdp_reset stays as the belt-and-braces for a run the
+        // dispatcher picks up some other way.
+        up_phase: null, up_progress: 0, up_log: null,
         up_csv: updates.length ? buildPushCsv(updates, { countryNames }) : null,
         up_csv_create: creates.length ? buildPushCsv(creates, { create: true, countryNames }) : null,
         up_member_ids: JSON.stringify(pushMembers.map((m) => m.id)),
@@ -4598,6 +4614,14 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
         // to a new run's state — and so the commit gate above cannot be satisfied
         // twice by one preview.
         grp_result: null,
+        // ⚠ The progress trio is cleared HERE, not only by the dispatcher's
+        // cdp_reset. The dispatchers run on a one-minute cron, so between the
+        // click and the claim a queued job rendered the PREVIOUS run's phase, its
+        // 100% bar and its whole log — a dialog that opens on "Synced from
+        // ClubDesk · 100%" two seconds after you asked for a fresh sync
+        // (08.09.2026). cdp_reset stays as the belt-and-braces for a run the
+        // dispatcher picks up some other way.
+        grp_phase: null, grp_progress: 0, grp_log: null,
         grp_requested_by_name: actor.name,
         grp_requested_by_email: actor.email,
       })

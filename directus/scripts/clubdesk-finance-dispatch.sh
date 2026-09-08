@@ -20,7 +20,7 @@ psqlc "UPDATE finance_ledger_settings SET sync_state='idle', sync_requested_at=N
 claim=$(psqlc "WITH u AS (UPDATE finance_ledger_settings SET sync_state='running' WHERE id=1 AND sync_requested_at IS NOT NULL AND sync_state <> 'running' RETURNING 1) SELECT count(*) FROM u" 2>/dev/null || echo 0)
 [ "$claim" = "1" ] || exit 0
 
-echo "=== dispatch: finance sync requested — running $(date -u +%FT%TZ) ==="
+echo "=== dispatch: finance sync requested — running $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="
 if /opt/clubdesk-sync/clubdesk-finance-sync.sh; then
   psqlc "UPDATE finance_ledger_settings SET sync_state='done', sync_requested_at=NULL, sync_finished_at=now(), sync_message='Synced from ClubDesk' WHERE id=1"
   echo "=== dispatch: done ==="

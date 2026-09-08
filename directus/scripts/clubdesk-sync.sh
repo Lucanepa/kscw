@@ -36,7 +36,7 @@ SQL="$DIR/import.sql"
 cleanup() { rm -f "$CSV" "$SQL"; }   # export holds member PII (IBAN/AHV) — never linger
 trap cleanup EXIT
 
-echo "=== ClubDesk sync start $(date -u +%FT%TZ) (env=$ENVNAME db=$DB) ==="
+echo "=== ClubDesk sync start $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') (env=$ENVNAME db=$DB) ==="
 
 # `@@STEP <pct> <what it is doing>` lines are progress markers. clubdesk-member-
 # dispatch.sh reads them off this script's output (see clubdesk-progress.sh) and
@@ -65,4 +65,4 @@ step 78 "Loading the register and staging proposals…"
 docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -v ON_ERROR_STOP=1 < "$SQL"
 
 step 96 "Finishing up…"
-echo "=== ClubDesk sync done $(date -u +%FT%TZ) ==="
+echo "=== ClubDesk sync done $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="

@@ -29,10 +29,10 @@ SQL="$DIR/finance-import.sql"
 cleanup() { rm -f "$INV" "$BOOK" "$SQL"; }
 trap cleanup EXIT
 
-echo "=== ClubDesk finance sync start $(date -u +%FT%TZ) (env=$ENVNAME db=$DB) ==="
+echo "=== ClubDesk finance sync start $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') (env=$ENVNAME db=$DB) ==="
 docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" "$PW_IMG" \
   node /work/clubdesk-scrape-finance.mjs /work/clubdesk-rechnungen.csv /work/clubdesk-buchhaltung.csv
 docker run --rm -w /work -v "$DIR":/work "$NODE_IMG" \
   node /work/import-clubdesk-finance.mjs "$ENVNAME" /work/clubdesk-rechnungen.csv /work/clubdesk-buchhaltung.csv --emit-sql > "$SQL"
 docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -v ON_ERROR_STOP=1 < "$SQL"
-echo "=== ClubDesk finance sync done $(date -u +%FT%TZ) ==="
+echo "=== ClubDesk finance sync done $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="

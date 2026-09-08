@@ -87,7 +87,7 @@ psqlc "UPDATE clubdesk_member_sync SET up_state='idle', up_requested_at=NULL, up
 claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET up_state='running' WHERE id=1 AND up_requested_at IS NOT NULL AND up_state <> 'running' RETURNING 1) SELECT count(*) FROM u" 2>/dev/null || echo 0)
 [ "$claim" = "1" ] || exit 0
 
-echo "=== up-dispatch: sync-up requested — running $(date -u +%FT%TZ) (db=$DB) ==="
+echo "=== up-dispatch: sync-up requested — running $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') (db=$DB) ==="
 cdp_reset
 cdp 4 "Reading the push payload…"
 CSVUTF_U="$DIR/up-import-update.utf8.csv"; CSV_U="$DIR/up-import-update.csv"

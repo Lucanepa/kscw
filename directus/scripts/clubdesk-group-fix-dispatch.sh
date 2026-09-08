@@ -90,7 +90,7 @@ claim=$(psqlc "WITH u AS (UPDATE clubdesk_member_sync SET grp_state='running' WH
 [ "$claim" = "1" ] || exit 0
 
 MODE=$(psqlc "SELECT COALESCE(grp_mode,'preview') FROM clubdesk_member_sync WHERE id=1")
-echo "=== group-fix: requested (mode=$MODE, db=$DB) $(date -u +%FT%TZ) ==="
+echo "=== group-fix: requested (mode=$MODE, db=$DB) $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="
 cdp_reset
 cdp 3 "Reading the worklist…"
 
@@ -207,4 +207,4 @@ psqlc "UPDATE clubdesk_member_sync SET grp_state='done', grp_requested_at=NULL, 
 if [ "$MODE" = "commit" ]; then
   cd_mirror_patch "$RESULT" | sed 's/^/  /'
 fi
-echo "=== group-fix: done ($MSG) $(date -u +%FT%TZ) ==="
+echo "=== group-fix: done ($MSG) $(TZ=Europe/Zurich date +'%d.%m.%Y %H:%M:%S') ==="
