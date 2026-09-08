@@ -2,7 +2,7 @@
 -- KSCW SCHEMA baseline — GENERATED, DO NOT EDIT BY HAND
 -- ============================================================================
 --
--- Generated:   2026-08-27T13:31:34.199Z
+-- Generated:   2026-09-08T07:46:51.068Z
 -- Source:      prod (db=postgres)
 -- Generator:   directus/scripts/regenerate-baseline.mjs
 --
@@ -29,7 +29,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict qnfoFbQtrGgyFrMmm1UZoVpwrRxIJLTaohsqfIhd3xYp4hN6GiYGAcobJVPBioo
+\restrict Edf78WCThBko4yHiY6V5e4WkmksepwdOqhW24uxz6ru15xjqmEVlG8iPH8ND7W7
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
@@ -82,6 +82,35 @@ CREATE TYPE public.svrz_push_status_enum AS ENUM (
     'pushed',
     'failed'
 );
+
+
+--
+-- Name: bb_game_floor_claims(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.bb_game_floor_claims() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  floors text[];
+  is_bb  boolean;
+BEGIN
+  DELETE FROM basketball_game_floor_claims WHERE game = NEW.id;
+
+  IF NEW.type IS DISTINCT FROM 'home' OR NEW.date IS NULL OR NEW.kscw_team IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT (t.sport = 'basketball') INTO is_bb FROM teams t WHERE t.id = NEW.kscw_team;
+  IF NOT COALESCE(is_bb, false) THEN RETURN NULL; END IF;
+
+  floors := vb_slot_floors(NEW.hall, NEW.additional_halls::jsonb);
+  IF array_length(floors, 1) IS NULL THEN RETURN NULL; END IF;  -- not a KWI floor
+
+  INSERT INTO basketball_game_floor_claims (game, date, "time", floor)
+  SELECT NEW.id, NEW.date, COALESCE(to_char(NEW."time", 'HH24:MI'), ''), unnest(floors);
+  RETURN NULL;
+END $$;
 
 
 --
@@ -1147,6 +1176,41 @@ $$;
 
 
 --
+-- Name: rebuild_member_guardians(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rebuild_member_guardians(p_household integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF p_household IS NULL THEN RETURN; END IF;
+
+  DELETE FROM member_guardians WHERE household = p_household;
+
+  INSERT INTO member_guardians (member, guardian_user, household)
+  SELECT DISTINCT c.member, g_m."user", p_household
+    FROM household_members c
+    JOIN household_members g   ON g.household = c.household
+                              AND g.role = 'guardian'
+                              AND g.revoked_at IS NULL
+    JOIN members            g_m ON g_m.id = g.member
+                              AND g_m."user" IS NOT NULL
+   WHERE c.household = p_household
+     AND c.role = 'managed'
+     AND c.revoked_at IS NULL
+     AND c.member <> g.member
+  ON CONFLICT (member, guardian_user, household) DO NOTHING;
+END $$;
+
+
+--
+-- Name: FUNCTION rebuild_member_guardians(p_household integer); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.rebuild_member_guardians(p_household integer) IS 'Recomputes every acting-grant conferred by one household. Called by trigger on household_members and on members."user" changes. Deletes then re-inserts, scoped to the single household — which is why `household` is part of member_guardians'' unique key.';
+
+
+--
 -- Name: refresh_participation_visibility(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1528,6 +1592,28 @@ $$;
 
 
 --
+-- Name: trg_household_members_rebuild(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trg_household_members_rebuild() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- Rebuild BOTH sides on a move: a row whose household changed removes a grant
+  -- from the old household and adds one to the new.
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    PERFORM rebuild_member_guardians(OLD.household);
+  END IF;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    IF TG_OP = 'INSERT' OR NEW.household IS DISTINCT FROM OLD.household THEN
+      PERFORM rebuild_member_guardians(NEW.household);
+    END IF;
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: trg_members_coach_approval_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1565,6 +1651,25 @@ $$;
 
 
 --
+-- Name: trg_members_user_rebuild_guardians(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trg_members_user_rebuild_guardians() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE h integer;
+BEGIN
+  FOR h IN
+    SELECT DISTINCT household FROM household_members
+     WHERE member = NEW.id AND role = 'guardian' AND revoked_at IS NULL
+  LOOP
+    PERFORM rebuild_member_guardians(h);
+  END LOOP;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: trg_participations_clear_auto_marker(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1580,6 +1685,10 @@ BEGIN
   IF NEW.status IS DISTINCT FROM OLD.status
      AND NEW.auto_declined_by_game IS NOT DISTINCT FROM OLD.auto_declined_by_game THEN
     NEW.auto_declined_by_game := NULL;
+  END IF;
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND NEW.auto_declined_deadline IS NOT DISTINCT FROM OLD.auto_declined_deadline THEN
+    NEW.auto_declined_deadline := false;
   END IF;
   RETURN NEW;
 END;
@@ -1659,13 +1768,21 @@ CREATE FUNCTION public.trg_protect_hall_delete() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM hall_slots hs
-    JOIN hall_slots_teams hst ON hst.hall_slots_id = hs.id
-    WHERE hs.hall = OLD.id
-  ) THEN
-    RAISE EXCEPTION 'Cannot delete hall with existing hall_slots. Remove slots first.';
-  END IF;
+  -- Order matters: slot_claims reference hall_slots by id but carry no FK, so
+  -- they have to go before the slots they point at, or they are orphaned by
+  -- the very statement meant to clean them up.
+  DELETE FROM slot_claims
+   WHERE hall = OLD.id
+      OR hall_slot IN (SELECT id FROM hall_slots WHERE hall = OLD.id);
+
+  DELETE FROM game_scheduling_slots WHERE hall = OLD.id;
+  DELETE FROM hall_closures         WHERE hall = OLD.id;
+  DELETE FROM hall_slots            WHERE hall = OLD.id;
+
+  -- No FK on this one (unlike trainings.hall / games.hall, which the FK sets
+  -- to NULL for us), so without this the column keeps a dead hall id.
+  UPDATE events SET hall = NULL WHERE hall = OLD.id;
+
   RETURN OLD;
 END;
 $$;
@@ -2404,6 +2521,26 @@ COMMENT ON TABLE public.basketball_floor_claims IS 'One row per (placement, phys
 
 
 --
+-- Name: basketball_game_floor_claims; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.basketball_game_floor_claims (
+    game integer NOT NULL,
+    date date NOT NULL,
+    "time" character varying NOT NULL,
+    floor character(1) NOT NULL,
+    CONSTRAINT basketball_game_floor_claims_floor_check CHECK ((floor = ANY (ARRAY['A'::bpchar, 'B'::bpchar, 'C'::bpchar])))
+);
+
+
+--
+-- Name: TABLE basketball_game_floor_claims; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.basketball_game_floor_claims IS 'One row per (basketball home game in `games`, physical KWI floor it occupies). Machinery, not data: maintained solely by trg_games_0_bb_floor_claims. Deliberately NOT unique on (date,time,floor) — a placement and the Basketplan row for the SAME game legitimately claim one floor twice; see migration 351. Read through the bb_floor_claims_all view.';
+
+
+--
 -- Name: basketball_group_teams; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2573,6 +2710,9 @@ CREATE TABLE public.basketball_slot_plan (
     responded_by_email text,
     opponent_note text,
     counter_proposals jsonb,
+    agreed_offline boolean DEFAULT false NOT NULL,
+    agreed_offline_by_name character varying(255),
+    CONSTRAINT basketball_slot_plan_agreed_offline_check CHECK (((agreed_offline = false) OR ((proposal_status)::text = 'accepted'::text))),
     CONSTRAINT basketball_slot_plan_offer_needs_club_check CHECK ((((proposal_status)::text = 'draft'::text) OR (opponent_club IS NOT NULL))),
     CONSTRAINT basketball_slot_plan_proposal_status_check CHECK (((proposal_status)::text = ANY (ARRAY['draft'::text, 'offered'::text, 'club_proposed'::text, 'accepted'::text, 'declined'::text, 'countered'::text])))
 );
@@ -2611,6 +2751,20 @@ COMMENT ON COLUMN public.basketball_slot_plan.responded_by_email IS 'Who at the 
 --
 
 COMMENT ON COLUMN public.basketball_slot_plan.counter_proposals IS 'jsonb array of {date, time} alternatives the opponent suggested when declining. NEVER auto-applied — a KSCW planner re-places the game in the prep grid.';
+
+
+--
+-- Name: COLUMN basketball_slot_plan.agreed_offline; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.basketball_slot_plan.agreed_offline IS 'TRUE when a KSCW planner recorded this agreement outside the opponent portal (phone/email). Distinguishes it from an answer the club gave through its own link, which leaves this false. Written only by POST /kscw/admin/terminplanung/bb/mark-agreed.';
+
+
+--
+-- Name: COLUMN basketball_slot_plan.agreed_offline_by_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.basketball_slot_plan.agreed_offline_by_name IS 'The KSCW planner who recorded an offline agreement. NOT the opponent — that is responded_by_name, which mark-agreed also requires.';
 
 
 --
@@ -3021,6 +3175,313 @@ COMMENT ON TABLE public.basketplan_people IS 'Staging for the authenticated Bask
 --
 
 COMMENT ON COLUMN public.basketplan_people.licence_category IS 'Licence category from the club licence list (Senior / U 6..U 20 / Offizielle/r). Harvested from showPrintLicences.do — the person page does not carry it. Applied to members.licence_category fill-or-BB-refresh only; Volleymanager codes (RLL/JLL/…) are never overwritten.';
+
+
+--
+-- Name: games; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.games (
+    id integer NOT NULL,
+    game_id character varying(255) DEFAULT NULL::character varying,
+    home_team character varying(255) DEFAULT NULL::character varying,
+    away_team character varying(255) DEFAULT NULL::character varying,
+    away_hall_json json,
+    date date,
+    "time" time without time zone,
+    league character varying(255) DEFAULT NULL::character varying,
+    round character varying(255) DEFAULT NULL::character varying,
+    season character varying(255) DEFAULT NULL::character varying,
+    type character varying(255) DEFAULT NULL::character varying,
+    status character varying(255) DEFAULT NULL::character varying,
+    home_score integer DEFAULT 0,
+    away_score integer DEFAULT 0,
+    sets_json json,
+    duty_confirmed boolean DEFAULT false NOT NULL,
+    referees_json json,
+    source character varying(255) DEFAULT NULL::character varying,
+    respond_by timestamp with time zone,
+    min_participants integer,
+    kscw_team integer,
+    hall integer,
+    scorer_member integer,
+    scoreboard_member integer,
+    scorer_scoreboard_member integer,
+    scorer_duty_team integer,
+    scoreboard_duty_team integer,
+    scorer_scoreboard_duty_team integer,
+    bb_scorer_member integer,
+    bb_timekeeper_member integer,
+    bb_24s_official integer,
+    bb_duty_team integer,
+    bb_scorer_duty_team integer,
+    bb_timekeeper_duty_team integer,
+    bb_24s_duty_team integer,
+    date_created timestamp with time zone,
+    date_updated timestamp with time zone,
+    send_email_invite boolean DEFAULT false,
+    svrz_push_status public.svrz_push_status_enum,
+    additional_halls json,
+    auto_confirm_rsvp boolean,
+    scorer_confirmed_by_name character varying(255),
+    scorer_confirmed_at timestamp with time zone,
+    scoreboard_confirmed_by_name character varying(255),
+    scoreboard_confirmed_at timestamp with time zone,
+    scorer_scoreboard_confirmed_by_name character varying(255),
+    scorer_scoreboard_confirmed_at timestamp with time zone,
+    bb_scorer_confirmed_by_name character varying(255),
+    bb_scorer_confirmed_at timestamp with time zone,
+    bb_timekeeper_confirmed_by_name character varying(255),
+    bb_timekeeper_confirmed_at timestamp with time zone,
+    bb_24s_confirmed_by_name character varying(255),
+    bb_24s_confirmed_at timestamp with time zone,
+    referee_duty_team integer,
+    referee_member integer,
+    referee_confirmed_by_name character varying(255),
+    referee_confirmed_at timestamp with time zone,
+    duty_late_json jsonb,
+    duty_leader_alert_json jsonb,
+    auto_nomination_list boolean,
+    vm_nomination_status character varying(16),
+    vm_nomination_list_id character varying(64),
+    vm_nomination_count integer,
+    vm_nomination_pushed_at timestamp with time zone,
+    vm_nomination_error text,
+    meeting_offset_minutes integer DEFAULT 60,
+    vm_nomination_claimed_at timestamp with time zone,
+    CONSTRAINT games_meeting_offset_range CHECK (((meeting_offset_minutes IS NULL) OR ((meeting_offset_minutes >= 0) AND (meeting_offset_minutes <= 1440)))),
+    CONSTRAINT games_status_chk CHECK (((status IS NULL) OR ((status)::text = ANY ((ARRAY['scheduled'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'postponed'::character varying])::text[]))))
+);
+
+
+--
+-- Name: COLUMN games.auto_confirm_rsvp; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.auto_confirm_rsvp IS 'NULL = inherit teams.features_enabled.game_auto_confirm. true/false = per-activity override.';
+
+
+--
+-- Name: COLUMN games.duty_late_json; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.duty_late_json IS 'Per-role late-arrival reports { role: { at, by_name } } (migration 202). Written by the duty-late endpoint; no contact info stored.';
+
+
+--
+-- Name: COLUMN games.duty_leader_alert_json; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.duty_leader_alert_json IS 'Emergency "contact team leaders" reports { memberId: { at, by_name } } (migration 203). Written by the duty-leader-contact endpoint; no contact info stored.';
+
+
+--
+-- Name: COLUMN games.auto_nomination_list; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.auto_nomination_list IS 'Auto-file the Volleymanager Einsatzliste from confirmed RSVPs ~60 min before kickoff. NULL = inherit teams.features_enabled.auto_nomination_list; true/false = per-game override.';
+
+
+--
+-- Name: COLUMN games.vm_nomination_status; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.vm_nomination_status IS 'filled = players written, list left OPEN (a fineable validation issue blocked the close, or the team asked us not to close). closed = filed AND closed, nothing left to do. skipped = nothing to file (no licensed confirmed players). failed = see vm_nomination_error. NULL = never attempted. The cron re-attempts anything not in (closed, skipped).';
+
+
+--
+-- Name: COLUMN games.vm_nomination_list_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.vm_nomination_list_id IS 'Volleymanager nominationList __identity (uuid). Set once created; lets a retry update the existing list instead of creating a second one.';
+
+
+--
+-- Name: COLUMN games.vm_nomination_count; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.vm_nomination_count IS 'Players actually filed on the last successful push.';
+
+
+--
+-- Name: COLUMN games.vm_nomination_error; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.vm_nomination_error IS 'Last push failure, surfaced to the coach in the game detail modal.';
+
+
+--
+-- Name: COLUMN games.meeting_offset_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.meeting_offset_minutes IS 'Besammlung: minutes BEFORE `time` that the team meets. NULL = no meeting time shown. Stored as an offset, not a clock, so it follows a Swiss Volley reschedule (sv-sync rewrites `time`) without going stale. DEFAULT 60 is what gives sync-created fixtures a meeting time with no code in sv-sync.';
+
+
+--
+-- Name: COLUMN games.vm_nomination_claimed_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.games.vm_nomination_claimed_at IS 'When the current nomination-push worker claimed this game. Lets a stale claim be reclaimed after a container restart or a lost worker; NULL when unclaimed.';
+
+
+--
+-- Name: halls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.halls (
+    id integer NOT NULL,
+    name character varying(255) DEFAULT NULL::character varying NOT NULL,
+    address character varying(255) DEFAULT NULL::character varying,
+    city character varying(255) DEFAULT NULL::character varying,
+    courts integer,
+    notes text,
+    maps_url character varying(255) DEFAULT NULL::character varying,
+    homologation boolean DEFAULT false NOT NULL,
+    sv_hall_id character varying(255) DEFAULT NULL::character varying,
+    date_created timestamp with time zone,
+    date_updated timestamp with time zone,
+    vm_hall_id character varying(64)
+);
+
+
+--
+-- Name: teams; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.teams (
+    id integer NOT NULL,
+    name character varying(255) DEFAULT NULL::character varying NOT NULL,
+    full_name character varying(255) DEFAULT NULL::character varying,
+    team_id character varying(255) DEFAULT NULL::character varying,
+    sport character varying(255) DEFAULT NULL::character varying,
+    league character varying(255) DEFAULT NULL::character varying,
+    season character varying(255) DEFAULT NULL::character varying,
+    color character varying(255) DEFAULT NULL::character varying,
+    active boolean DEFAULT true NOT NULL,
+    team_picture uuid,
+    team_picture_pos character varying(255) DEFAULT NULL::character varying,
+    social_url character varying(255) DEFAULT NULL::character varying,
+    bb_source_id character varying(255) DEFAULT NULL::character varying,
+    features_enabled json,
+    date_created timestamp with time zone,
+    date_updated timestamp with time zone,
+    captain integer,
+    open_for_players boolean DEFAULT false,
+    facebook_url character varying(255) DEFAULT NULL::character varying,
+    tiktok_url character varying(255) DEFAULT NULL::character varying,
+    show_guests_on_website boolean DEFAULT true NOT NULL,
+    dashboard_range_from date,
+    dashboard_range_to date,
+    dashboard_league_only boolean DEFAULT false NOT NULL,
+    recruiting_positions jsonb,
+    waitlist_url character varying(500),
+    waitlist_label character varying(100),
+    gender character varying(8),
+    duty_credit integer DEFAULT 0 NOT NULL,
+    clubdesk_group text,
+    open_for_girls boolean DEFAULT false,
+    open_for_boys boolean DEFAULT false,
+    CONSTRAINT teams_gender_check CHECK (((gender IS NULL) OR ((gender)::text = ANY (ARRAY[('m'::character varying)::text, ('f'::character varying)::text, ('mixed'::character varying)::text])))),
+    CONSTRAINT teams_season_format_check CHECK (((season IS NULL) OR ((season)::text ~ '^[0-9]{4}/[0-9]{2}$'::text)))
+);
+
+
+--
+-- Name: COLUMN teams.dashboard_range_from; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.dashboard_range_from IS 'Coach Dashboard "From" date (NULL = use rolling default of most recent 01-06 ≤ today)';
+
+
+--
+-- Name: COLUMN teams.dashboard_range_to; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.dashboard_range_to IS 'Coach Dashboard "To" date (NULL = use today)';
+
+
+--
+-- Name: COLUMN teams.dashboard_league_only; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.dashboard_league_only IS 'Coach Dashboard: exclude cup/tournament games from the games attendance count';
+
+
+--
+-- Name: COLUMN teams.recruiting_positions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.recruiting_positions IS 'Positions the team is recruiting for (e.g. ["setter","middle"]). NULL/[] = open to all positions. Surfaced on the public team page when open_for_players=true.';
+
+
+--
+-- Name: COLUMN teams.duty_credit; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.duty_credit IS 'Scorer-duty manual credit: duties this team is excused from (higher = fewer scorer/scoreboard assignments). Stacks on top of the automatic referee credit. Edited on the scorer-assignment page.';
+
+
+--
+-- Name: COLUMN teams.clubdesk_group; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.clubdesk_group IS 'ClubDesk group token for this team (e.g. ''VB D1''). NULL = not configured yet (flagged by the ClubDesk group check); '''' = intentionally no ClubDesk group (league umbrella).';
+
+
+--
+-- Name: COLUMN teams.open_for_girls; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.open_for_girls IS 'Mixed (MU) teams only: recruiting girls. Sub-toggle of open_for_players — ignored while that is false. Both this and open_for_boys false/true = the team recruits without a gender split.';
+
+
+--
+-- Name: COLUMN teams.open_for_boys; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.teams.open_for_boys IS 'Mixed (MU) teams only: recruiting boys. Sub-toggle of open_for_players — see open_for_girls.';
+
+
+--
+-- Name: bb_floor_claims_all; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.bb_floor_claims_all AS
+ SELECT 'plan'::text AS source,
+    p.id AS ref_id,
+    fc.date,
+    fc."time",
+    fc.floor,
+    p.hall AS bb_hall,
+    COALESCE(t.name, (p.kscw_team_label)::character varying) AS bb_team,
+    p.opponent AS bb_opponent
+   FROM ((public.basketball_floor_claims fc
+     JOIN public.basketball_slot_plan p ON ((p.id = fc.plan)))
+     LEFT JOIN public.teams t ON ((t.id = p.kscw_team)))
+UNION ALL
+ SELECT 'game'::text AS source,
+    g.id AS ref_id,
+    gc.date,
+    gc."time",
+    gc.floor,
+        CASE
+            WHEN (f.floors @> ARRAY['A'::text, 'B'::text]) THEN 'KWI A+B'::character varying
+            ELSE h.name
+        END AS bb_hall,
+    t.name AS bb_team,
+    g.away_team AS bb_opponent
+   FROM ((((public.basketball_game_floor_claims gc
+     JOIN public.games g ON ((g.id = gc.game)))
+     LEFT JOIN public.teams t ON ((t.id = g.kscw_team)))
+     LEFT JOIN public.halls h ON ((h.id = g.hall)))
+     CROSS JOIN LATERAL ( SELECT public.vb_slot_floors(g.hall, (g.additional_halls)::jsonb) AS floors) f);
+
+
+--
+-- Name: VIEW bb_floor_claims_all; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON VIEW public.bb_floor_claims_all IS 'Every physical KWI floor basketball holds, from BOTH roads: basketball_slot_plan placements (migration 295) and basketball home games in `games` (migration 351). The volleyball side (game-scheduling.js) reads this, never either table directly — a slot must disappear whichever road took the court.';
 
 
 --
@@ -5613,7 +6074,7 @@ ALTER SEQUENCE public.fine_rules_id_seq OWNED BY public.fine_rules.id;
 
 CREATE TABLE public.fines (
     id integer NOT NULL,
-    member integer NOT NULL,
+    member integer,
     team integer NOT NULL,
     category character varying(32) NOT NULL,
     amount numeric(8,2) NOT NULL,
@@ -5653,7 +6114,14 @@ CREATE TABLE public.fines (
 -- Name: TABLE fines; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.fines IS 'Per-member fine ledger. amount + tier_offense + reset_window_at_issue are snapshotted at issue time and never re-derived. Edits to amount/category/reason are blocked by the kscw-hooks filter — leaders must waive + reissue to change a wrong fine, preserving audit trail.';
+COMMENT ON TABLE public.fines IS 'Fine ledger — per member, or per team when `member` IS NULL (migration 350). amount + tier_offense + reset_window_at_issue are snapshotted at issue time and never re-derived. Edits to amount/category/reason are blocked by the kscw-hooks filter — leaders must waive + reissue to change a wrong fine, preserving audit trail.';
+
+
+--
+-- Name: COLUMN fines.member; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.fines.member IS 'Member being fined. NULL = a TEAM-level fine (forfait, missing scorer, …) owed by the team as a whole — no escalation tier, amount must be explicit, and it never appears on a member''s personal balance.';
 
 
 --
@@ -6457,145 +6925,6 @@ ALTER SEQUENCE public.game_scheduling_slots_id_seq OWNED BY public.game_scheduli
 
 
 --
--- Name: games; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.games (
-    id integer NOT NULL,
-    game_id character varying(255) DEFAULT NULL::character varying,
-    home_team character varying(255) DEFAULT NULL::character varying,
-    away_team character varying(255) DEFAULT NULL::character varying,
-    away_hall_json json,
-    date date,
-    "time" time without time zone,
-    league character varying(255) DEFAULT NULL::character varying,
-    round character varying(255) DEFAULT NULL::character varying,
-    season character varying(255) DEFAULT NULL::character varying,
-    type character varying(255) DEFAULT NULL::character varying,
-    status character varying(255) DEFAULT NULL::character varying,
-    home_score integer DEFAULT 0,
-    away_score integer DEFAULT 0,
-    sets_json json,
-    duty_confirmed boolean DEFAULT false NOT NULL,
-    referees_json json,
-    source character varying(255) DEFAULT NULL::character varying,
-    respond_by timestamp with time zone,
-    min_participants integer,
-    kscw_team integer,
-    hall integer,
-    scorer_member integer,
-    scoreboard_member integer,
-    scorer_scoreboard_member integer,
-    scorer_duty_team integer,
-    scoreboard_duty_team integer,
-    scorer_scoreboard_duty_team integer,
-    bb_scorer_member integer,
-    bb_timekeeper_member integer,
-    bb_24s_official integer,
-    bb_duty_team integer,
-    bb_scorer_duty_team integer,
-    bb_timekeeper_duty_team integer,
-    bb_24s_duty_team integer,
-    date_created timestamp with time zone,
-    date_updated timestamp with time zone,
-    send_email_invite boolean DEFAULT false,
-    svrz_push_status public.svrz_push_status_enum,
-    additional_halls json,
-    auto_confirm_rsvp boolean,
-    scorer_confirmed_by_name character varying(255),
-    scorer_confirmed_at timestamp with time zone,
-    scoreboard_confirmed_by_name character varying(255),
-    scoreboard_confirmed_at timestamp with time zone,
-    scorer_scoreboard_confirmed_by_name character varying(255),
-    scorer_scoreboard_confirmed_at timestamp with time zone,
-    bb_scorer_confirmed_by_name character varying(255),
-    bb_scorer_confirmed_at timestamp with time zone,
-    bb_timekeeper_confirmed_by_name character varying(255),
-    bb_timekeeper_confirmed_at timestamp with time zone,
-    bb_24s_confirmed_by_name character varying(255),
-    bb_24s_confirmed_at timestamp with time zone,
-    referee_duty_team integer,
-    referee_member integer,
-    referee_confirmed_by_name character varying(255),
-    referee_confirmed_at timestamp with time zone,
-    duty_late_json jsonb,
-    duty_leader_alert_json jsonb,
-    auto_nomination_list boolean,
-    vm_nomination_status character varying(16),
-    vm_nomination_list_id character varying(64),
-    vm_nomination_count integer,
-    vm_nomination_pushed_at timestamp with time zone,
-    vm_nomination_error text,
-    meeting_offset_minutes integer DEFAULT 60,
-    CONSTRAINT games_meeting_offset_range CHECK (((meeting_offset_minutes IS NULL) OR ((meeting_offset_minutes >= 0) AND (meeting_offset_minutes <= 1440)))),
-    CONSTRAINT games_status_chk CHECK (((status IS NULL) OR ((status)::text = ANY ((ARRAY['scheduled'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'postponed'::character varying])::text[]))))
-);
-
-
---
--- Name: COLUMN games.auto_confirm_rsvp; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.auto_confirm_rsvp IS 'NULL = inherit teams.features_enabled.game_auto_confirm. true/false = per-activity override.';
-
-
---
--- Name: COLUMN games.duty_late_json; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.duty_late_json IS 'Per-role late-arrival reports { role: { at, by_name } } (migration 202). Written by the duty-late endpoint; no contact info stored.';
-
-
---
--- Name: COLUMN games.duty_leader_alert_json; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.duty_leader_alert_json IS 'Emergency "contact team leaders" reports { memberId: { at, by_name } } (migration 203). Written by the duty-leader-contact endpoint; no contact info stored.';
-
-
---
--- Name: COLUMN games.auto_nomination_list; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.auto_nomination_list IS 'Auto-file the Volleymanager Einsatzliste from confirmed RSVPs ~60 min before kickoff. NULL = inherit teams.features_enabled.auto_nomination_list; true/false = per-game override.';
-
-
---
--- Name: COLUMN games.vm_nomination_status; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.vm_nomination_status IS 'filled = players written, list left OPEN (a fineable validation issue blocked the close, or the team asked us not to close). closed = filed AND closed, nothing left to do. skipped = nothing to file (no licensed confirmed players). failed = see vm_nomination_error. NULL = never attempted. The cron re-attempts anything not in (closed, skipped).';
-
-
---
--- Name: COLUMN games.vm_nomination_list_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.vm_nomination_list_id IS 'Volleymanager nominationList __identity (uuid). Set once created; lets a retry update the existing list instead of creating a second one.';
-
-
---
--- Name: COLUMN games.vm_nomination_count; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.vm_nomination_count IS 'Players actually filed on the last successful push.';
-
-
---
--- Name: COLUMN games.vm_nomination_error; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.vm_nomination_error IS 'Last push failure, surfaced to the coach in the game detail modal.';
-
-
---
--- Name: COLUMN games.meeting_offset_minutes; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.games.meeting_offset_minutes IS 'Besammlung: minutes BEFORE `time` that the team meets. NULL = no meeting time shown. Stored as an offset, not a clock, so it follows a Swiss Volley reschedule (sv-sync rewrites `time`) without going stale. DEFAULT 60 is what gives sync-created fixtures a meeting time with no code in sv-sync.';
-
-
---
 -- Name: games_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -6790,26 +7119,6 @@ ALTER SEQUENCE public.hall_slots_teams_id_seq OWNED BY public.hall_slots_teams.i
 
 
 --
--- Name: halls; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.halls (
-    id integer NOT NULL,
-    name character varying(255) DEFAULT NULL::character varying NOT NULL,
-    address character varying(255) DEFAULT NULL::character varying,
-    city character varying(255) DEFAULT NULL::character varying,
-    courts integer,
-    notes text,
-    maps_url character varying(255) DEFAULT NULL::character varying,
-    homologation boolean DEFAULT false NOT NULL,
-    sv_hall_id character varying(255) DEFAULT NULL::character varying,
-    date_created timestamp with time zone,
-    date_updated timestamp with time zone,
-    vm_hall_id character varying(64)
-);
-
-
---
 -- Name: halls_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -6827,6 +7136,115 @@ CREATE SEQUENCE public.halls_id_seq
 --
 
 ALTER SEQUENCE public.halls_id_seq OWNED BY public.halls.id;
+
+
+--
+-- Name: household_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.household_members (
+    id integer NOT NULL,
+    household integer NOT NULL,
+    member integer NOT NULL,
+    role character varying(16) DEFAULT 'managed'::character varying NOT NULL,
+    accent character varying(16),
+    linked_by integer,
+    linked_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    revoked_by integer,
+    CONSTRAINT household_members_revoked_by_needs_revoked_at CHECK (((revoked_by IS NULL) OR (revoked_at IS NOT NULL))),
+    CONSTRAINT household_members_role_ck CHECK (((role)::text = ANY ((ARRAY['guardian'::character varying, 'managed'::character varying])::text[])))
+);
+
+
+--
+-- Name: TABLE household_members; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.household_members IS 'Membership of a household. role=guardian may act for the household''s managed members; role=managed may act for nobody. Never hard-deleted — revoked_at is set, because the history of who could act for a minor IS the record.';
+
+
+--
+-- Name: COLUMN household_members.accent; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.household_members.accent IS 'Stable per-member colour token for the account switcher (sky/ochre/plum/teal/rose). Stored rather than hashed from the id so it never re-shuffles when a sibling is added — a parent navigates this bar by colour before she reads it.';
+
+
+--
+-- Name: COLUMN household_members.revoked_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.household_members.revoked_at IS 'Set instead of deleting. The partial unique index ignores revoked rows, so a member may be re-linked later without losing the earlier record.';
+
+
+--
+-- Name: household_members_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.household_members_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: household_members_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.household_members_id_seq OWNED BY public.household_members.id;
+
+
+--
+-- Name: households; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.households (
+    id integer NOT NULL,
+    name character varying(120) NOT NULL,
+    notes text,
+    created_by integer,
+    date_created timestamp with time zone DEFAULT now() NOT NULL,
+    date_updated timestamp with time zone,
+    CONSTRAINT households_name_nonblank CHECK ((btrim((name)::text) <> ''::text))
+);
+
+
+--
+-- Name: TABLE households; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.households IS 'A family (or other caring arrangement) in which one adult login administers several members. Created by admin/superuser only — see /kscw/household.';
+
+
+--
+-- Name: COLUMN households.name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.households.name IS 'Display name, e.g. "Familie Bolgé". Named rather than derived from a shared email: an address is a poor family key (remarriage, siblings getting their own address, shared inboxes).';
+
+
+--
+-- Name: households_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.households_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: households_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.households_id_seq OWNED BY public.households.id;
 
 
 --
@@ -7131,6 +7549,45 @@ COMMENT ON COLUMN public.live_scores.serving_team IS 'Volleyball/beach: which si
 --
 
 COMMENT ON COLUMN public.live_scores.set_results IS 'Completed sets, oldest first: [{"a":25,"b":20}, …]. Volleyball/beach only.';
+
+
+--
+-- Name: member_guardians; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.member_guardians (
+    id integer NOT NULL,
+    member integer NOT NULL,
+    guardian_user uuid NOT NULL,
+    household integer NOT NULL
+);
+
+
+--
+-- Name: TABLE member_guardians; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.member_guardians IS 'DERIVED from household_members by trigger — do not edit. The only table the acting-member request path reads. A hand-written row here is a privilege grant with no household behind it, which is why no policy grants write access to it.';
+
+
+--
+-- Name: member_guardians_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.member_guardians_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: member_guardians_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.member_guardians_id_seq OWNED BY public.member_guardians.id;
 
 
 --
@@ -8034,6 +8491,7 @@ CREATE TABLE public.participations (
     last_note_edited_at timestamp with time zone,
     auto_declined_by_game integer,
     event integer,
+    auto_declined_deadline boolean DEFAULT false NOT NULL,
     CONSTRAINT participations_activity_type_chk CHECK (((activity_type)::text = ANY ((ARRAY['training'::character varying, 'game'::character varying, 'event'::character varying])::text[]))),
     CONSTRAINT participations_status_chk CHECK (((status)::text = ANY ((ARRAY['confirmed'::character varying, 'declined'::character varying, 'tentative'::character varying, 'waitlisted'::character varying])::text[])))
 );
@@ -8075,101 +8533,10 @@ COMMENT ON COLUMN public.participations.event IS 'Derived mirror of activity_id 
 
 
 --
--- Name: teams; Type: TABLE; Schema: public; Owner: -
+-- Name: COLUMN participations.auto_declined_deadline; Type: COMMENT; Schema: public; Owner: -
 --
 
-CREATE TABLE public.teams (
-    id integer NOT NULL,
-    name character varying(255) DEFAULT NULL::character varying NOT NULL,
-    full_name character varying(255) DEFAULT NULL::character varying,
-    team_id character varying(255) DEFAULT NULL::character varying,
-    sport character varying(255) DEFAULT NULL::character varying,
-    league character varying(255) DEFAULT NULL::character varying,
-    season character varying(255) DEFAULT NULL::character varying,
-    color character varying(255) DEFAULT NULL::character varying,
-    active boolean DEFAULT true NOT NULL,
-    team_picture uuid,
-    team_picture_pos character varying(255) DEFAULT NULL::character varying,
-    social_url character varying(255) DEFAULT NULL::character varying,
-    bb_source_id character varying(255) DEFAULT NULL::character varying,
-    features_enabled json,
-    date_created timestamp with time zone,
-    date_updated timestamp with time zone,
-    captain integer,
-    open_for_players boolean DEFAULT false,
-    facebook_url character varying(255) DEFAULT NULL::character varying,
-    tiktok_url character varying(255) DEFAULT NULL::character varying,
-    show_guests_on_website boolean DEFAULT true NOT NULL,
-    dashboard_range_from date,
-    dashboard_range_to date,
-    dashboard_league_only boolean DEFAULT false NOT NULL,
-    recruiting_positions jsonb,
-    waitlist_url character varying(500),
-    waitlist_label character varying(100),
-    gender character varying(8),
-    duty_credit integer DEFAULT 0 NOT NULL,
-    clubdesk_group text,
-    open_for_girls boolean DEFAULT false,
-    open_for_boys boolean DEFAULT false,
-    CONSTRAINT teams_gender_check CHECK (((gender IS NULL) OR ((gender)::text = ANY (ARRAY[('m'::character varying)::text, ('f'::character varying)::text, ('mixed'::character varying)::text])))),
-    CONSTRAINT teams_season_format_check CHECK (((season IS NULL) OR ((season)::text ~ '^[0-9]{4}/[0-9]{2}$'::text)))
-);
-
-
---
--- Name: COLUMN teams.dashboard_range_from; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.dashboard_range_from IS 'Coach Dashboard "From" date (NULL = use rolling default of most recent 01-06 ≤ today)';
-
-
---
--- Name: COLUMN teams.dashboard_range_to; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.dashboard_range_to IS 'Coach Dashboard "To" date (NULL = use today)';
-
-
---
--- Name: COLUMN teams.dashboard_league_only; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.dashboard_league_only IS 'Coach Dashboard: exclude cup/tournament games from the games attendance count';
-
-
---
--- Name: COLUMN teams.recruiting_positions; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.recruiting_positions IS 'Positions the team is recruiting for (e.g. ["setter","middle"]). NULL/[] = open to all positions. Surfaced on the public team page when open_for_players=true.';
-
-
---
--- Name: COLUMN teams.duty_credit; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.duty_credit IS 'Scorer-duty manual credit: duties this team is excused from (higher = fewer scorer/scoreboard assignments). Stacks on top of the automatic referee credit. Edited on the scorer-assignment page.';
-
-
---
--- Name: COLUMN teams.clubdesk_group; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.clubdesk_group IS 'ClubDesk group token for this team (e.g. ''VB D1''). NULL = not configured yet (flagged by the ClubDesk group check); '''' = intentionally no ClubDesk group (league umbrella).';
-
-
---
--- Name: COLUMN teams.open_for_girls; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.open_for_girls IS 'Mixed (MU) teams only: recruiting girls. Sub-toggle of open_for_players — ignored while that is false. Both this and open_for_boys false/true = the team recruits without a gender split.';
-
-
---
--- Name: COLUMN teams.open_for_boys; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.teams.open_for_boys IS 'Mixed (MU) teams only: recruiting boys. Sub-toggle of open_for_players — see open_for_girls.';
+COMMENT ON COLUMN public.participations.auto_declined_deadline IS 'true = this declined row was written by the deadline sweep (kscw-hooks daily cron) because the member never responded before respond_by, not by a human. Cleared to false by trg_participations_clear_auto_marker the moment anyone changes `status`, so a surviving true is the definitive "still system-owned" signal — same contract as auto_declined_by (absences). Read by ParticipationRosterModal to label the row "No response — auto-declined" instead of a bare "Declined".';
 
 
 --
@@ -10016,8 +10383,16 @@ CREATE TABLE public.user_logs (
     data json,
     "user" integer,
     date_created timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    date_updated timestamp with time zone
+    date_updated timestamp with time zone,
+    acting_guardian integer
 );
+
+
+--
+-- Name: COLUMN user_logs.acting_guardian; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_logs.acting_guardian IS 'The guardian who performed this action on behalf of user (migration 348). NULL = the member acted herself, which is also the correct reading of every row predating this column. Rendered at /admin/audit-log as a "via <name>" badge.';
 
 
 --
@@ -10769,6 +11144,20 @@ ALTER TABLE ONLY public.halls ALTER COLUMN id SET DEFAULT nextval('public.halls_
 
 
 --
+-- Name: household_members id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members ALTER COLUMN id SET DEFAULT nextval('public.household_members_id_seq'::regclass);
+
+
+--
+-- Name: households id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households ALTER COLUMN id SET DEFAULT nextval('public.households_id_seq'::regclass);
+
+
+--
 -- Name: identity_document_keys id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -10780,6 +11169,13 @@ ALTER TABLE ONLY public.identity_document_keys ALTER COLUMN id SET DEFAULT nextv
 --
 
 ALTER TABLE ONLY public.identity_documents ALTER COLUMN id SET DEFAULT nextval('public.identity_documents_id_seq'::regclass);
+
+
+--
+-- Name: member_guardians id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians ALTER COLUMN id SET DEFAULT nextval('public.member_guardians_id_seq'::regclass);
 
 
 --
@@ -11103,6 +11499,14 @@ ALTER TABLE ONLY public.basketball_floor_claims
 
 ALTER TABLE ONLY public.basketball_floor_claims
     ADD CONSTRAINT basketball_floor_claims_uniq UNIQUE (season, date, "time", floor);
+
+
+--
+-- Name: basketball_game_floor_claims basketball_game_floor_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.basketball_game_floor_claims
+    ADD CONSTRAINT basketball_game_floor_claims_pkey PRIMARY KEY (game, floor);
 
 
 --
@@ -11882,6 +12286,22 @@ ALTER TABLE ONLY public.halls
 
 
 --
+-- Name: household_members household_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members
+    ADD CONSTRAINT household_members_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: households households_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT households_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: identity_document_keys identity_document_keys_document_recipient_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11935,6 +12355,22 @@ ALTER TABLE ONLY public.live_history
 
 ALTER TABLE ONLY public.live_scores
     ADD CONSTRAINT live_scores_pkey PRIMARY KEY (channel);
+
+
+--
+-- Name: member_guardians member_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians
+    ADD CONSTRAINT member_guardians_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: member_guardians member_guardians_uq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians
+    ADD CONSTRAINT member_guardians_uq UNIQUE (member, guardian_user, household);
 
 
 --
@@ -12496,6 +12932,13 @@ CREATE INDEX announcement_recipients_member_idx ON public.announcement_recipient
 
 
 --
+-- Name: basketball_game_floor_claims_date_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX basketball_game_floor_claims_date_idx ON public.basketball_game_floor_claims USING btree (date, floor);
+
+
+--
 -- Name: basketball_group_teams_bp_club_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12797,6 +13240,13 @@ CREATE INDEX finance_email_jobs_run_idx ON public.finance_email_jobs USING btree
 
 
 --
+-- Name: finance_expenses_file_uq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX finance_expenses_file_uq ON public.finance_expenses USING btree (file) WHERE (file IS NOT NULL);
+
+
+--
 -- Name: finance_expenses_member_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13049,6 +13499,20 @@ CREATE INDEX fine_rules_team_idx ON public.fine_rules USING btree (team);
 
 
 --
+-- Name: fines_auto_activity_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX fines_auto_activity_unique ON public.fines USING btree (member, team, category, activity_type, activity_id) WHERE (auto_issued = true);
+
+
+--
+-- Name: INDEX fines_auto_activity_unique; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON INDEX public.fines_auto_activity_unique IS 'Backstop for the deadline sweep: a server-issued fine can exist at most once per member×team×category×activity. Partial on auto_issued so leader-issued corrections (waive + reissue, or two manual fines on one game) stay unconstrained.';
+
+
+--
 -- Name: fines_engine_count_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13060,6 +13524,13 @@ CREATE INDEX fines_engine_count_idx ON public.fines USING btree (team, member, c
 --
 
 CREATE INDEX fines_member_status_idx ON public.fines USING btree (member, status);
+
+
+--
+-- Name: fines_team_level_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fines_team_level_idx ON public.fines USING btree (team, status, issued_at DESC) WHERE (member IS NULL);
 
 
 --
@@ -13343,6 +13814,13 @@ CREATE INDEX games_scorer_scoreboard_member_index ON public.games USING btree (s
 
 
 --
+-- Name: games_vm_nomination_claim_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX games_vm_nomination_claim_idx ON public.games USING btree (vm_nomination_status, vm_nomination_claimed_at) WHERE (vm_nomination_status IS NOT NULL);
+
+
+--
 -- Name: hall_closures_hall_index; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13368,6 +13846,27 @@ CREATE INDEX hall_slots_hall_index ON public.hall_slots USING btree (hall);
 --
 
 CREATE UNIQUE INDEX hall_slots_teams_pair_uq ON public.hall_slots_teams USING btree (hall_slots_id, teams_id);
+
+
+--
+-- Name: household_members_household_ix; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX household_members_household_ix ON public.household_members USING btree (household);
+
+
+--
+-- Name: household_members_member_ix; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX household_members_member_ix ON public.household_members USING btree (member);
+
+
+--
+-- Name: household_members_pair_uq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX household_members_pair_uq ON public.household_members USING btree (household, member) WHERE (revoked_at IS NULL);
 
 
 --
@@ -13739,6 +14238,13 @@ CREATE INDEX idx_trainings_auto_cancelled_by_trial ON public.trainings USING btr
 --
 
 CREATE INDEX live_history_channel_finished_idx ON public.live_history USING btree (channel, finished_at DESC);
+
+
+--
+-- Name: member_guardians_lookup_ix; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX member_guardians_lookup_ix ON public.member_guardians USING btree (guardian_user, member);
 
 
 --
@@ -14218,6 +14724,13 @@ CREATE INDEX trainings_hall_index ON public.trainings USING btree (hall);
 
 
 --
+-- Name: trainings_hall_slot_date_uq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX trainings_hall_slot_date_uq ON public.trainings USING btree (hall_slot, date) WHERE (hall_slot IS NOT NULL);
+
+
+--
 -- Name: trainings_hall_slot_index; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -14285,6 +14798,13 @@ CREATE UNIQUE INDEX uq_msg_requests_conv ON public.message_requests USING btree 
 --
 
 CREATE UNIQUE INDEX uq_reactions_msg_member_emoji ON public.message_reactions USING btree (message, member, emoji);
+
+
+--
+-- Name: user_logs_acting_guardian_ix; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_logs_acting_guardian_ix ON public.user_logs USING btree (acting_guardian) WHERE (acting_guardian IS NOT NULL);
 
 
 --
@@ -14519,6 +15039,13 @@ CREATE TRIGGER trg_game_guests_purge_participation AFTER DELETE ON public.game_g
 
 
 --
+-- Name: games trg_games_0_bb_floor_claims; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_games_0_bb_floor_claims AFTER INSERT OR UPDATE OF type, date, "time", hall, additional_halls, kscw_team ON public.games FOR EACH ROW EXECUTE FUNCTION public.bb_game_floor_claims();
+
+
+--
 -- Name: games trg_games_0_purge_polymorphic; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -14544,6 +15071,13 @@ CREATE TRIGGER trg_halls_protect_delete BEFORE DELETE ON public.halls FOR EACH R
 --
 
 CREATE TRIGGER trg_halls_reject_vm_combo BEFORE INSERT OR UPDATE ON public.halls FOR EACH ROW EXECUTE FUNCTION public.trg_halls_reject_vm_combo();
+
+
+--
+-- Name: household_members trg_household_members_rebuild; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_household_members_rebuild AFTER INSERT OR DELETE OR UPDATE ON public.household_members FOR EACH ROW EXECUTE FUNCTION public.trg_household_members_rebuild();
 
 
 --
@@ -14579,6 +15113,13 @@ CREATE TRIGGER trg_members_prevent_email_blanking BEFORE UPDATE OF email ON publ
 --
 
 CREATE TRIGGER trg_members_shell_convert BEFORE UPDATE ON public.members FOR EACH ROW EXECUTE FUNCTION public.trg_members_shell_convert();
+
+
+--
+-- Name: members trg_members_user_rebuild_guardians; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_members_user_rebuild_guardians AFTER UPDATE OF "user" ON public.members FOR EACH ROW WHEN ((old."user" IS DISTINCT FROM new."user")) EXECUTE FUNCTION public.trg_members_user_rebuild_guardians();
 
 
 --
@@ -14890,6 +15431,14 @@ ALTER TABLE ONLY public.basketball_club_date_prefs
 
 ALTER TABLE ONLY public.basketball_floor_claims
     ADD CONSTRAINT basketball_floor_claims_plan_fkey FOREIGN KEY (plan) REFERENCES public.basketball_slot_plan(id) ON DELETE CASCADE;
+
+
+--
+-- Name: basketball_game_floor_claims basketball_game_floor_claims_game_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.basketball_game_floor_claims
+    ADD CONSTRAINT basketball_game_floor_claims_game_fkey FOREIGN KEY (game) REFERENCES public.games(id) ON DELETE CASCADE;
 
 
 --
@@ -15957,6 +16506,46 @@ ALTER TABLE ONLY public.hall_slots_teams
 
 
 --
+-- Name: household_members household_members_household_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members
+    ADD CONSTRAINT household_members_household_fkey FOREIGN KEY (household) REFERENCES public.households(id) ON DELETE CASCADE;
+
+
+--
+-- Name: household_members household_members_linked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members
+    ADD CONSTRAINT household_members_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES public.members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: household_members household_members_member_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members
+    ADD CONSTRAINT household_members_member_fkey FOREIGN KEY (member) REFERENCES public.members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: household_members household_members_revoked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.household_members
+    ADD CONSTRAINT household_members_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: households households_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT households_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.members(id) ON DELETE SET NULL;
+
+
+--
 -- Name: identity_document_keys identity_document_keys_document_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15994,6 +16583,30 @@ ALTER TABLE ONLY public.identity_documents
 
 ALTER TABLE ONLY public.identity_documents
     ADD CONSTRAINT identity_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: member_guardians member_guardians_guardian_user_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians
+    ADD CONSTRAINT member_guardians_guardian_user_fkey FOREIGN KEY (guardian_user) REFERENCES public.directus_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: member_guardians member_guardians_household_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians
+    ADD CONSTRAINT member_guardians_household_fkey FOREIGN KEY (household) REFERENCES public.households(id) ON DELETE CASCADE;
+
+
+--
+-- Name: member_guardians member_guardians_member_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.member_guardians
+    ADD CONSTRAINT member_guardians_member_fkey FOREIGN KEY (member) REFERENCES public.members(id) ON DELETE CASCADE;
 
 
 --
@@ -16517,6 +17130,14 @@ ALTER TABLE ONLY public.trainings
 
 
 --
+-- Name: user_logs user_logs_acting_guardian_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_logs
+    ADD CONSTRAINT user_logs_acting_guardian_fkey FOREIGN KEY (acting_guardian) REFERENCES public.members(id) ON DELETE SET NULL;
+
+
+--
 -- Name: user_logs user_logs_user_foreign; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -16812,12 +17433,12 @@ ALTER TABLE public.volley_feedback ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qnfoFbQtrGgyFrMmm1UZoVpwrRxIJLTaohsqfIhd3xYp4hN6GiYGAcobJVPBioo
+\unrestrict Edf78WCThBko4yHiY6V5e4WkmksepwdOqhW24uxz6ru15xjqmEVlG8iPH8ND7W7
 
 
 
 -- ============================================================================
--- Migration tracker seed — 353 migration(s) already in the schema above.
+-- Migration tracker seed — 361 migration(s) already in the schema above.
 -- GENERATED with the snapshot; do not hand-edit.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS kscw_migrations (
@@ -17182,6 +17803,14 @@ FROM (VALUES
   ('343-participation-visibility-single-pk.sql'),
   ('344-tidy-event-locations.sql'),
   ('345-purge-guest-and-orphan-game-rsvps.sql'),
-  ('346-vb-slots-respect-bb-floor-claims.sql')
+  ('346-vb-slots-respect-bb-floor-claims.sql'),
+  ('347-bb-agreed-offline.sql'),
+  ('348-households.sql'),
+  ('349-user-logs-acting-guardian.sql'),
+  ('350-team-level-fines.sql'),
+  ('351-bb-home-games-hold-the-floor.sql'),
+  ('352-late-signin-no-response-sweep.sql'),
+  ('353-hall-delete-cascades.sql'),
+  ('354-concurrency-guards.sql')
 ) AS v(fname)
 ON CONFLICT (filename) DO NOTHING;
