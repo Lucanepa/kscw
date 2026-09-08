@@ -96,6 +96,35 @@ docker exec "$PGC" psql -U supabase_admin -d "$DEV_DB" -v ON_ERROR_STOP=1 </dev/
 docker exec "$PGC" psql -U supabase_admin -d "$DEV_DB" -v ON_ERROR_STOP=1 </dev/null \
   -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO supabase_admin; GRANT USAGE ON SCHEMA public TO anon, authenticated;" >/dev/null
 
+# ⚠⚠ EXTENSIONS ARE NOT IN THE DUMP. `DROP SCHEMA public CASCADE` above takes
+# every extension installed into that schema with it, and `pg_dump -n public`
+# never emits CREATE EXTENSION (extensions are database-level objects, excluded
+# by a schema filter). So each refresh left dev without `unaccent` and the
+# ClubDesk sync-down died on the accent-insensitive linker pass every day
+# (`function unaccent(text) does not exist`).
+#
+# ⚠ refresh-dev-from-prod.sh — the attended sibling — has carried this block
+# since 25.08.2026 and THIS script did not, which is why the fix looked like it
+# worked: running the manual refresh by hand put the extension back, the nightly
+# cron took it away again, and the sync-down failed the next day (08.09.2026).
+# Whatever is added to one of these two scripts belongs in the other.
+#
+# ⚠ A migration CANNOT fix this on its own: `kscw_migrations` lives in the public
+# schema, so the clone restores PROD's tracker, which already lists the migration
+# as applied. The runner would skip it forever while the extension stayed gone.
+log "[3b/7] Recreating database-level extensions (not carried by a schema-only dump)"
+for ext in unaccent; do
+  if docker exec "$PGC" psql -U supabase_admin -d "$DEV_DB" -v ON_ERROR_STOP=1 </dev/null \
+       -c "CREATE EXTENSION IF NOT EXISTS $ext;" >/dev/null 2>&1; then
+    log "     ok $ext"
+  else
+    # Not fatal: the rest of dev works without it. Loud, because the thing it
+    # breaks (the ClubDesk sync-down) fails minutes later with an error that
+    # points at SQL rather than at this.
+    log "     WARN $ext FAILED — the ClubDesk sync-down will break on dev"
+  fi
+done
+
 log "[4/7] Cloning prod -> dev (public schema)"
 docker exec "$PGC" pg_dump -U supabase_admin -d "$PROD_DB" -n public --no-owner --no-acl </dev/null \
   | docker exec -i "$PGC" psql -U supabase_admin -d "$DEV_DB" -q -v ON_ERROR_STOP=0 > "$RLOG" 2>&1 || true

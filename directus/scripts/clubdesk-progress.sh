@@ -37,15 +37,21 @@ CDP_PHASE=''
 # trap the caller may already own (the member dispatcher traps its RUNLOG).
 cdp_cleanup() { rm -f "$CDP_BUF"; }
 
-# The one place that talks to Postgres. `-v` + `:'…'` rather than string
+# The one place that talks to Postgres. `-v` + `:'…'` rather than shell string
 # interpolation: a scraper error can quote page content, and psql's own quoting is
 # the only escaping here that is not a guess.
+#
+# ⚠⚠ The SQL goes in on STDIN, never `-c`. psql does NOT expand variables in a
+# `-c` command string — it is handed to the server as typed — so the same
+# statement that works from stdin fails there with `syntax error at or near ":"`.
+# And since every write here ends in `|| true`, that error is invisible: the run
+# succeeds, the bar simply never moves. Caught only by reading the column back.
 cdp_write() {
   local lg
   lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
-  docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
-    -v pct="$CDP_PCT" -v phase="$CDP_PHASE" -v lg="$lg" \
-    -c "UPDATE clubdesk_member_sync SET ${CDP_JOB}_progress = NULLIF(:'pct','')::smallint, ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1" \
+  printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_progress = NULLIF(:'pct','')::smallint, ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
+    | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
+      -v pct="$CDP_PCT" -v phase="$CDP_PHASE" -v lg="$lg" \
     >/dev/null 2>&1 || true
   CDP_LAST_WRITE=$(date +%s)
   return 0
@@ -62,8 +68,8 @@ cdp_write() {
 cdp_write_log() {
   local lg
   lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
-  docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q -v lg="$lg" \
-    -c "UPDATE clubdesk_member_sync SET ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1" \
+  printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
+    | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q -v lg="$lg" \
     >/dev/null 2>&1 || true
   CDP_LAST_WRITE=$(date +%s)
   return 0
@@ -111,9 +117,9 @@ cdp_fail() {
   cdp_append "$CDP_PHASE"
   local lg
   lg="$(tail -n "$CDP_KEEP" "$CDP_BUF" 2>/dev/null | tail -c "$CDP_MAX_BYTES")"
-  docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
-    -v phase="$CDP_PHASE" -v lg="$lg" \
-    -c "UPDATE clubdesk_member_sync SET ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1" \
+  printf '%s' "UPDATE clubdesk_member_sync SET ${CDP_JOB}_phase = NULLIF(:'phase',''), ${CDP_JOB}_log = NULLIF(:'lg','') WHERE id = 1;" \
+    | docker exec -i "$PG" psql -U supabase_admin -d "$DB" -X -q \
+      -v phase="$CDP_PHASE" -v lg="$lg" \
     >/dev/null 2>&1 || true
   return 0
 }
