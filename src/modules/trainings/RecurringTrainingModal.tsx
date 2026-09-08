@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isDuplicateSlotTraining } from '../../utils/isDuplicateSlotTraining'
 import Modal from '@/components/Modal'
 import { flattenM2MTeams } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -387,9 +388,17 @@ export default function RecurringTrainingModal({ open, onClose, onGenerated, sel
       setDone(true)
       onGenerated()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message
-        : (err as { errors?: { message?: string }[] })?.errors?.[0]?.message ?? JSON.stringify(err)
-      setError(`${tc('errorSaving')}: ${msg}`)
+      // The occurrences are created in ONE batch, so a single collision rolls the
+      // whole thing back — nothing was written and re-running is safe, which is
+      // exactly what the message says. Without this the coach got the raw driver
+      // text naming a Postgres index.
+      if (isDuplicateSlotTraining(err)) {
+        setError(t('duplicateSlotDate'))
+      } else {
+        const msg = err instanceof Error ? err.message
+          : (err as { errors?: { message?: string }[] })?.errors?.[0]?.message ?? JSON.stringify(err)
+        setError(`${tc('errorSaving')}: ${msg}`)
+      }
     } finally {
       setLoading(false)
     }

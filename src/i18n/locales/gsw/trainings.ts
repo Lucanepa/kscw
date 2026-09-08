@@ -1,4 +1,6 @@
 export default {
+  /** Migration 354: trainings_hall_slot_date_uq rejected a concurrent create. */
+  duplicateSlotDate: 'Für dä Hallenslot gits a dem Datum scho es Training. Aktualisier und probiers nomal — öpper hets vilicht grad erstellt.',
   title: 'Trainings',
   subtitle: 'Trainingsübersicht mit Aaweseheitskontrolle',
 

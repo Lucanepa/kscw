@@ -1,4 +1,6 @@
 export default {
+  /** Migration 354: trainings_hall_slot_date_uq rejected a concurrent create. */
+  duplicateSlotDate: 'Esiste già un allenamento per questo slot di palestra in questa data. Aggiorna e riprova — qualcuno potrebbe averlo appena creato.',
   title: 'Allenamenti',
   subtitle: 'Panoramica allenamenti con monitoraggio presenze',
 
