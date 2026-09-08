@@ -10,7 +10,7 @@ import { currentSeasonShort, currentSeasonLong } from './season.js'
 import path from 'path'
 import { spawn } from 'node:child_process'
 import { syncSvGames, syncSvRankings } from './sv-sync.js'
-import { syncBpGames, syncBpRankings } from './bp-sync.js'
+import { syncBpGames, syncBpRankings, sweepSupersededManualGames } from './bp-sync.js'
 import { registerPasswordReset } from './password-reset.js'
 import { registerSignupInvites } from './signup-invites.js'
 import { registerICalFeed } from './ical-feed.js'
@@ -1108,12 +1108,50 @@ export default {
       }
     })
 
+    // Read-only preview of the manual-placeholder sweep (see bp-sync.js →
+    // "Superseded manual games"). Answers "what would tonight's sync delete?"
+    // WITHOUT running the sync, which is the question worth asking the first
+    // time ProBasket publishes a season.
+    router.get('/admin/bp-sync/manual-sweep-preview', async (req, res) => {
+      try {
+        requireAdmin(req, log)
+        const preview = await sweepSupersededManualGames(database, log, { dryRun: true })
+        res.json({ status: 'ok', preview })
+      } catch (err) {
+        logEndpointError(log, 'admin/bp-sync/manual-sweep-preview', err, req)
+        res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal error' })
+      }
+    })
+
     router.post('/admin/bp-sync', async (req, res) => {
       try {
         requireAdmin(req, log)
-        log.info('Manual BP sync triggered')
-        const games = await syncBpGames(database, log)
+        // 'on' (default, what the cron runs) | 'dry' (sync, but only preview the
+        // sweep) | 'off' (leave the placeholders alone entirely).
+        const sweepManual = ['on', 'dry', 'off'].includes(req.body?.manual_sweep)
+          ? req.body.manual_sweep
+          : 'on'
+        log.info(`Manual BP sync triggered (manual_sweep=${sweepManual})`)
+        const games = await syncBpGames(database, log, { sweepManual })
         const rankings = await syncBpRankings(database, log, games.leagueHoldingIds)
+        // The sweep DELETES games — per CLAUDE.md → "Audit logging (actor
+        // capture)", raw-knex writes bypass Directus's activity trail, so the
+        // acting admin and the full list of retired fixtures are recorded here.
+        // The cron runs unauthenticated and is traceable via sync_runs + logs.
+        if (games.manualSweep?.deleted > 0) {
+          await writeUserLog(database, log, {
+            accountability: req.accountability,
+            action: 'delete',
+            collection: 'games',
+            recordId: null,
+            data: {
+              kind: 'bp_manual_sweep',
+              deleted: games.manualSweep.deleted,
+              rsvps_removed: games.manualSweep.rsvpsRemoved,
+              games: games.manualSweep.rows,
+            },
+          })
+        }
         res.json({ status: 'ok', games, rankings })
       } catch (err) {
         logEndpointError(log, 'admin/bp-sync', err, req)
