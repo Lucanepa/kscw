@@ -202,6 +202,56 @@ function needsUpdate(existing, desired) {
 
 // ── sync ──────────────────────────────────────────────────────────────────────
 
+// ── one reconcile at a time ───────────────────────────────────────────────────
+//
+// Both reconcilers below are read-modify-write against a calendar we do NOT own:
+// list every event we already own, then POST the ones missing from that snapshot.
+// Two runs that overlap both list before either creates, so both find the same
+// fixture (or closure) missing and both create it — and that duplicate is then
+// invisible to us forever, because `existing` is a Map keyed on game_id /
+// closure_key: the second copy overwrites the first, so it is never seen by the
+// update loop and never reached by the delete loop. Only a hand-deletion on the
+// school's calendar removes it.
+//
+// The actor pairs are ordinary, not exotic: two admins (or one in two tabs)
+// pressing "Run now" on the infra-health GCal card, an admin ticking a second
+// closure's "publish to the school's calendar" while the first tick's reconcile
+// is still in flight (that endpoint runs the FULL, global closure push on every
+// tick, and only the clicked row's button is disabled), and the 04:00 cron
+// overlapped by either.
+//
+// ⚠ Nothing in Postgres can arbitrate this the way a partial unique index does
+// for finance_email_jobs: the dedupe key lives in a Google extendedProperty, not
+// in a table, and events.insert has no conditional create. So the claim is
+// PROCESS-LOCAL — the same shape as `syncRunningFor` (scheduling-mailbox.js) and
+// the run flag in vis-player-check.js. Directus runs as ONE container here, so it
+// genuinely covers every actor pair above. It would NOT survive scaling to a
+// second instance; that needs a Postgres advisory lock (or a claim row), which is
+// out of scope for a migration-free fix.
+const runningPushes = new Map() // 'games' | 'closures' → the claim object held
+
+// A hung Google call must not wedge the push forever — api() sets no timeout — so
+// a claim older than this is treated as dead and taken over. Generous on purpose:
+// a full reconcile is seconds, not minutes.
+const PUSH_CLAIM_MAX_MS = 15 * 60 * 1000
+
+function claimPush(kind, log) {
+  const held = runningPushes.get(kind)
+  if (held && Date.now() - held.startedAt < PUSH_CLAIM_MAX_MS) return null
+  if (held) {
+    log.warn({ msg: `gcal-push: the ${kind} run claimed at ${new Date(held.startedAt).toISOString()} never finished — taking the claim over`, endpoint: 'gcal-sync' })
+  }
+  const claim = { startedAt: Date.now() }
+  runningPushes.set(kind, claim)
+  return claim
+}
+
+// Only the current holder clears the claim: a run that was reaped as dead must
+// not release the claim its successor is now holding.
+function releasePush(kind, claim) {
+  if (runningPushes.get(kind) === claim) runningPushes.delete(kind)
+}
+
 /**
  * Reconcile KWI home fixtures onto the calendar — `games` rows plus accepted
  * basketball placements that have no `games` row yet.
@@ -212,165 +262,183 @@ function needsUpdate(existing, desired) {
 export async function pushHomeGames(db, log) {
   if (!isPushEnabled()) return { created: 0, updated: 0, deleted: 0, skipped: 0, eventIds: new Set(), disabled: true }
 
-  // Manage today forward only. Past events are frozen history: never rewritten,
-  // never swept, even if the game row is later corrected or deleted.
-  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(new Date())
-
-  const games = await db('games as g')
-    .join('halls as h', 'h.id', 'g.hall')
-    .leftJoin('teams as t', 't.id', 'g.kscw_team')
-    .where('g.type', 'home')
-    .whereRaw("h.name ~* '^kwi'")
-    .andWhere('g.date', '>=', today)
-    .whereNotNull('g.game_id')
-    .select(
-      'g.game_id',
-      'g.away_team',
-      'g.home_team',
-      'g.source',
-      db.raw('g.date::text as date'),
-      db.raw("to_char(g.time, 'HH24:MI') as time"),
-      // Same floor projection the Hallenplan and bb_floor_claims_all use, so a
-      // game booked across the divider says so. NULLIF guards a hall whose name
-      // vb_slot_floors cannot map, which falls back to the trailing letter.
-      db.raw("COALESCE(NULLIF(array_to_string(vb_slot_floors(g.hall, g.additional_halls::jsonb), '+'), ''), right(h.name, 1)) as hall_label"),
-      'g.kscw_team',
-      't.name as team_name',
-      't.sport as sport',
-    )
-
-  // Basketball home fixtures reach the DB by two independent roads and only one
-  // of them is a `games` row: the prep grid at /admin/terminplanung/basketball
-  // writes `basketball_slot_plan` placements, which hold the KWI floor from the
-  // moment the opponent agrees but may not become a `games` row until Basketplan
-  // publishes the fixture — months later, or never for a friendly. Publishing
-  // only `games` left 8 agreed KWI fixtures off the hall administration's
-  // calendar (reported 07.09.2026 alongside the VB/BB mislabelling).
-  //
-  // ⚠ ACCEPTED ONLY. A draft placement is a negotiating position — 44 of the 52
-  // upcoming ones were drafts — and republishing every counter-proposal onto a
-  // calendar the school owns would be worse than publishing nothing.
-  const placements = await db('basketball_slot_plan as p')
-    .leftJoin('teams as t', 't.id', 'p.kscw_team')
-    .where('p.game_type', 'home')
-    .andWhere('p.proposal_status', 'accepted')
-    .andWhere('p.date', '>=', today)
-    .whereRaw("p.hall ~* '^kwi'")
-    .select(
-      'p.id',
-      'p.kscw_team',
-      'p.time',
-      'p.hall',
-      'p.opponent',
-      'p.kscw_team_label',
-      db.raw('p.date::text as date'),
-      't.name as team_name',
-    )
-
-  const desired = new Map()
-  let skipped = 0
-  // "This team already has a home fixture that day", so a placement that has
-  // since been promoted to a `games` row is published once, not twice. Keyed on
-  // date+team rather than date+floor because a promotion routinely corrects the
-  // time or moves the game between floors, and rather than on the opponent
-  // because the two roads spell club names differently (the grid's free-text
-  // name vs. Basketplan's).
-  const fixtureDays = new Set()
-  for (const game of games) {
-    // No kick-off time means we cannot place it in a hall slot honestly. Leave it
-    // off the calendar rather than invent an hour.
-    if (!game.time || !game.away_team) { skipped++; continue }
-    desired.set(game.game_id, buildEvent(game))
-    if (game.kscw_team) fixtureDays.add(`${game.date}|${game.kscw_team}`)
+  // One home-game reconcile at a time (see "one reconcile at a time" above). A
+  // second, overlapping run is skipped rather than allowed to publish the same
+  // fixtures twice onto the school's calendar — the run already in flight covers
+  // exactly the same fixtures, and the next run picks up anything added since.
+  const claim = claimPush('games', log)
+  if (!claim) {
+    log.warn({ msg: 'gcal-push: a home-game push is already running — this run was skipped (the in-flight one publishes the same fixtures)', endpoint: 'gcal-sync' })
+    // Empty eventIds is the same state the push-disabled return hands back, and
+    // the pull half's isOwnGameTitle() backstop covers it.
+    // Carries `disabled`/`dryRun` so a skipped run is not reported to the admin as
+    // a live, enabled run that simply found nothing to do.
+    return { created: 0, updated: 0, deleted: 0, skipped: 0, superseded: 0, eventIds: new Set(), alreadyRunning: true, disabled: false, dryRun: isDryRun() }
   }
 
-  let superseded = 0
-  for (const p of placements) {
-    // Migration 346's fail-safe stores '' for a fixture with no tip-off yet. It
-    // blocks the floor all day internally; on the calendar it would be a lie.
-    if (!p.time || !p.opponent) { skipped++; continue }
-    if (p.kscw_team && fixtureDays.has(`${p.date}|${p.kscw_team}`)) { superseded++; continue }
-    desired.set(`bbplan_${p.id}`, buildEvent(placementFixture(p)))
-  }
+  try {
+    // Manage today forward only. Past events are frozen history: never rewritten,
+    // never swept, even if the game row is later corrected or deleted.
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(new Date())
 
-  // Everything we own, from today forward. Two sources: the private marker
-  // (everything the sync itself has written) and the transitional signature of
-  // the 70 events seeded by hand in 2026-07, which predate the marker.
-  const existing = new Map() // game_id → event
-  const timeMin = `${today}T00:00:00Z`
+    const games = await db('games as g')
+      .join('halls as h', 'h.id', 'g.hall')
+      .leftJoin('teams as t', 't.id', 'g.kscw_team')
+      .where('g.type', 'home')
+      .whereRaw("h.name ~* '^kwi'")
+      .andWhere('g.date', '>=', today)
+      .whereNotNull('g.game_id')
+      .select(
+        'g.game_id',
+        'g.away_team',
+        'g.home_team',
+        'g.source',
+        db.raw('g.date::text as date'),
+        db.raw("to_char(g.time, 'HH24:MI') as time"),
+        // Same floor projection the Hallenplan and bb_floor_claims_all use, so a
+        // game booked across the divider says so. NULLIF guards a hall whose name
+        // vb_slot_floors cannot map, which falls back to the trailing letter.
+        db.raw("COALESCE(NULLIF(array_to_string(vb_slot_floors(g.hall, g.additional_halls::jsonb), '+'), ''), right(h.name, 1)) as hall_label"),
+        'g.kscw_team',
+        't.name as team_name',
+        't.sport as sport',
+      )
 
-  const collect = async (query) => {
-    let pageToken
-    do {
-      const page = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
-        query: { timeMin, singleEvents: 'true', maxResults: '250', ...query, ...(pageToken ? { pageToken } : {}) },
-      })
-      for (const ev of page.items ?? []) {
-        const marked = ev.extendedProperties?.private?.wiedisync === 'game'
-        const gameId = ev.extendedProperties?.private?.game_id
-        if (marked && gameId) { existing.set(gameId, ev); continue }
-        // Transitional: seeded by hand, keyed by the visible "Spielnummer" line.
-        // Both halves of the signature must match so we can never adopt — and
-        // therefore never delete — an event a human wrote.
-        const desc = ev.description ?? ''
-        const legacy = /Spielnummer (\S+)/.exec(desc)
-        if (legacy && desc.includes('wiedisync.kscw.ch')) existing.set(`vb_${legacy[1]}`, ev)
-      }
-      pageToken = page.nextPageToken
-    } while (pageToken)
-  }
+    // Basketball home fixtures reach the DB by two independent roads and only one
+    // of them is a `games` row: the prep grid at /admin/terminplanung/basketball
+    // writes `basketball_slot_plan` placements, which hold the KWI floor from the
+    // moment the opponent agrees but may not become a `games` row until Basketplan
+    // publishes the fixture — months later, or never for a friendly. Publishing
+    // only `games` left 8 agreed KWI fixtures off the hall administration's
+    // calendar (reported 07.09.2026 alongside the VB/BB mislabelling).
+    //
+    // ⚠ ACCEPTED ONLY. A draft placement is a negotiating position — 44 of the 52
+    // upcoming ones were drafts — and republishing every counter-proposal onto a
+    // calendar the school owns would be worse than publishing nothing.
+    const placements = await db('basketball_slot_plan as p')
+      .leftJoin('teams as t', 't.id', 'p.kscw_team')
+      .where('p.game_type', 'home')
+      .andWhere('p.proposal_status', 'accepted')
+      .andWhere('p.date', '>=', today)
+      .whereRaw("p.hall ~* '^kwi'")
+      .select(
+        'p.id',
+        'p.kscw_team',
+        'p.time',
+        'p.hall',
+        'p.opponent',
+        'p.kscw_team_label',
+        db.raw('p.date::text as date'),
+        't.name as team_name',
+      )
 
-  await collect({ privateExtendedProperty: 'wiedisync=game' })
-  await collect({}) // adoption sweep; drops out naturally once every event is marked
+    const desired = new Map()
+    let skipped = 0
+    // "This team already has a home fixture that day", so a placement that has
+    // since been promoted to a `games` row is published once, not twice. Keyed on
+    // date+team rather than date+floor because a promotion routinely corrects the
+    // time or moves the game between floors, and rather than on the opponent
+    // because the two roads spell club names differently (the grid's free-text
+    // name vs. Basketplan's).
+    const fixtureDays = new Set()
+    for (const game of games) {
+      // No kick-off time means we cannot place it in a hall slot honestly. Leave it
+      // off the calendar rather than invent an hour.
+      if (!game.time || !game.away_team) { skipped++; continue }
+      desired.set(game.game_id, buildEvent(game))
+      if (game.kscw_team) fixtureDays.add(`${game.date}|${game.kscw_team}`)
+    }
 
-  const dryRun = isDryRun()
-  let created = 0
-  let updated = 0
-  let deleted = 0
-  const eventIds = new Set()
+    let superseded = 0
+    for (const p of placements) {
+      // Migration 346's fail-safe stores '' for a fixture with no tip-off yet. It
+      // blocks the floor all day internally; on the calendar it would be a lie.
+      if (!p.time || !p.opponent) { skipped++; continue }
+      if (p.kscw_team && fixtureDays.has(`${p.date}|${p.kscw_team}`)) { superseded++; continue }
+      desired.set(`bbplan_${p.id}`, buildEvent(placementFixture(p)))
+    }
 
-  for (const [gameId, event] of desired) {
-    const current = existing.get(gameId)
-    if (!current) {
-      if (!dryRun) {
-        const made = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
-          method: 'POST', body: event, query: { sendUpdates: 'none' },
+    // Everything we own, from today forward. Two sources: the private marker
+    // (everything the sync itself has written) and the transitional signature of
+    // the 70 events seeded by hand in 2026-07, which predate the marker.
+    const existing = new Map() // game_id → event
+    const timeMin = `${today}T00:00:00Z`
+
+    const collect = async (query) => {
+      let pageToken
+      do {
+        const page = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
+          query: { timeMin, singleEvents: 'true', maxResults: '250', ...query, ...(pageToken ? { pageToken } : {}) },
         })
-        eventIds.add(made.id)
-      }
-      created++
-    } else {
-      eventIds.add(current.id)
-      if (needsUpdate(current, event)) {
-        if (!dryRun) {
-          await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${current.id}`, {
-            method: 'PATCH', body: event, query: { sendUpdates: 'none' },
-          })
+        for (const ev of page.items ?? []) {
+          const marked = ev.extendedProperties?.private?.wiedisync === 'game'
+          const gameId = ev.extendedProperties?.private?.game_id
+          if (marked && gameId) { existing.set(gameId, ev); continue }
+          // Transitional: seeded by hand, keyed by the visible "Spielnummer" line.
+          // Both halves of the signature must match so we can never adopt — and
+          // therefore never delete — an event a human wrote.
+          const desc = ev.description ?? ''
+          const legacy = /Spielnummer (\S+)/.exec(desc)
+          if (legacy && desc.includes('wiedisync.kscw.ch')) existing.set(`vb_${legacy[1]}`, ev)
         }
-        updated++
+        pageToken = page.nextPageToken
+      } while (pageToken)
+    }
+
+    await collect({ privateExtendedProperty: 'wiedisync=game' })
+    await collect({}) // adoption sweep; drops out naturally once every event is marked
+
+    const dryRun = isDryRun()
+    let created = 0
+    let updated = 0
+    let deleted = 0
+    const eventIds = new Set()
+
+    for (const [gameId, event] of desired) {
+      const current = existing.get(gameId)
+      if (!current) {
+        if (!dryRun) {
+          const made = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
+            method: 'POST', body: event, query: { sendUpdates: 'none' },
+          })
+          eventIds.add(made.id)
+        }
+        created++
+      } else {
+        eventIds.add(current.id)
+        if (needsUpdate(current, event)) {
+          if (!dryRun) {
+            await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${current.id}`, {
+              method: 'PATCH', body: event, query: { sendUpdates: 'none' },
+            })
+          }
+          updated++
+        }
       }
     }
-  }
 
-  // Ours, but no longer a KWI home game — cancelled, rescheduled away, or moved
-  // to Döltschi. Only events we own reach this loop.
-  for (const [gameId, event] of existing) {
-    if (desired.has(gameId)) continue
-    if (!dryRun) {
-      await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${event.id}`, {
-        method: 'DELETE', query: { sendUpdates: 'none' },
-      })
+    // Ours, but no longer a KWI home game — cancelled, rescheduled away, or moved
+    // to Döltschi. Only events we own reach this loop.
+    for (const [gameId, event] of existing) {
+      if (desired.has(gameId)) continue
+      if (!dryRun) {
+        await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${event.id}`, {
+          method: 'DELETE', query: { sendUpdates: 'none' },
+        })
+      }
+      deleted++
     }
-    deleted++
-  }
 
-  if (skipped) log.warn({ msg: `gcal-push: ${skipped} home fixture(s) skipped (no kick-off time or opponent)`, endpoint: 'gcal-sync' })
-  log.info({
-    msg: `gcal-push${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted}`
-      + ` (${games.length} games, ${placements.length} accepted placements, ${superseded} superseded)`,
-    endpoint: 'gcal-sync',
-  })
-  return { created, updated, deleted, skipped, superseded, dryRun, eventIds }
+    if (skipped) log.warn({ msg: `gcal-push: ${skipped} home fixture(s) skipped (no kick-off time or opponent)`, endpoint: 'gcal-sync' })
+    log.info({
+      msg: `gcal-push${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted}`
+        + ` (${games.length} games, ${placements.length} accepted placements, ${superseded} superseded)`,
+      endpoint: 'gcal-sync',
+    })
+    return { created, updated, deleted, skipped, superseded, dryRun, eventIds }
+  } finally {
+    releasePush('games', claim)
+  }
 }
 
 // ── club closures → their calendar ────────────────────────────────────────────
@@ -500,125 +568,141 @@ export async function pushClubClosures(db, log, hallEvents = []) {
     return { created: 0, updated: 0, deleted: 0, skippedDuplicate: 0, eventIds: new Set(), disabled: true }
   }
 
-  // Today forward only — same rule as the games half. Past closures are frozen
-  // history and pushing them tells the school nothing it can act on.
-  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(new Date())
-
-  const rows = await db('hall_closures as c')
-    .join('halls as h', 'h.id', 'c.hall')
-    .where('c.push_to_gcal', true)
-    .whereNotIn('c.source', ['gcal', 'school_holidays'])
-    .andWhere('c.end_date', '>=', today)
-    .select(
-      db.raw('c.start_date::text as start_date'),
-      db.raw('c.end_date::text as end_date'),
-      'c.reason',
-      'h.name as hall_name',
-    )
-
-  // One event per (span, reason); the halls become part of the title.
-  const groups = new Map()
-  for (const r of rows) {
-    const key = closureKey(r.start_date, r.end_date, r.reason)
-    const g = groups.get(key)
-      || { key, start_date: r.start_date, end_date: r.end_date, reason: r.reason, halls: [] }
-    if (r.hall_name && !g.halls.includes(r.hall_name)) g.halls.push(r.hall_name)
-    groups.set(key, g)
+  // One closure reconcile at a time (see "one reconcile at a time" above). The
+  // toggle endpoint runs this GLOBAL push on every tick, so ticking a second
+  // closure while the first tick's run is still listing the calendar is the
+  // likeliest road to two identical all-day entries on it. A second, overlapping
+  // run is therefore skipped; every flagged closure is reconciled by the run in
+  // flight, and anything ticked since lands on the next run.
+  const claim = claimPush('closures', log)
+  if (!claim) {
+    log.warn({ msg: 'gcal-push closures: a closure push is already running — this run was skipped (the in-flight one reconciles every flagged closure)', endpoint: 'gcal-sync' })
+    return { created: 0, updated: 0, deleted: 0, skippedDuplicate: 0, eventIds: new Set(), alreadyRunning: true, disabled: false, dryRun: isDryRun() }
   }
 
-  const desired = new Map()
-  let skippedDuplicate = 0
-  for (const [key, g] of groups) {
-    const dup = findDuplicate(hallEvents, g.start_date, g.end_date)
-    if (dup) {
-      skippedDuplicate++
-      log.info({ msg: `gcal-push: closure "${g.reason}" ${g.start_date}..${g.end_date} already covered by their "${dup.title}" — not pushed`, endpoint: 'gcal-sync' })
-      continue
+  try {
+    // Today forward only — same rule as the games half. Past closures are frozen
+    // history and pushing them tells the school nothing it can act on.
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(new Date())
+
+    const rows = await db('hall_closures as c')
+      .join('halls as h', 'h.id', 'c.hall')
+      .where('c.push_to_gcal', true)
+      .whereNotIn('c.source', ['gcal', 'school_holidays'])
+      .andWhere('c.end_date', '>=', today)
+      .select(
+        db.raw('c.start_date::text as start_date'),
+        db.raw('c.end_date::text as end_date'),
+        'c.reason',
+        'h.name as hall_name',
+      )
+
+    // One event per (span, reason); the halls become part of the title.
+    const groups = new Map()
+    for (const r of rows) {
+      const key = closureKey(r.start_date, r.end_date, r.reason)
+      const g = groups.get(key)
+        || { key, start_date: r.start_date, end_date: r.end_date, reason: r.reason, halls: [] }
+      if (r.hall_name && !g.halls.includes(r.hall_name)) g.halls.push(r.hall_name)
+      groups.set(key, g)
     }
-    desired.set(key, buildClosureEvent(g))
-  }
 
-  // Everything WE own on the closure side, today forward.
-  const existing = new Map()
-  let pageToken
-  do {
-    const page = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
-      query: {
-        timeMin: `${today}T00:00:00Z`, singleEvents: 'true', maxResults: '250',
-        privateExtendedProperty: 'wiedisync=closure',
-        ...(pageToken ? { pageToken } : {}),
-      },
-    })
-    for (const ev of page.items ?? []) {
-      const k = ev.extendedProperties?.private?.closure_key
-      if (k) existing.set(k, ev)
-    }
-    pageToken = page.nextPageToken
-  } while (pageToken)
-
-  const dryRun = isDryRun()
-  let created = 0, updated = 0, deleted = 0
-  const eventIds = new Set()
-
-  for (const [key, event] of desired) {
-    const current = existing.get(key)
-    if (!current) {
-      if (!dryRun) {
-        const made = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
-          method: 'POST', body: event, query: { sendUpdates: 'none' },
-        })
-        eventIds.add(made.id)
+    const desired = new Map()
+    let skippedDuplicate = 0
+    for (const [key, g] of groups) {
+      const dup = findDuplicate(hallEvents, g.start_date, g.end_date)
+      if (dup) {
+        skippedDuplicate++
+        log.info({ msg: `gcal-push: closure "${g.reason}" ${g.start_date}..${g.end_date} already covered by their "${dup.title}" — not pushed`, endpoint: 'gcal-sync' })
+        continue
       }
-      created++
-    } else {
-      eventIds.add(current.id)
-      if (closureNeedsUpdate(current, event)) {
-        if (!dryRun) {
-          await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${current.id}`, {
-            method: 'PATCH', body: event, query: { sendUpdates: 'none' },
-          })
-        }
-        updated++
-      }
+      desired.set(key, buildClosureEvent(g))
     }
-  }
 
-  // Ours, but no longer wanted — un-ticked, deleted, or now covered by one of
-  // their own entries. Only `wiedisync=closure` events reach this loop.
-  //
-  // ⚠⚠ THIS LOOP IS WHY `GCAL_PUSH_DRY_RUN=true` ON DEV IS LOAD-BEARING, and more
-  // sharply so than for games. There is one production calendar, and the READ
-  // above is never dry — so dev sees the events PROD published. Dev's `desired`
-  // set is built from dev's own `push_to_gcal` flags, which diverge from prod's
-  // the moment anybody toggles one on dev (they only agree just after the 03:00
-  // clone). Every prod-published closure dev does not also have flagged
-  // therefore lands here as a delete. Observed on 2026-08-18: a dev run reported
-  // `-2`, i.e. it would have silently removed both VB U20 Tournament entries
-  // from the hall administration's calendar. Only the dry run stopped it.
-  const me = pushEnv()
-  let foreign = 0
-  for (const [key, event] of existing) {
-    if (desired.has(key)) continue
-    // ⚠⚠ Never delete another ENVIRONMENT's event. `wiedisync=closure` says only
-    // that some wiedisync wrote it; dev and prod share one calendar and their
-    // push_to_gcal flags diverge, so "marked ours but not in my desired set" is
-    // NOT sufficient grounds to remove it. Unstamped events predate this guard
-    // and only prod ever wrote, so prod adopts them (and stamps them on update);
-    // dev leaves them alone. This is the belt to the dry-run's braces — the
-    // failure it prevents is deleting the club's real bookings off the school's
-    // calendar, which nothing would alert us to.
-    if (!mayDelete(event.extendedProperties?.private?.env, me)) { foreign++; continue }
-    if (!dryRun) {
-      await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${event.id}`, {
-        method: 'DELETE', query: { sendUpdates: 'none' },
+    // Everything WE own on the closure side, today forward.
+    const existing = new Map()
+    let pageToken
+    do {
+      const page = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
+        query: {
+          timeMin: `${today}T00:00:00Z`, singleEvents: 'true', maxResults: '250',
+          privateExtendedProperty: 'wiedisync=closure',
+          ...(pageToken ? { pageToken } : {}),
+        },
       })
-    }
-    deleted++
-  }
-  if (foreign) {
-    log.warn({ msg: `gcal-push closures: left ${foreign} event(s) belonging to another environment untouched`, endpoint: 'gcal-sync' })
-  }
+      for (const ev of page.items ?? []) {
+        const k = ev.extendedProperties?.private?.closure_key
+        if (k) existing.set(k, ev)
+      }
+      pageToken = page.nextPageToken
+    } while (pageToken)
 
-  log.info({ msg: `gcal-push closures${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted} (${skippedDuplicate} already on their calendar)`, endpoint: 'gcal-sync' })
-  return { created, updated, deleted, skippedDuplicate, dryRun, eventIds }
+    const dryRun = isDryRun()
+    let created = 0, updated = 0, deleted = 0
+    const eventIds = new Set()
+
+    for (const [key, event] of desired) {
+      const current = existing.get(key)
+      if (!current) {
+        if (!dryRun) {
+          const made = await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events`, {
+            method: 'POST', body: event, query: { sendUpdates: 'none' },
+          })
+          eventIds.add(made.id)
+        }
+        created++
+      } else {
+        eventIds.add(current.id)
+        if (closureNeedsUpdate(current, event)) {
+          if (!dryRun) {
+            await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${current.id}`, {
+              method: 'PATCH', body: event, query: { sendUpdates: 'none' },
+            })
+          }
+          updated++
+        }
+      }
+    }
+
+    // Ours, but no longer wanted — un-ticked, deleted, or now covered by one of
+    // their own entries. Only `wiedisync=closure` events reach this loop.
+    //
+    // ⚠⚠ THIS LOOP IS WHY `GCAL_PUSH_DRY_RUN=true` ON DEV IS LOAD-BEARING, and more
+    // sharply so than for games. There is one production calendar, and the READ
+    // above is never dry — so dev sees the events PROD published. Dev's `desired`
+    // set is built from dev's own `push_to_gcal` flags, which diverge from prod's
+    // the moment anybody toggles one on dev (they only agree just after the 03:00
+    // clone). Every prod-published closure dev does not also have flagged
+    // therefore lands here as a delete. Observed on 2026-08-18: a dev run reported
+    // `-2`, i.e. it would have silently removed both VB U20 Tournament entries
+    // from the hall administration's calendar. Only the dry run stopped it.
+    const me = pushEnv()
+    let foreign = 0
+    for (const [key, event] of existing) {
+      if (desired.has(key)) continue
+      // ⚠⚠ Never delete another ENVIRONMENT's event. `wiedisync=closure` says only
+      // that some wiedisync wrote it; dev and prod share one calendar and their
+      // push_to_gcal flags diverge, so "marked ours but not in my desired set" is
+      // NOT sufficient grounds to remove it. Unstamped events predate this guard
+      // and only prod ever wrote, so prod adopts them (and stamps them on update);
+      // dev leaves them alone. This is the belt to the dry-run's braces — the
+      // failure it prevents is deleting the club's real bookings off the school's
+      // calendar, which nothing would alert us to.
+      if (!mayDelete(event.extendedProperties?.private?.env, me)) { foreign++; continue }
+      if (!dryRun) {
+        await api(`/calendars/${encodeURIComponent(KSCW_CALENDAR_ID)}/events/${event.id}`, {
+          method: 'DELETE', query: { sendUpdates: 'none' },
+        })
+      }
+      deleted++
+    }
+    if (foreign) {
+      log.warn({ msg: `gcal-push closures: left ${foreign} event(s) belonging to another environment untouched`, endpoint: 'gcal-sync' })
+    }
+
+    log.info({ msg: `gcal-push closures${dryRun ? ' (dry run — nothing written)' : ''}: +${created} ~${updated} -${deleted} (${skippedDuplicate} already on their calendar)`, endpoint: 'gcal-sync' })
+    return { created, updated, deleted, skippedDuplicate, dryRun, eventIds }
+  } finally {
+    releasePush('closures', claim)
+  }
 }

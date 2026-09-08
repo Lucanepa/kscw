@@ -596,6 +596,22 @@ async function repostInboundToGroup(database, log, acct) {
 // Per-account run guard so one stuck mailbox never blocks the other.
 const syncRunningFor = new Set()
 
+// In-flight guard for the club-admin GROUP SEND (POST /admin/mailbox/bulk),
+// keyed by account + a hash of the audience and the message. A club-wide run
+// spends more than a minute inside its per-recipient loop and nothing about the
+// request is idempotent, so without this a retried or double-clicked Send mails
+// every recipient a second time. Claimed before the first message goes out,
+// released in the route's `finally`, and it dies with the process — so a
+// crashed run can never wedge an audience out of a later send.
+// Process-local by necessity: no unique constraint on `scheduling_emails` can
+// arbitrate here (message_id is a fresh UUID per run, so ON CONFLICT can never
+// see the duplicate) and this change adds no migration. Directus runs as ONE
+// container, so a process-local set genuinely covers every actor pair — the
+// retrying admin and a second admin alike. It would NOT survive scaling to
+// multiple instances; that needs a claim row behind a partial unique index,
+// the way finance.js does it for the dues send.
+const bulkSendRunningFor = new Set()
+
 // Sync the configured mailbox accounts (INBOX + Sent each). `onlySport` limits
 // the run to one account (a UI "Check now" for the active toggle); omitted (the
 // cron) syncs every configured account. One IMAP login per account, sequential.
@@ -1620,6 +1636,11 @@ export function registerSchedulingMailbox(router, { database, logger }) {
   router.post('/admin/mailbox/bulk', async (req, res) => {
     const acct = pinnedAdmin()
     if (!(await authForAccount(req, acct.sport))) return res.status(403).json({ error: 'Admin only' })
+    // Set once this run owns the in-flight claim; released in the `finally`.
+    let sendKey = null
+    // Hoisted for the catch below: everything inside the try is block-scoped, and a
+    // throw mid-loop must still be able to close out the archive row it created.
+    const archive = { id: null, sent: 0, total: 0 }
     try {
       if (!accountConfigured(acct)) return res.status(409).json({ error: 'Mailbox not configured' })
 
@@ -1752,6 +1773,61 @@ export function registerSchedulingMailbox(router, { database, logger }) {
       }
       if (attachTotal > ATTACH_MAX_TOTAL) return res.status(413).json({ error: 'Attachments exceed total size limit' })
 
+      // Single-shot claim. Everything below actually mails people, and nothing
+      // about the request is idempotent: the same audience posted twice mails
+      // all 671 members twice. The check and the add are one synchronous step
+      // (no await between them), so two overlapping requests cannot both pass.
+      // See `bulkSendRunningFor` for why this is process-local, not DB-arbitrated.
+      sendKey = `${acct.sport}:${crypto.createHash('sha256')
+        .update(`${groupKey}\n${subject}\n${rawHtml}`).digest('hex')}`
+      if (bulkSendRunningFor.has(sendKey)) {
+        sendKey = null // someone else's claim — the `finally` must not release it
+        return res.status(409).json({
+          error: 'A send to this audience is already in progress. It appears in the mailbox history — wait for it to finish before sending again.',
+        })
+      }
+      bulkSendRunningFor.add(sendKey)
+
+      // Archive row FIRST, counts filled in by the UPDATE after the run. It
+      // used to be written only once the whole run was over — more than a
+      // minute for a club-wide send, during which the mailbox history stayed
+      // empty. That reads as "nothing was sent" and is exactly what invites the
+      // operator to press Send again, so the row goes in before the first
+      // message does.
+      const messageId = `<${crypto.randomUUID()}@${acct.msgIdDomain}>`
+      const archiveHtml =
+        `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.5">` +
+        `${bodyContentHtml}</div><br>` + acct.signatureHtml
+      const pendingSummary = `Group send: ${groupKey} (sending to ${recipients.length} recipients…)`
+      // No .onConflict(...).ignore() here: message_id is a fresh UUID so the
+      // clause could never fire, and knex's .ignore() DROPS RETURNING — which
+      // would leave this row without the id the post-run UPDATE needs.
+      const [inserted] = await database('scheduling_emails')
+        .insert({
+          account: acct.sport,
+          message_id: stripBrackets(messageId),
+          direction: 'out',
+          folder: null,
+          imap_uid: null,
+          from_address: acct.fromAddress,
+          from_name: acct.fromName,
+          to_addresses: pendingSummary,
+          cc_addresses: [...ccOnce, ...bccOnce].join(',') || null,
+          subject,
+          body_text: `${pendingSummary}\n\n${plainContent}`,
+          body_html: archiveHtml,
+          has_attachments: attachments.length > 0,
+          attachments: attachments.length
+            ? JSON.stringify(attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, size: a.content.length })))
+            : null,
+          date_sent: new Date().toISOString(),
+          read_at: new Date().toISOString(),
+        })
+        .returning('id')
+      const sentId = inserted?.id ?? inserted ?? null
+      archive.id = sentId
+      archive.total = recipients.length
+
       // One POOLED transport for the whole run, unlike the reply handler's
       // per-send transport: without pooling every message pays a fresh TCP+TLS
       // handshake, which is what turns a 700-recipient send into minutes.
@@ -1795,6 +1871,7 @@ export function registerSchedulingMailbox(router, { database, logger }) {
             headers: { 'List-Unsubscribe': unsubscribe },
           })
           sent++
+          archive.sent = sent
         } catch (err) {
           // One bad address must not abort the run — record and continue.
           errors.push({ email: r.email, error: String(err?.message || err).slice(0, 300) })
@@ -1833,13 +1910,10 @@ export function registerSchedulingMailbox(router, { database, logger }) {
       }
       transport.close()
 
-      // Archive ONE copy in Sent + one scheduling_emails row. Appending N copies
-      // would bury the mailbox under its own outbound mail; the row records the
-      // group and the counts, which is what an operator actually needs later.
-      const messageId = `<${crypto.randomUUID()}@${acct.msgIdDomain}>`
-      const archiveHtml =
-        `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:14px;line-height:1.5">` +
-        `${bodyContentHtml}</div><br>` + acct.signatureHtml
+      // Archive ONE copy in Sent, then finish the scheduling_emails row that was
+      // written before the run. Appending N copies would bury the mailbox under
+      // its own outbound mail; the row records the group and the counts, which
+      // is what an operator actually needs later.
       const toSummary = `Group send: ${groupKey} (${sent} recipients)`
       let folder = null
       let imapUid = null
@@ -1868,31 +1942,14 @@ export function registerSchedulingMailbox(router, { database, logger }) {
         log.warn(`Mailbox group send: sent OK but Sent-folder append failed: ${err.message}`)
       }
 
-      const [inserted] = await database('scheduling_emails')
-        .insert({
-          account: acct.sport,
-          message_id: stripBrackets(messageId),
-          direction: 'out',
+      if (sentId) {
+        await database('scheduling_emails').where({ id: sentId }).update({
           folder,
           imap_uid: imapUid,
-          from_address: acct.fromAddress,
-          from_name: acct.fromName,
           to_addresses: toSummary,
-          cc_addresses: [...ccOnce, ...bccOnce].join(',') || null,
-          subject,
           body_text: `${toSummary}\n\n${plainContent}`,
-          body_html: archiveHtml,
-          has_attachments: attachments.length > 0,
-          attachments: attachments.length
-            ? JSON.stringify(attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, size: a.content.length })))
-            : null,
-          date_sent: new Date().toISOString(),
-          read_at: new Date().toISOString(),
         })
-        .onConflict(['account', 'message_id'])
-        .ignore()
-        .returning('id')
-      const sentId = inserted?.id ?? inserted ?? null
+      }
 
       await writeUserLog(database, log, {
         accountability: req.accountability,
@@ -1920,7 +1977,27 @@ export function registerSchedulingMailbox(router, { database, logger }) {
 
       log.info(`Mailbox group send "${groupKey}": ${sent} sent, ${errors.length} failed (audience ${audienceSize}, cc/bcc ${ccSent})`)
       res.json({ success: true, id: sentId, group: groupKey, audience_size: audienceSize, recipient_count: recipients.length, sent, failed: errors.length, cc_sent: ccSent, skipped, errors: errors.slice(0, 20) })
-    } catch (err) { fail(res, 'mailbox/bulk', err, req) }
+    } catch (err) {
+      // ⚠ The archive row is inserted BEFORE the send loop (so the history shows an
+      // in-progress send and the operator is not misled into retrying). That means a
+      // throw mid-loop would otherwise strand it reading "sending to N recipients…"
+      // for ever — worse than the no-row-at-all it replaced, because the next retry
+      // then leaves two rows for one send. Mark it failed with whatever went out.
+      if (archive.id) {
+        try {
+          await database('scheduling_emails').where({ id: archive.id }).update({
+            body_text: `Send failed after ${archive.sent} of ${archive.total} recipients.`,
+          })
+        } catch (e2) {
+          log.warn(`Mailbox group send: could not mark archive row ${archive.id} as failed: ${e2.message}`)
+        }
+      }
+      fail(res, 'mailbox/bulk', err, req)
+    } finally {
+      // Released whether the run finished, failed or threw: a crashed run must
+      // never lock this audience out of a later send.
+      if (sendKey) bulkSendRunningFor.delete(sendKey)
+    }
   })
 
   // GET .../mailbox/attachment/:id/:index — stream one attachment live from IMAP

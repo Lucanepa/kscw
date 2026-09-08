@@ -27,6 +27,31 @@ const GCAL_IDS = [
   KSCW_CALENDAR_ID,
 ]
 
+// ── In-flight guard for the sync ───────────────────────────────────────
+// `runSync` is one long check-then-act with no transaction around it: it reads
+// the current state (the hall_closures rows in `existKeys`, and the events
+// already on the calendar inside pushHomeGames) and then creates whatever that
+// snapshot says is missing. Nothing arbitrates a second, overlapping run —
+// hall_closures has no unique index on (hall, start_date, end_date) and Google
+// accepts a second identical event without complaint — so two runs that both
+// read the pre-state both write: twin closure rows for one hall+span (the twin
+// then blocks the delete path's NOT EXISTS guard from reinstating trainings),
+// twin fixture events on a calendar the club does not own, and the club-admin
+// change digest mailed twice. The overlapping actors are real and ordinary: the
+// 04:00 UTC cron POSTs this endpoint while an admin presses "Run now" on
+// /admin/status, or two admins press it.
+//
+// The guard is PROCESS-LOCAL on purpose. Closing this in the database would need
+// a schema change (a partial unique index on hall_closures), which is out of
+// scope for this batch. Directus runs as ONE container here, so a module-level
+// claim genuinely covers both actor pairs today. ⚠ It would NOT survive scaling
+// to multiple Directus instances — that needs the index, or an advisory lock
+// taken on a connection pinned for the whole run. It is also crash-safe in the
+// only way that matters: the claim lives in memory and dies with the process,
+// and every exit path releases it in a `finally`.
+const IN_FLIGHT = new Set()
+const SYNC_KEY = 'gcal-sync'
+
 function parseIcsDatetime(str) {
   if (!str) return null
   str = str.trim()
@@ -617,10 +642,24 @@ export function registerGCalSync(router, { database, logger, services, getSchema
 
   router.post('/admin/gcal-sync', async (req, res) => {
     if (!req.accountability?.admin) return res.status(403).json({ error: 'Admin access required' })
+    const trigger = req.get('x-kscw-trigger') === 'cron' ? 'cron' : 'manual'
+    // One run at a time — see IN_FLIGHT at the top of this module for why two
+    // overlapping runs duplicate closures, calendar events and the digest mail.
+    // Claimed BEFORE any work and released in the `finally` below, so a caller
+    // that overlaps is turned away rather than quietly doing the work twice.
+    if (IN_FLIGHT.has(SYNC_KEY)) {
+      log.warn({ msg: `gcal-sync: a sync is already running — this ${trigger} trigger was skipped`, endpoint: 'gcal-sync', trigger })
+      // ⚠ 200, not 409: the nightly cron caller does `if (!res.ok) throw`, so a
+      // deliberate skip would be recorded by logCronError() and paint the "Hall
+      // schedule sync" card red. A skip is a healthy outcome, not a failure —
+      // callers distinguish it on `status`, not on the HTTP code.
+      return res.json({ status: 'skipped', code: 'gcal_sync_running', message: 'A calendar sync is already running' })
+    }
+    IN_FLIGHT.add(SYNC_KEY)
     try {
       log.info('Manual GCal sync triggered')
       const schema = await getSchema()
-      const result = await runSync(database, schema, { trigger: req.get('x-kscw-trigger') === 'cron' ? 'cron' : 'manual' })
+      const result = await runSync(database, schema, { trigger })
       // Writes to a calendar the hall administration reads — record who triggered it.
       await writeUserLog(database, log, {
         accountability: req.accountability,
@@ -633,6 +672,8 @@ export function registerGCalSync(router, { database, logger, services, getSchema
     } catch (err) {
       log.error({ msg: `gcal-sync: ${err.message}`, endpoint: 'gcal-sync', userId: req?.accountability?.user || null, method: req?.method, stack: err.stack })
       res.status(500).json({ error: 'Internal error' })
+    } finally {
+      IN_FLIGHT.delete(SYNC_KEY)
     }
   })
 }
