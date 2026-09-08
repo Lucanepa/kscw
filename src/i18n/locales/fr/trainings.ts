@@ -1,4 +1,6 @@
 export default {
+  /** Migration 354: trainings_hall_slot_date_uq rejected a concurrent create. */
+  duplicateSlotDate: 'Un entraînement existe déjà pour ce créneau de salle à cette date. Actualise et réessaie — quelqu\'un vient peut-être de le créer.',
   title: 'Entrainements',
   subtitle: 'Apercu des entrainements avec suivi des presences',
 

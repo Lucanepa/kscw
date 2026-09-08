@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isDuplicateSlotTraining } from '../../utils/isDuplicateSlotTraining'
 import Modal from '@/components/Modal'
 import LocationCombobox from '@/components/LocationCombobox'
 import { useAuth } from '../../hooks/useAuth'
@@ -428,8 +429,12 @@ export default function TrainingForm({ open, training, editScope = 'this', defau
         await create(data)
       }
       onSave()
-    } catch {
-      setError(tc('errorSaving'))
+    } catch (err) {
+      // Migration 354 added trainings_hall_slot_date_uq, so a concurrent create in
+      // the same slot on the same day now fails here instead of silently making a
+      // duplicate. Say which conflict it is — "Error saving" gives the coach
+      // nothing to act on.
+      setError(isDuplicateSlotTraining(err) ? t('duplicateSlotDate') : tc('errorSaving'))
     } finally {
       setIsLoading(false)
     }
