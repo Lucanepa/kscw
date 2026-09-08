@@ -694,6 +694,9 @@ export default {
   dhStepHintGroups: 'Writes the missing and stale group allocations into ClubDesk. Preview first, then commit.',
   // The live bar and log, shared by all three ClubDesk jobs.
   dhJobStarting: 'Starting…',
+  // ⚠ Queued ≠ running: the host dispatcher is a once-a-minute cron, so this is the
+  // honest reading of the first sixty seconds.
+  dhJobQueued: 'Queued — the sync starts within a minute',
   dhJobIdle: 'Not running',
   dhJobLogLabel: 'Sync log',
   dhSportFilter: 'Sport',

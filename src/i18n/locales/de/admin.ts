@@ -690,6 +690,7 @@ export default {
   dhStepHintDown2: 'Nach einem Push nötig: Ein neuer Kontakt bekommt erst hier seine ClubDesk-ID — und die Verknüpfung zurück nach wiedisync.',
   dhStepHintGroups: 'Schreibt fehlende und veraltete Gruppenzuteilungen nach ClubDesk. Zuerst Vorschau, dann übernehmen.',
   dhJobStarting: 'Startet…',
+  dhJobQueued: 'In der Warteschlange — der Sync startet innert einer Minute',
   dhJobIdle: 'Läuft nicht',
   dhJobLogLabel: 'Sync-Protokoll',
   dhSportFilter: 'Sportart',

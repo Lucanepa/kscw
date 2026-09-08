@@ -419,7 +419,11 @@ export default function ClubdeskSyncPath({
   const downJob: JobProgress = {
     running: running || foreignDown,
     progress: lock.progress,
-    phase: lock.phase,
+    // ⚠ A queued job has not STARTED — the host dispatcher is a once-a-minute cron,
+    // so for up to 60 seconds there is nothing to report and the bar showed a
+    // wordless "Starting…" that looked like a hang (asked as "so where do i see the
+    // progress?", 08.09.2026). Waiting for a cron tick is a fact worth saying.
+    phase: lock.phase || (lock.down === 'queued' ? t('dhJobQueued') : null),
     log: lock.log,
     error: lock.message
       ? `${t(SYNC_FAILURE_KEY[classifySyncFailure(lock.message)])} — ${lock.message}`
