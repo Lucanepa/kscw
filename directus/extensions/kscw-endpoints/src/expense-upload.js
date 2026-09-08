@@ -407,6 +407,9 @@ export function registerExpenseUpload(router, { database, logger, services, getS
       // of its migration — the 2026-06-19 failure mode), so submit never fully
       // regresses to a 500.
       let expenseId = null
+      // Set when this submit lost the race for the receipt file and resolved to
+      // the claim an earlier request had already created (see the 23505 branch).
+      let duplicateOfExisting = false
       if (member) {
         try {
           const [inserted] = await database('finance_expenses')
@@ -429,7 +432,39 @@ export function registerExpenseUpload(router, { database, logger, services, getS
             .returning('id')
           expenseId = typeof inserted === 'object' ? inserted.id : inserted
         } catch (insErr) {
-          log.error(`expense submit: persist failed (${insErr.message}) — email-only fallback`)
+          // One receipt file backs exactly one claim — enforced by the partial
+          // UNIQUE finance_expenses_file_uq (migration 354). The submit is not
+          // idempotent on its own: the row commits BEFORE the SES round-trip, so
+          // a response lost in that window (phone flipping wifi → cellular, a
+          // tunnel hiccup) shows the member a generic error over an
+          // already-persisted claim, and pressing Submit again used to mint a
+          // second identical pending row — a receipt the treasurer can pay twice,
+          // plus a second copy of the PDF mailed to finance.
+          //
+          // The index arbitrates, not a SELECT-then-INSERT (which has the very
+          // race it would be guarding). Deliberately NOT
+          // `.onConflict('file').ignore()`: that form drops RETURNING, so the
+          // insert reports zero rows and a swallowed duplicate is indistinguishable
+          // from a genuine failure.
+          if (insErr?.code === '23505') {
+            // Scoped to the member too: a claim on someone else's receipt is not
+            // ours to hand back (unreachable today — loadFile only resolves files
+            // the caller uploaded — so treat a miss as the fallback below).
+            const existing = await database('finance_expenses')
+              .where({ file: fileId, member: member.id })
+              .first('id')
+            if (existing) {
+              // The claim exists either way, so the retry gets the same answer the
+              // first request got — same id, no second row, no second finance mail.
+              expenseId = existing.id
+              duplicateOfExisting = true
+              log.warn(`expense submit: duplicate submit for file ${fileId} — returning existing claim ${expenseId}, no second row and no second finance mail`)
+            } else {
+              log.error(`expense submit: file ${fileId} is already claimed by another expense — email-only fallback`)
+            }
+          } else {
+            log.error(`expense submit: persist failed (${insErr.message}) — email-only fallback`)
+          }
         }
       } else {
         log.warn(`expense submit: no members row for user ${userId} — email-only fallback`)
@@ -461,30 +496,38 @@ export function registerExpenseUpload(router, { database, logger, services, getS
       // once the row is saved — that's what made a retry create a duplicate row.
       // Email-only fallback (no row) keeps the mail failure fatal so the member
       // isn't told "sent" when nothing was delivered.
-      try {
-        const schema = await getSchema()
-        const { MailService } = services
-        const mail = new MailService({ schema, knex: database })
-        // Inbox stays as archive; the treasurer's real address(es) ride as direct
-        // recipients so the reimbursement actually lands (see FINANCE_NOTIFY_EMAILS).
-        const financeTo = [...new Set([
-          FINANCE_INBOX_EMAIL.toLowerCase(),
-          ...FINANCE_NOTIFY_EMAILS,
-        ])].join(', ')
-        await mail.send({
-          to: financeTo,
-          ...(submitterEmail ? { cc: submitterEmail } : {}),
-          subject: `Spesen / expense — ${submitterName} — ${fmtAmount}`,
-          html,
-          attachments: [{
-            filename: row.filename_download || 'receipt',
-            content: bytes,
-            contentType: row.type,
-          }],
-        })
-      } catch (mailErr) {
-        if (!expenseId) throw mailErr
-        log.error(`expense submit: finance email failed (${mailErr.message}) — row ${expenseId} persisted, continuing`)
+      // A submit that resolved to an existing claim must not mail the treasurer a
+      // second copy of the same receipt PDF (and cc the member again) — that
+      // duplicate delivery is the certain harm of the double submit, and the first
+      // request already sent it.
+      if (duplicateOfExisting) {
+        log.info(`expense submit: finance email skipped — duplicate of claim ${expenseId}, already mailed`)
+      } else {
+        try {
+          const schema = await getSchema()
+          const { MailService } = services
+          const mail = new MailService({ schema, knex: database })
+          // Inbox stays as archive; the treasurer's real address(es) ride as direct
+          // recipients so the reimbursement actually lands (see FINANCE_NOTIFY_EMAILS).
+          const financeTo = [...new Set([
+            FINANCE_INBOX_EMAIL.toLowerCase(),
+            ...FINANCE_NOTIFY_EMAILS,
+          ])].join(', ')
+          await mail.send({
+            to: financeTo,
+            ...(submitterEmail ? { cc: submitterEmail } : {}),
+            subject: `Spesen / expense — ${submitterName} — ${fmtAmount}`,
+            html,
+            attachments: [{
+              filename: row.filename_download || 'receipt',
+              content: bytes,
+              contentType: row.type,
+            }],
+          })
+        } catch (mailErr) {
+          if (!expenseId) throw mailErr
+          log.error(`expense submit: finance email failed (${mailErr.message}) — row ${expenseId} persisted, continuing`)
+        }
       }
 
       // Actor capture: this is a "send" mutation (CLAUDE.md audit rule).
@@ -493,11 +536,11 @@ export function registerExpenseUpload(router, { database, logger, services, getS
         action: 'submit_expense',
         collection: expenseId ? 'finance_expenses' : 'directus_files',
         recordId: expenseId ?? fileId,
-        data: { amount: Number(amount), currency, date, vendor },
+        data: { amount: Number(amount), currency, date, vendor, ...(duplicateOfExisting ? { duplicate_of_existing: true } : {}) },
       })
 
       log.info(`Expense submitted by member ${member?.id ?? '?'} (${fmtAmount})`)
-      res.json({ success: true, id: expenseId })
+      res.json({ success: true, id: expenseId, ...(duplicateOfExisting ? { duplicate: true } : {}) })
     } catch (err) {
       log.error({ msg: `expense submit: ${err.message}`, stack: err.stack })
       res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal error' })

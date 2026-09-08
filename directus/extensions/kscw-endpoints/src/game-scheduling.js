@@ -5,6 +5,7 @@
  */
 
 import crypto from 'crypto'
+import { claimVmAccount, vmAccountHeldBy } from './vm-account-lock.js'
 import nodemailer from 'nodemailer'
 import MailComposer from 'nodemailer/lib/mail-composer/index.js'
 import { SCHEDULING_URL, buildEmailLayout, buildInfoCard, escHtml } from './email-template.js'
@@ -467,6 +468,26 @@ export function registerGameScheduling(router, { database, logger, services, get
   // so the gap + Saturday-cap checks can't be raced (the per-slot FOR UPDATE
   // only guards the same slot row). Arbitrary constant, unused elsewhere.
   const GSCH_BOOK_LOCK_CLASS = 920601
+
+  // Advisory-lock namespace (classid) for season-wide slot REGENERATION.
+  // generate-slots deletes every `available` slot in a season and rebuilds it,
+  // while propose-home writes a booking pointing at three of those slots after a
+  // long unserialised validation pass. Unordered, a regeneration starting
+  // mid-proposal deletes the picked slots and its own orphan sweep then deletes
+  // the brand-new booking — after the opponent club already got its "picks
+  // recorded" receipt. Both sides take pg_advisory_xact_lock(GSCH_GEN_LOCK_CLASS,
+  // season), so only the two clean orderings remain. Keyed on the SEASON, so two
+  // seasons never block each other; transaction-scoped, so a crashed or restarted
+  // container releases it automatically — there is no claim to reclaim by hand.
+  const GSCH_GEN_LOCK_CLASS = 920602
+
+  // Advisory-lock namespace for opponent-INVITE creation. Both writers
+  // (POST /admin/terminplanung/invites and .../invites/ensure-from-svrz) dedupe by
+  // normalised opponent team name with a SELECT-then-INSERT, and
+  // game_scheduling_opponents has no unique index behind it — so two concurrent
+  // callers both miss and both insert, mailing the opponent club two different
+  // scheduling links. Keyed on kscw_team: different teams never block each other.
+  const GSCH_INVITE_LOCK_CLASS = 920603
 
   // Dates (YYYY-MM-DD) the KSCW team is already committed to play — real SVRZ
   // games, home slots an opponent has already booked, and confirmed away
@@ -2702,43 +2723,81 @@ export function registerGameScheduling(router, { database, logger, services, get
       const priorHome = allHome
         .filter((b) => bookingMatchesFixture(b, target) && b.status === 'pending')
         .map((b) => b.id)
-      if (priorHome.length > 0) {
-        await database('game_scheduling_bookings').where('id', priorHome[0]).update({
-          season: opponent.season,
-          svrz_game_id: target.fixtureId,
-          proposed_slot_1: ids[0] ?? null,
-          proposed_slot_2: ids[1] ?? null,
-          proposed_slot_3: ids[2] ?? null,
-          proposed_by_name: proposer.name,
-          proposed_by_email: proposer.email,
-          confirmed_proposal: null,
-          slot: null,
-        })
-        if (priorHome.length > 1) {
-          await database('game_scheduling_bookings').whereIn('id', priorHome.slice(1)).del()
+      // ⚠ Concurrency: the per-slot validation above ran on the bare handle across
+      // ~15 sequential round trips, and slots are not reserved on proposal. Two
+      // things could land inside that window. (1) generate-slots deletes every
+      // `available` slot in the season and then sweeps pending proposals whose slots
+      // are all gone — so this booking was written against dead slot ids and then
+      // deleted outright, after the club had already been mailed its receipt and the
+      // opponent flipped to 'booked' with no booking behind it. (2) confirm-home may
+      // have confirmed this very fixture, and the in-place update below would blank
+      // its `slot`/`confirmed_proposal` back to NULL while leaving status='confirmed'.
+      // Close both by re-checking the picks and writing inside ONE transaction that
+      // holds the SAME season advisory lock generate-slots takes, and by re-asserting
+      // status='pending' on the in-place update. The loser now fails loudly at the
+      // opponent (409, pick again) instead of losing its proposal in silence. The
+      // emails stay outside the transaction; the lock is transaction-scoped, so a
+      // crash mid-write releases it and rolls the partial write back.
+      let raceError = null
+      await database.transaction(async (trx) => {
+        await trx.raw('SELECT pg_advisory_xact_lock(?, ?)', [GSCH_GEN_LOCK_CLASS, Number(opponent.season) || 0])
+        const liveSlots = await trx('game_scheduling_slots')
+          .whereIn('id', ids).forUpdate().select('id', 'status')
+        const liveById = new Map(liveSlots.map((s) => [Number(s.id), s]))
+        for (let i = 0; i < ids.length; i++) {
+          const live = liveById.get(ids[i])
+          if (!live || live.status !== 'available') {
+            raceError = `Slot ${i + 1} is no longer available — please pick another.`
+            return
+          }
         }
-      } else {
-        await database('game_scheduling_bookings').insert({
-          opponent: opponent.id,
-          season: opponent.season,
-          type: 'home_slot_pick',
-          status: 'pending',
-          svrz_game_id: target.fixtureId,
-          proposed_slot_1: ids[0] ?? null,
-          proposed_slot_2: ids[1] ?? null,
-          proposed_slot_3: ids[2] ?? null,
-          proposed_by_name: proposer.name,
-          proposed_by_email: proposer.email,
-        })
-      }
+        if (priorHome.length > 0) {
+          const replaced = await trx('game_scheduling_bookings')
+            .where({ id: priorHome[0], status: 'pending' })
+            .update({
+              season: opponent.season,
+              svrz_game_id: target.fixtureId,
+              proposed_slot_1: ids[0] ?? null,
+              proposed_slot_2: ids[1] ?? null,
+              proposed_slot_3: ids[2] ?? null,
+              proposed_by_name: proposer.name,
+              proposed_by_email: proposer.email,
+              confirmed_proposal: null,
+              slot: null,
+            })
+          if (replaced !== 1) {
+            raceError = 'This game was confirmed while you were picking — please reload the page.'
+            return
+          }
+          if (priorHome.length > 1) {
+            await trx('game_scheduling_bookings').whereIn('id', priorHome.slice(1)).where('status', 'pending').del()
+          }
+        } else {
+          await trx('game_scheduling_bookings').insert({
+            opponent: opponent.id,
+            season: opponent.season,
+            type: 'home_slot_pick',
+            status: 'pending',
+            svrz_game_id: target.fixtureId,
+            proposed_slot_1: ids[0] ?? null,
+            proposed_slot_2: ids[1] ?? null,
+            proposed_slot_3: ids[2] ?? null,
+            proposed_by_name: proposer.name,
+            proposed_by_email: proposer.email,
+          })
+        }
 
-      await database('game_scheduling_opponents')
-        .where('id', opponent.id)
-        .whereIn('status', ['invited', 'viewed'])
-        .update({ status: 'booked' })
-      // Fresh proposals clear any pending "pick new slots" re-request flag.
-      await database('game_scheduling_opponents')
-        .where('id', opponent.id).update({ new_slots_requested_at: null })
+        await trx('game_scheduling_opponents')
+          .where('id', opponent.id)
+          .whereIn('status', ['invited', 'viewed'])
+          .update({ status: 'booked' })
+        // Fresh proposals clear any pending "pick new slots" re-request flag.
+        await trx('game_scheduling_opponents')
+          .where('id', opponent.id).update({ new_slots_requested_at: null })
+      })
+      // Nothing was written when a race was detected (the checks precede every
+      // write), so the commit above is a no-op and this is a clean rejection.
+      if (raceError) return res.status(409).json({ error: raceError })
 
       // Receipt to the opponent (their language) + KSCW notify. Best-effort.
       try {
@@ -2824,6 +2883,26 @@ export function registerGameScheduling(router, { database, logger, services, get
         if (slot.kscw_team !== opponent.kscw_team) {
           throw Object.assign(new Error('Slot does not belong to this team'), { httpStatus: 400 })
         }
+        // ⚠ Concurrency: the `status !== 'pending'` check above ran on the outer
+        // handle BEFORE this lock, so two planners (or one in two tabs) confirming two
+        // DIFFERENT proposals of the same booking both pass it. The advisory lock
+        // serialises them but re-validates nothing, and the FOR UPDATE above covers
+        // only the chosen slot — a different row for each proposal — so the loser used
+        // to book its own slot and overwrite the booking, leaving the winner's slot
+        // `booked` with nothing referencing it: unreclaimable (delete-booking frees
+        // only booking.slot, block-slot refuses a booked slot) and withheld from the
+        // offer pool for the rest of the season. Re-read the booking under the lock.
+        // ⚠ Order matters: the slot row is locked FIRST, above. Every handler in this
+        // file that touches both takes slots before bookings (delete-booking,
+        // manual-booking, generate-slots) — re-reading the booking earlier would
+        // invert that pair and open a deadlock window against generate-slots.
+        const freshBooking = await trx('game_scheduling_bookings').where('id', booking_id).forUpdate().first()
+        if (!freshBooking || freshBooking.status !== 'pending') {
+          throw Object.assign(new Error('This proposal is already confirmed'), { httpStatus: 409 })
+        }
+        if (Number(freshBooking[`proposed_slot_${n}`]) !== Number(slotId)) {
+          throw Object.assign(new Error('This proposal changed while you were confirming — reload the dashboard.'), { httpStatus: 409 })
+        }
         const slotYmd = (typeof slot.date === 'string' ? slot.date : new Date(slot.date).toISOString()).slice(0, 10)
 
         const eventCover = await trx('events as e')
@@ -2901,15 +2980,24 @@ export function registerGameScheduling(router, { database, logger, services, get
           throw Object.assign(new Error(`Cross-team conflict: ${names.join(', ')} already play that day`), { httpStatus: 400 })
         }
 
-        await trx('game_scheduling_bookings').where('id', booking_id).update({
-          status: 'confirmed',
-          confirmed_proposal: n,
-          slot: slotId,
-          admin_notes: admin_notes || booking.admin_notes || null,
-          confirmed_by_name: actor.name,
-          confirmed_by_email: actor.email,
-          confirmed_at: trx.fn.now(),
-        })
+        // Conditional write used as the final arbiter: act only when this UPDATE
+        // matched the row we validated. Redundant with the FOR UPDATE re-read above
+        // by design — it keeps the "a confirmed booking is never re-confirmed"
+        // guarantee local to the statement that would break it.
+        const bookingUpdated = await trx('game_scheduling_bookings')
+          .where({ id: booking_id, status: 'pending' })
+          .update({
+            status: 'confirmed',
+            confirmed_proposal: n,
+            slot: slotId,
+            admin_notes: admin_notes || booking.admin_notes || null,
+            confirmed_by_name: actor.name,
+            confirmed_by_email: actor.email,
+            confirmed_at: trx.fn.now(),
+          })
+        if (bookingUpdated !== 1) {
+          throw Object.assign(new Error('This proposal is already confirmed'), { httpStatus: 409 })
+        }
         await trx('game_scheduling_slots').where('id', slotId).update({ status: 'booked' })
       })
 
@@ -3565,357 +3653,378 @@ export function registerGameScheduling(router, { database, logger, services, get
       const teamConfig = parseJson(season.team_slot_config, {})
       const seasonKey = Number(season_id)
 
-      // "Overwrites not-yet-booked slots": drop existing available slots for the
-      // season before regenerating. Booked + blocked rows are preserved — AND so
-      // are slots a PENDING home proposal points to, otherwise regenerating mints
-      // new slot ids and orphans the proposal (confirm then 400s "Slot is no
-      // longer available"). The clash check below skips re-creating a duplicate.
-      const heldRows = await database('game_scheduling_bookings')
-        .where('season', seasonKey).where('type', 'home_slot_pick').where('status', 'pending')
-        .select('proposed_slot_1', 'proposed_slot_2', 'proposed_slot_3')
-      const heldSlotIds = [...new Set(
-        heldRows.flatMap((r) => [r.proposed_slot_1, r.proposed_slot_2, r.proposed_slot_3]).filter((v) => v != null),
-      )]
-      await database('game_scheduling_slots')
-        .where('season', seasonKey).where('status', 'available')
-        .modify((q) => { if (heldSlotIds.length) q.whereNotIn('id', heldSlotIds) })
-        .del()
+      // ⚠ Concurrency: the DELETE below, the per-team clash check and the chunked
+      // INSERTs are one logical operation, and they ran on the bare handle. Two
+      // overlapping regenerations (two spielplaner, or one reload after this endpoint
+      // appears to hang — Node does not abort the first handler on client disconnect)
+      // each deleted, each then read a clash set that did not yet contain the other's
+      // rows, and each inserted the full candidate set: every offer listed twice in
+      // the opponent's picker. Worse, a regeneration overlapping an opponent's
+      // propose-home deleted the three slots that proposal points at and then swept
+      // the proposal itself as an orphan, silently, after the club had already been
+      // sent its receipt. One transaction holding a SEASON-scoped advisory lock fixes
+      // both: propose-home takes the same lock, so the two orderings are the only two
+      // possible (regenerate first → the opponent gets a loud "slot no longer
+      // available"; propose first → its slots are in heldRows and survive). The
+      // transaction also means a throw mid-loop rolls the DELETE back instead of
+      // leaving the season with no offers at all. Different seasons never block each
+      // other, and the lock dies with the transaction, so a crash strands nothing.
+      const { total_created, orphans_deleted } = await database.transaction(async (trx) => {
+        await trx.raw('SELECT pg_advisory_xact_lock(?, ?)', [GSCH_GEN_LOCK_CLASS, seasonKey])
+        // "Overwrites not-yet-booked slots": drop existing available slots for the
+        // season before regenerating. Booked + blocked rows are preserved — AND so
+        // are slots a PENDING home proposal points to, otherwise regenerating mints
+        // new slot ids and orphans the proposal (confirm then 400s "Slot is no
+        // longer available"). The clash check below skips re-creating a duplicate.
+        const heldRows = await trx('game_scheduling_bookings')
+          .where('season', seasonKey).where('type', 'home_slot_pick').where('status', 'pending')
+          .select('proposed_slot_1', 'proposed_slot_2', 'proposed_slot_3')
+        const heldSlotIds = [...new Set(
+          heldRows.flatMap((r) => [r.proposed_slot_1, r.proposed_slot_2, r.proposed_slot_3]).filter((v) => v != null),
+        )]
+        await trx('game_scheduling_slots')
+          .where('season', seasonKey).where('status', 'available')
+          .modify((q) => { if (heldSlotIds.length) q.whereNotIn('id', heldSlotIds) })
+          .del()
 
-      const addHours = (hhmm, hrs) => {
-        const [h, m] = String(hhmm).split(':').map(Number)
-        const d = new Date(Date.UTC(2000, 0, 1, h || 0, m || 0))
-        d.setUTCHours(d.getUTCHours() + hrs)
-        return d.toISOString().slice(11, 16)
-      }
-
-      // Evening (hall_slot) mode repeats weekly across the season offer window —
-      // configurable via season_opens/season_closes (migration 108), else
-      // Sep 1 (first year) → Mar 31 (second year) derived from the season name
-      // (e.g. "2026/27"). Generation is bounded to it so no slot is ever created
-      // outside the window (the offer queries also re-filter, belt and braces).
-      const ow = seasonOfferWindow(season)
-      const eveningWindow = ow
-        ? { start: new Date(`${ow.start}T00:00:00Z`), end: new Date(`${ow.end}T00:00:00Z`) }
-        : null
-
-      // Club-wide Spielhalle pool: the shared game-hall slots (label
-      // 'Spielhalle', no team assigned — KWI A/B on Friday). Any team without
-      // its own 21:30 Döltschi/KWI slot falls back to these.
-      const spielhalleSlots = await database('hall_slots')
-        .whereRaw("LOWER(label) = 'spielhalle'")
-        .select('day_of_week', 'start_time', 'end_time', 'hall')
-
-      // Shared VOLLEYBALL Döltschi pool: the Under teams take each other's
-      // Tuesday Döltschi slots. Volleyball only — the BB Döltschi slots stay out.
-      const doltschiVbPool = await database('hall_slots')
-        .join('halls', 'hall_slots.hall', 'halls.id')
-        .where('hall_slots.sport', 'volleyball')
-        .whereRaw("(LOWER(halls.name) LIKE '%döltschi%' OR LOWER(halls.name) LIKE '%doltschi%')")
-        .select('hall_slots.day_of_week', 'hall_slots.start_time', 'hall_slots.end_time', 'hall_slots.hall')
-
-      // KWI game halls — used for junior Sunday slots (rule A2/C1). Juniors may
-      // play home games on any Sunday; the times are fixed.
-      const kwiHalls = await database('halls')
-        .whereRaw("LOWER(name) LIKE '%kwi%'").orderBy('name').select('id')
-      const SUNDAY_TIMES = ['11:00', '13:00', '15:00']
-
-      // Teams excluded from Terminplanung entirely (no league fixtures to
-      // schedule) — mirrors SCHEDULING_EXCLUDED_TEAM_NAMES in the frontend
-      // (src/modules/gameScheduling/utils/schedulableTeams.ts). No slots generated.
-      const SCHEDULING_EXCLUDED_TEAM_NAMES = ['MiniVB', 'DU20']
-      const teams = await database('teams')
-        .where('sport', 'volleyball').where('active', true)
-        .whereNotIn('name', SCHEDULING_EXCLUDED_TEAM_NAMES).select('id', 'name')
-
-      // B1/B2 — Friday gym split with basketball. Until the October vacation
-      // (Herbstferien) volleyball uses both halls every Friday. After it, Fridays
-      // alternate VB / BB, so VB only gets every other Friday. Parity (documented):
-      // the first Friday on/after Herbstferien end is a VB Friday. If no
-      // Herbstferien closure is found, keep the pre-vacation behaviour (all Fridays).
-      let herbstStart = null
-      let herbstEndExclusive = null // first open day after the vacation
-      if (eveningWindow) {
-        const herbst = await database('hall_closures')
-          .where('source', 'school_holidays')
-          .whereRaw("LOWER(reason) LIKE '%herbst%'")
-          .andWhere('end_date', '>=', eveningWindow.start)
-          .andWhere('start_date', '<=', eveningWindow.end)
-          .select(database.raw('MIN(start_date)::text as s'), database.raw('MAX(end_date)::text as e'))
-          .first()
-        if (herbst?.s) herbstStart = new Date(`${herbst.s.slice(0, 10)}T00:00:00Z`)
-        if (herbst?.e) herbstEndExclusive = new Date(`${herbst.e.slice(0, 10)}T00:00:00Z`)
-      }
-      // The reference VB Friday after the vacation = the first Friday on/after the
-      // first open day. Used to compute alternating-week parity.
-      let firstPostHerbstFriday = null
-      if (herbstEndExclusive) {
-        const d = new Date(herbstEndExclusive)
-        while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() + 1)
-        firstPostHerbstFriday = d
-      }
-      // Smart alternating: VB shares post-vacation Fridays 50/50 with basketball
-      // (the gym is VB or BB on a given Friday, club-wide — can't differ per team).
-      // Of the two every-other-Friday parities, pick the one that leaves the
-      // WORST-AFFECTED Friday team with the fewest absence-hit VB Fridays — i.e.
-      // protect the team that has the most absences on its Friday slots (minimax),
-      // tie → fewest overall. Only NON-junior teams without their own KWI evening
-      // slot count here: those genuinely depend on the Friday Spielhalle as a home
-      // option. Juniors are excluded — Friday Spielhalle is a low-priority fallback
-      // for them (their priority is own slot / Spielsamstag / Döltschi / Sunday),
-      // so their Friday absences shouldn't drive the offset. Strict alternation is
-      // preserved; only the offset is chosen.
-      let vbFridaySet = null
-      if (eveningWindow && herbstStart && firstPostHerbstFriday) {
-        const teamsWithOwnSlot = new Set(
-          await database('hall_slots')
-            .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
-            .join('halls', 'hall_slots.hall', 'halls.id')
-            .whereRaw("hall_slots.end_time::text LIKE '21:30%'")
-            .whereRaw("LOWER(halls.name) LIKE '%kwi%'")
-            .distinct('hall_slots_teams.teams_id')
-            .pluck('hall_slots_teams.teams_id'),
-        )
-        const fridayTeamIds = teams
-          .filter((tm) => !isJuniorTeam(tm.name) && !teamsWithOwnSlot.has(tm.id))
-          .map((tm) => tm.id)
-        const absRows = fridayTeamIds.length
-          ? await database('absences as a')
-              .join('member_teams as mt', 'mt.member', 'a.member')
-              .whereIn('mt.team', fridayTeamIds)
-              .where(function () { this.where('mt.guest_level', 0).orWhereNull('mt.guest_level') })
-              .whereRaw("a.type IS DISTINCT FROM 'weekly'")
-              .whereRaw('a.blocking IS NOT FALSE')
-              .whereRaw("(a.affects::jsonb @> '\"all\"' OR a.affects::jsonb @> '\"games\"')")
-              .where('a.end_date', '>=', eveningWindow.start)
-              .where('a.start_date', '<=', eveningWindow.end)
-              .select(database.raw('mt.team as team'), database.raw('a.start_date::date::text as s'), database.raw('a.end_date::date::text as e'))
-          : []
-        const fridays = []
-        for (const d = new Date(firstPostHerbstFriday); d <= eveningWindow.end; d.setUTCDate(d.getUTCDate() + 7)) {
-          fridays.push(d.toISOString().slice(0, 10))
+        const addHours = (hhmm, hrs) => {
+          const [h, m] = String(hhmm).split(':').map(Number)
+          const d = new Date(Date.UTC(2000, 0, 1, h || 0, m || 0))
+          d.setUTCHours(d.getUTCHours() + hrs)
+          return d.toISOString().slice(11, 16)
         }
-        // Which teams have a game-affecting absence on each Friday.
-        const teamsAbsentOn = new Map()
-        for (const r of absRows) {
-          for (const f of fridays) {
-            if (r.s <= f && f <= r.e) {
-              if (!teamsAbsentOn.has(f)) teamsAbsentOn.set(f, new Set())
-              teamsAbsentOn.get(f).add(r.team)
+
+        // Evening (hall_slot) mode repeats weekly across the season offer window —
+        // configurable via season_opens/season_closes (migration 108), else
+        // Sep 1 (first year) → Mar 31 (second year) derived from the season name
+        // (e.g. "2026/27"). Generation is bounded to it so no slot is ever created
+        // outside the window (the offer queries also re-filter, belt and braces).
+        const ow = seasonOfferWindow(season)
+        const eveningWindow = ow
+          ? { start: new Date(`${ow.start}T00:00:00Z`), end: new Date(`${ow.end}T00:00:00Z`) }
+          : null
+
+        // Club-wide Spielhalle pool: the shared game-hall slots (label
+        // 'Spielhalle', no team assigned — KWI A/B on Friday). Any team without
+        // its own 21:30 Döltschi/KWI slot falls back to these.
+        const spielhalleSlots = await trx('hall_slots')
+          .whereRaw("LOWER(label) = 'spielhalle'")
+          .select('day_of_week', 'start_time', 'end_time', 'hall')
+
+        // Shared VOLLEYBALL Döltschi pool: the Under teams take each other's
+        // Tuesday Döltschi slots. Volleyball only — the BB Döltschi slots stay out.
+        const doltschiVbPool = await trx('hall_slots')
+          .join('halls', 'hall_slots.hall', 'halls.id')
+          .where('hall_slots.sport', 'volleyball')
+          .whereRaw("(LOWER(halls.name) LIKE '%döltschi%' OR LOWER(halls.name) LIKE '%doltschi%')")
+          .select('hall_slots.day_of_week', 'hall_slots.start_time', 'hall_slots.end_time', 'hall_slots.hall')
+
+        // KWI game halls — used for junior Sunday slots (rule A2/C1). Juniors may
+        // play home games on any Sunday; the times are fixed.
+        const kwiHalls = await trx('halls')
+          .whereRaw("LOWER(name) LIKE '%kwi%'").orderBy('name').select('id')
+        const SUNDAY_TIMES = ['11:00', '13:00', '15:00']
+
+        // Teams excluded from Terminplanung entirely (no league fixtures to
+        // schedule) — mirrors SCHEDULING_EXCLUDED_TEAM_NAMES in the frontend
+        // (src/modules/gameScheduling/utils/schedulableTeams.ts). No slots generated.
+        const SCHEDULING_EXCLUDED_TEAM_NAMES = ['MiniVB', 'DU20']
+        const teams = await trx('teams')
+          .where('sport', 'volleyball').where('active', true)
+          .whereNotIn('name', SCHEDULING_EXCLUDED_TEAM_NAMES).select('id', 'name')
+
+        // B1/B2 — Friday gym split with basketball. Until the October vacation
+        // (Herbstferien) volleyball uses both halls every Friday. After it, Fridays
+        // alternate VB / BB, so VB only gets every other Friday. Parity (documented):
+        // the first Friday on/after Herbstferien end is a VB Friday. If no
+        // Herbstferien closure is found, keep the pre-vacation behaviour (all Fridays).
+        let herbstStart = null
+        let herbstEndExclusive = null // first open day after the vacation
+        if (eveningWindow) {
+          const herbst = await trx('hall_closures')
+            .where('source', 'school_holidays')
+            .whereRaw("LOWER(reason) LIKE '%herbst%'")
+            .andWhere('end_date', '>=', eveningWindow.start)
+            .andWhere('start_date', '<=', eveningWindow.end)
+            .select(trx.raw('MIN(start_date)::text as s'), trx.raw('MAX(end_date)::text as e'))
+            .first()
+          if (herbst?.s) herbstStart = new Date(`${herbst.s.slice(0, 10)}T00:00:00Z`)
+          if (herbst?.e) herbstEndExclusive = new Date(`${herbst.e.slice(0, 10)}T00:00:00Z`)
+        }
+        // The reference VB Friday after the vacation = the first Friday on/after the
+        // first open day. Used to compute alternating-week parity.
+        let firstPostHerbstFriday = null
+        if (herbstEndExclusive) {
+          const d = new Date(herbstEndExclusive)
+          while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() + 1)
+          firstPostHerbstFriday = d
+        }
+        // Smart alternating: VB shares post-vacation Fridays 50/50 with basketball
+        // (the gym is VB or BB on a given Friday, club-wide — can't differ per team).
+        // Of the two every-other-Friday parities, pick the one that leaves the
+        // WORST-AFFECTED Friday team with the fewest absence-hit VB Fridays — i.e.
+        // protect the team that has the most absences on its Friday slots (minimax),
+        // tie → fewest overall. Only NON-junior teams without their own KWI evening
+        // slot count here: those genuinely depend on the Friday Spielhalle as a home
+        // option. Juniors are excluded — Friday Spielhalle is a low-priority fallback
+        // for them (their priority is own slot / Spielsamstag / Döltschi / Sunday),
+        // so their Friday absences shouldn't drive the offset. Strict alternation is
+        // preserved; only the offset is chosen.
+        let vbFridaySet = null
+        if (eveningWindow && herbstStart && firstPostHerbstFriday) {
+          const teamsWithOwnSlot = new Set(
+            await trx('hall_slots')
+              .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
+              .join('halls', 'hall_slots.hall', 'halls.id')
+              .whereRaw("hall_slots.end_time::text LIKE '21:30%'")
+              .whereRaw("LOWER(halls.name) LIKE '%kwi%'")
+              .distinct('hall_slots_teams.teams_id')
+              .pluck('hall_slots_teams.teams_id'),
+          )
+          const fridayTeamIds = teams
+            .filter((tm) => !isJuniorTeam(tm.name) && !teamsWithOwnSlot.has(tm.id))
+            .map((tm) => tm.id)
+          const absRows = fridayTeamIds.length
+            ? await trx('absences as a')
+                .join('member_teams as mt', 'mt.member', 'a.member')
+                .whereIn('mt.team', fridayTeamIds)
+                .where(function () { this.where('mt.guest_level', 0).orWhereNull('mt.guest_level') })
+                .whereRaw("a.type IS DISTINCT FROM 'weekly'")
+                .whereRaw('a.blocking IS NOT FALSE')
+                .whereRaw("(a.affects::jsonb @> '\"all\"' OR a.affects::jsonb @> '\"games\"')")
+                .where('a.end_date', '>=', eveningWindow.start)
+                .where('a.start_date', '<=', eveningWindow.end)
+                .select(trx.raw('mt.team as team'), trx.raw('a.start_date::date::text as s'), trx.raw('a.end_date::date::text as e'))
+            : []
+          const fridays = []
+          for (const d = new Date(firstPostHerbstFriday); d <= eveningWindow.end; d.setUTCDate(d.getUTCDate() + 7)) {
+            fridays.push(d.toISOString().slice(0, 10))
+          }
+          // Which teams have a game-affecting absence on each Friday.
+          const teamsAbsentOn = new Map()
+          for (const r of absRows) {
+            for (const f of fridays) {
+              if (r.s <= f && f <= r.e) {
+                if (!teamsAbsentOn.has(f)) teamsAbsentOn.set(f, new Set())
+                teamsAbsentOn.get(f).add(r.team)
+              }
             }
           }
+          // For an offset: worst = the most absence-hit VB Fridays any single team
+          // would carry; total = the same summed over all teams. Pick the offset
+          // that minimises the WORST team first, then the total as a tiebreaker.
+          const burdenStats = (parity) => {
+            const cnt = new Map()
+            fridays.forEach((f, i) => {
+              if (i % 2 !== parity) return
+              for (const team of teamsAbsentOn.get(f) || []) cnt.set(team, (cnt.get(team) || 0) + 1)
+            })
+            const vals = [...cnt.values()]
+            return { worst: vals.length ? Math.max(...vals) : 0, total: vals.reduce((a, b) => a + b, 0) }
+          }
+          const b0 = burdenStats(0)
+          const b1 = burdenStats(1)
+          const vbParity = b1.worst !== b0.worst
+            ? (b1.worst < b0.worst ? 1 : 0)
+            : (b1.total < b0.total ? 1 : 0) // worst-team tie → fewer absences overall; full tie → 0 (default)
+          vbFridaySet = new Set(fridays.filter((_, i) => i % 2 === vbParity))
         }
-        // For an offset: worst = the most absence-hit VB Fridays any single team
-        // would carry; total = the same summed over all teams. Pick the offset
-        // that minimises the WORST team first, then the total as a tiebreaker.
-        const burdenStats = (parity) => {
-          const cnt = new Map()
-          fridays.forEach((f, i) => {
-            if (i % 2 !== parity) return
-            for (const team of teamsAbsentOn.get(f) || []) cnt.set(team, (cnt.get(team) || 0) + 1)
-          })
-          const vals = [...cnt.values()]
-          return { worst: vals.length ? Math.max(...vals) : 0, total: vals.reduce((a, b) => a + b, 0) }
+        // Should a Friday `spielhalle` slot be generated for volleyball on `date`?
+        const fridayIsVolleyball = (date) => {
+          if (!herbstStart || !firstPostHerbstFriday) return true // no Herbst data → all Fridays
+          if (date < herbstStart) return true                    // before vacation → every Friday
+          if (date < firstPostHerbstFriday) return false         // inside vacation / pre-first-VB-Friday
+          if (!vbFridaySet) return true
+          return vbFridaySet.has(date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10))
         }
-        const b0 = burdenStats(0)
-        const b1 = burdenStats(1)
-        const vbParity = b1.worst !== b0.worst
-          ? (b1.worst < b0.worst ? 1 : 0)
-          : (b1.total < b0.total ? 1 : 0) // worst-team tie → fewer absences overall; full tie → 0 (default)
-        vbFridaySet = new Set(fridays.filter((_, i) => i % 2 === vbParity))
-      }
-      // Should a Friday `spielhalle` slot be generated for volleyball on `date`?
-      const fridayIsVolleyball = (date) => {
-        if (!herbstStart || !firstPostHerbstFriday) return true // no Herbst data → all Fridays
-        if (date < herbstStart) return true                    // before vacation → every Friday
-        if (date < firstPostHerbstFriday) return false         // inside vacation / pre-first-VB-Friday
-        if (!vbFridaySet) return true
-        return vbFridaySet.has(date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10))
-      }
 
-      let total_created = 0
-      for (const team of teams) {
-        const cfg = teamConfig[String(team.id)]
-        // Additive sources. Default (no config) = both. Explicit empty = manual.
-        let sources
-        if (Array.isArray(cfg?.sources)) sources = cfg.sources
-        else if (cfg?.source === 'manual') sources = []
-        else if (cfg?.source) sources = [cfg.source]
-        else sources = ['hall_slot', 'spielsamstag']
-        if (sources.length === 0) continue
+        let total_created = 0
+        for (const team of teams) {
+          const cfg = teamConfig[String(team.id)]
+          // Additive sources. Default (no config) = both. Explicit empty = manual.
+          let sources
+          if (Array.isArray(cfg?.sources)) sources = cfg.sources
+          else if (cfg?.source === 'manual') sources = []
+          else if (cfg?.source) sources = [cfg.source]
+          else sources = ['hall_slot', 'spielsamstag']
+          if (sources.length === 0) continue
 
-        const candidates = []
+          const candidates = []
 
-        // Game-Saturday pool: every picked Saturday × its configured slots.
-        if (sources.includes('spielsamstag')) {
-          for (const sat of (Array.isArray(spielsamstage) ? spielsamstage : [])) {
-            if (!sat?.date || !Array.isArray(sat.slots)) continue
-            for (const s of sat.slots) {
-              if (!s?.time || !s?.hall_id) continue
-              candidates.push({
-                date: sat.date, start_time: s.time, end_time: addHours(s.time, 2),
-                hall: parseInt(s.hall_id, 10) || null, source: 'spielsamstag',
-              })
+          // Game-Saturday pool: every picked Saturday × its configured slots.
+          if (sources.includes('spielsamstag')) {
+            for (const sat of (Array.isArray(spielsamstage) ? spielsamstage : [])) {
+              if (!sat?.date || !Array.isArray(sat.slots)) continue
+              for (const s of sat.slots) {
+                if (!s?.time || !s?.hall_id) continue
+                candidates.push({
+                  date: sat.date, start_time: s.time, end_time: addHours(s.time, 2),
+                  hall: parseInt(s.hall_id, 10) || null, source: 'spielsamstag',
+                })
+              }
+            }
+            // A2/C1 — juniors may play home games on ANY Sunday. Generate a Sunday
+            // slot on every Sunday in the season window at the fixed times × KWI
+            // halls. Not a curated "game-Sunday" list; the soft clustering onto
+            // Sundays another junior already uses happens at slot-display time.
+            if (isJuniorTeam(team.name) && eveningWindow) {
+              const d = new Date(eveningWindow.start)
+              while (d <= eveningWindow.end) {
+                if (d.getUTCDay() === 0) {
+                  const date = d.toISOString().slice(0, 10)
+                  for (const time of SUNDAY_TIMES) {
+                    for (const h of kwiHalls) {
+                      candidates.push({
+                        date, start_time: time, end_time: addHours(time, 2),
+                        hall: h.id, source: 'spielsonntag',
+                      })
+                    }
+                  }
+                }
+                d.setUTCDate(d.getUTCDate() + 1)
+              }
             }
           }
-          // A2/C1 — juniors may play home games on ANY Sunday. Generate a Sunday
-          // slot on every Sunday in the season window at the fixed times × KWI
-          // halls. Not a curated "game-Sunday" list; the soft clustering onto
-          // Sundays another junior already uses happens at slot-display time.
-          if (isJuniorTeam(team.name) && eveningWindow) {
-            const d = new Date(eveningWindow.start)
-            while (d <= eveningWindow.end) {
-              if (d.getUTCDay() === 0) {
-                const date = d.toISOString().slice(0, 10)
-                for (const time of SUNDAY_TIMES) {
-                  for (const h of kwiHalls) {
+
+          // Standard slot (volleyball-only generator):
+          //  - KWI teams: their own latest KWI block (ends 21:30).
+          //  - Döltschi (Under) teams: the SHARED volleyball Döltschi pool — any
+          //    team that uses Döltschi can take any VB Döltschi slot.
+          //  - Neither: fall back to the club Spielhalle pool (KWI A/B Friday).
+          // day_of_week is 0=Mon in the DB -> JS getUTCDay (0=Sun) via (dow + 1) % 7.
+          if (sources.includes('hall_slot') && eveningWindow) {
+            const ownKwi = await trx('hall_slots')
+              .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
+              .join('halls', 'hall_slots.hall', 'halls.id')
+              .where('hall_slots_teams.teams_id', team.id)
+              .whereRaw("hall_slots.end_time::text LIKE '21:30%'")
+              .whereRaw("LOWER(halls.name) LIKE '%kwi%'")
+              .select('hall_slots.day_of_week', 'hall_slots.start_time', 'hall_slots.end_time', 'hall_slots.hall')
+            const usesDoltschi = await trx('hall_slots')
+              .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
+              .join('halls', 'hall_slots.hall', 'halls.id')
+              .where('hall_slots_teams.teams_id', team.id)
+              .where('hall_slots.sport', 'volleyball')
+              .whereRaw("(LOWER(halls.name) LIKE '%döltschi%' OR LOWER(halls.name) LIKE '%doltschi%')")
+              .first()
+            // Build (slot, source-tag) entries. Juniors (Under teams) ALWAYS get the
+            // shared VB Döltschi pool — they may play in Döltschi even when it isn't
+            // their own slot — AND the club Spielhalle pool (both). Non-juniors keep
+            // their own KWI slot, take the Döltschi pool only if assigned, and fall
+            // back to Spielhalle only when they have no evening slot at all.
+            const isJr = isJuniorTeam(team.name)
+            const stdEntries = ownKwi.map((hs) => ({ hs, tag: 'hall_slot' }))
+            if (usesDoltschi || isJr) {
+              for (const hs of doltschiVbPool) stdEntries.push({ hs, tag: 'hall_slot' })
+            }
+            if (isJr) {
+              for (const hs of spielhalleSlots) stdEntries.push({ hs, tag: 'spielhalle' })
+            } else if (stdEntries.length === 0) {
+              for (const hs of spielhalleSlots) stdEntries.push({ hs, tag: 'spielhalle' })
+            }
+            for (const { hs, tag } of stdEntries) {
+              const targetJsDay = (hs.day_of_week + 1) % 7
+              const d = new Date(eveningWindow.start)
+              while (d <= eveningWindow.end) {
+                if (d.getUTCDay() === targetJsDay) {
+                  // B1/B2 — the shared Friday Spielhalle pool alternates with
+                  // basketball after the October vacation. Skip VB-off Fridays.
+                  const isFridaySpielhalle = tag === 'spielhalle' && targetJsDay === 5
+                  if (!isFridaySpielhalle || fridayIsVolleyball(d)) {
                     candidates.push({
-                      date, start_time: time, end_time: addHours(time, 2),
-                      hall: h.id, source: 'spielsonntag',
+                      date: d.toISOString().slice(0, 10), start_time: hs.start_time,
+                      end_time: hs.end_time, hall: hs.hall, source: tag,
                     })
                   }
                 }
+                d.setUTCDate(d.getUTCDate() + 1)
               }
-              d.setUTCDate(d.getUTCDate() + 1)
             }
           }
+
+          // Don't duplicate a surviving booked/blocked slot at the same key.
+          //
+          // This used to be two queries PER CANDIDATE inside this per-team loop — a
+          // SELECT to look for a clash and an INSERT — which came to ~4,000 sequential
+          // round-trips for a season across 11 teams (~2,200 candidates, and because
+          // the pre-pass deletes every `available` slot first, nearly all of them miss
+          // and insert). Each query was itself fast (index scan, 0.13 ms); the cost was
+          // purely round-trip count, ~3-8 s of it, in front of a spielplaner staring at
+          // a spinner. One SELECT + chunked INSERTs instead.
+          //
+          // ⚠ The clash key is asymmetric and that is not an accident — the old query
+          // only constrained `hall` when the candidate HAD one, so a hall-less candidate
+          // clashed with a slot at that date/time in ANY hall. Both shapes are kept.
+          //
+          // ⚠ No season filter, also deliberate: the original clash check had none, so a
+          // slot left over from another season at the same key still blocks. Preserved.
+          const existingRows = await trx('game_scheduling_slots')
+            .where('kscw_team', team.id)
+            .select(
+              trx.raw("to_char(date, 'YYYY-MM-DD') AS date"),
+              trx.raw("to_char(start_time, 'HH24:MI:SS') AS start_time"),
+              'hall',
+            )
+          const tkey = (v) => String(v).slice(0, 8)
+          // Exact (date, time, hall) — used when the candidate names a hall.
+          const takenWithHall = new Set(existingRows.map((r) => `${r.date}|${tkey(r.start_time)}|${r.hall}`))
+          // (date, time) regardless of hall — used when the candidate has none.
+          const takenAnyHall = new Set(existingRows.map((r) => `${r.date}|${tkey(r.start_time)}`))
+
+          const pending = []
+          for (const c of candidates) {
+            const t = tkey(c.start_time)
+            const clash = c.hall != null
+              ? takenWithHall.has(`${c.date}|${t}|${c.hall}`)
+              : takenAnyHall.has(`${c.date}|${t}`)
+            if (clash) continue
+            // ⚠ The old loop inserted immediately, so a later duplicate candidate found
+            // the earlier one and was skipped. Batching would lose that unless the sets
+            // are updated as we accept — two identical candidates would both insert.
+            takenAnyHall.add(`${c.date}|${t}`)
+            if (c.hall != null) takenWithHall.add(`${c.date}|${t}|${c.hall}`)
+            pending.push({
+              season: seasonKey, kscw_team: team.id, date: c.date,
+              start_time: c.start_time, end_time: c.end_time, hall: c.hall,
+              source: c.source, status: 'available',
+            })
+          }
+          const INSERT_CHUNK = 400
+          for (let i = 0; i < pending.length; i += INSERT_CHUNK) {
+            await trx('game_scheduling_slots').insert(pending.slice(i, i + INSERT_CHUNK))
+          }
+          total_created += pending.length
         }
 
-        // Standard slot (volleyball-only generator):
-        //  - KWI teams: their own latest KWI block (ends 21:30).
-        //  - Döltschi (Under) teams: the SHARED volleyball Döltschi pool — any
-        //    team that uses Döltschi can take any VB Döltschi slot.
-        //  - Neither: fall back to the club Spielhalle pool (KWI A/B Friday).
-        // day_of_week is 0=Mon in the DB -> JS getUTCDay (0=Sun) via (dow + 1) % 7.
-        if (sources.includes('hall_slot') && eveningWindow) {
-          const ownKwi = await database('hall_slots')
-            .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
-            .join('halls', 'hall_slots.hall', 'halls.id')
-            .where('hall_slots_teams.teams_id', team.id)
-            .whereRaw("hall_slots.end_time::text LIKE '21:30%'")
-            .whereRaw("LOWER(halls.name) LIKE '%kwi%'")
-            .select('hall_slots.day_of_week', 'hall_slots.start_time', 'hall_slots.end_time', 'hall_slots.hall')
-          const usesDoltschi = await database('hall_slots')
-            .join('hall_slots_teams', 'hall_slots.id', 'hall_slots_teams.hall_slots_id')
-            .join('halls', 'hall_slots.hall', 'halls.id')
-            .where('hall_slots_teams.teams_id', team.id)
-            .where('hall_slots.sport', 'volleyball')
-            .whereRaw("(LOWER(halls.name) LIKE '%döltschi%' OR LOWER(halls.name) LIKE '%doltschi%')")
-            .first()
-          // Build (slot, source-tag) entries. Juniors (Under teams) ALWAYS get the
-          // shared VB Döltschi pool — they may play in Döltschi even when it isn't
-          // their own slot — AND the club Spielhalle pool (both). Non-juniors keep
-          // their own KWI slot, take the Döltschi pool only if assigned, and fall
-          // back to Spielhalle only when they have no evening slot at all.
-          const isJr = isJuniorTeam(team.name)
-          const stdEntries = ownKwi.map((hs) => ({ hs, tag: 'hall_slot' }))
-          if (usesDoltschi || isJr) {
-            for (const hs of doltschiVbPool) stdEntries.push({ hs, tag: 'hall_slot' })
-          }
-          if (isJr) {
-            for (const hs of spielhalleSlots) stdEntries.push({ hs, tag: 'spielhalle' })
-          } else if (stdEntries.length === 0) {
-            for (const hs of spielhalleSlots) stdEntries.push({ hs, tag: 'spielhalle' })
-          }
-          for (const { hs, tag } of stdEntries) {
-            const targetJsDay = (hs.day_of_week + 1) % 7
-            const d = new Date(eveningWindow.start)
-            while (d <= eveningWindow.end) {
-              if (d.getUTCDay() === targetJsDay) {
-                // B1/B2 — the shared Friday Spielhalle pool alternates with
-                // basketball after the October vacation. Skip VB-off Fridays.
-                const isFridaySpielhalle = tag === 'spielhalle' && targetJsDay === 5
-                if (!isFridaySpielhalle || fridayIsVolleyball(d)) {
-                  candidates.push({
-                    date: d.toISOString().slice(0, 10), start_time: hs.start_time,
-                    end_time: hs.end_time, hall: hs.hall, source: tag,
-                  })
-                }
-              }
-              d.setUTCDate(d.getUTCDate() + 1)
-            }
-          }
-        }
-
-        // Don't duplicate a surviving booked/blocked slot at the same key.
-        //
-        // This used to be two queries PER CANDIDATE inside this per-team loop — a
-        // SELECT to look for a clash and an INSERT — which came to ~4,000 sequential
-        // round-trips for a season across 11 teams (~2,200 candidates, and because
-        // the pre-pass deletes every `available` slot first, nearly all of them miss
-        // and insert). Each query was itself fast (index scan, 0.13 ms); the cost was
-        // purely round-trip count, ~3-8 s of it, in front of a spielplaner staring at
-        // a spinner. One SELECT + chunked INSERTs instead.
-        //
-        // ⚠ The clash key is asymmetric and that is not an accident — the old query
-        // only constrained `hall` when the candidate HAD one, so a hall-less candidate
-        // clashed with a slot at that date/time in ANY hall. Both shapes are kept.
-        //
-        // ⚠ No season filter, also deliberate: the original clash check had none, so a
-        // slot left over from another season at the same key still blocks. Preserved.
-        const existingRows = await database('game_scheduling_slots')
-          .where('kscw_team', team.id)
-          .select(
-            database.raw("to_char(date, 'YYYY-MM-DD') AS date"),
-            database.raw("to_char(start_time, 'HH24:MI:SS') AS start_time"),
-            'hall',
+        // Auto-cleanup: drop any PENDING home proposal left orphaned — none of its
+        // proposed_slot_1/2/3 reference a slot that still exists. The held-slot
+        // exclusion above keeps live proposals intact, so this only removes ones
+        // whose slots were already gone (otherwise confirm would 400 forever with
+        // "Slot is no longer available").
+        const pendingHome = await trx('game_scheduling_bookings')
+          .where('season', seasonKey).where('type', 'home_slot_pick').where('status', 'pending')
+          .select('id', 'proposed_slot_1', 'proposed_slot_2', 'proposed_slot_3')
+        let orphans_deleted = 0
+        if (pendingHome.length) {
+          const refIds = [...new Set(
+            pendingHome.flatMap((b) => [b.proposed_slot_1, b.proposed_slot_2, b.proposed_slot_3]).filter((v) => v != null),
+          )]
+          const liveIds = new Set(
+            refIds.length
+              ? (await trx('game_scheduling_slots').whereIn('id', refIds).pluck('id')).map((v) => String(v))
+              : [],
           )
-        const tkey = (v) => String(v).slice(0, 8)
-        // Exact (date, time, hall) — used when the candidate names a hall.
-        const takenWithHall = new Set(existingRows.map((r) => `${r.date}|${tkey(r.start_time)}|${r.hall}`))
-        // (date, time) regardless of hall — used when the candidate has none.
-        const takenAnyHall = new Set(existingRows.map((r) => `${r.date}|${tkey(r.start_time)}`))
+          const deadBookingIds = pendingHome
+            .filter((b) => ![b.proposed_slot_1, b.proposed_slot_2, b.proposed_slot_3].some((s) => s != null && liveIds.has(String(s))))
+            .map((b) => b.id)
+          if (deadBookingIds.length) {
+            await trx('game_scheduling_bookings').whereIn('id', deadBookingIds).del()
+            orphans_deleted = deadBookingIds.length
+          }
+        }
 
-        const pending = []
-        for (const c of candidates) {
-          const t = tkey(c.start_time)
-          const clash = c.hall != null
-            ? takenWithHall.has(`${c.date}|${t}|${c.hall}`)
-            : takenAnyHall.has(`${c.date}|${t}`)
-          if (clash) continue
-          // ⚠ The old loop inserted immediately, so a later duplicate candidate found
-          // the earlier one and was skipped. Batching would lose that unless the sets
-          // are updated as we accept — two identical candidates would both insert.
-          takenAnyHall.add(`${c.date}|${t}`)
-          if (c.hall != null) takenWithHall.add(`${c.date}|${t}|${c.hall}`)
-          pending.push({
-            season: seasonKey, kscw_team: team.id, date: c.date,
-            start_time: c.start_time, end_time: c.end_time, hall: c.hall,
-            source: c.source, status: 'available',
-          })
-        }
-        const INSERT_CHUNK = 400
-        for (let i = 0; i < pending.length; i += INSERT_CHUNK) {
-          await database('game_scheduling_slots').insert(pending.slice(i, i + INSERT_CHUNK))
-        }
-        total_created += pending.length
-      }
-
-      // Auto-cleanup: drop any PENDING home proposal left orphaned — none of its
-      // proposed_slot_1/2/3 reference a slot that still exists. The held-slot
-      // exclusion above keeps live proposals intact, so this only removes ones
-      // whose slots were already gone (otherwise confirm would 400 forever with
-      // "Slot is no longer available").
-      const pendingHome = await database('game_scheduling_bookings')
-        .where('season', seasonKey).where('type', 'home_slot_pick').where('status', 'pending')
-        .select('id', 'proposed_slot_1', 'proposed_slot_2', 'proposed_slot_3')
-      let orphans_deleted = 0
-      if (pendingHome.length) {
-        const refIds = [...new Set(
-          pendingHome.flatMap((b) => [b.proposed_slot_1, b.proposed_slot_2, b.proposed_slot_3]).filter((v) => v != null),
-        )]
-        const liveIds = new Set(
-          refIds.length
-            ? (await database('game_scheduling_slots').whereIn('id', refIds).pluck('id')).map((v) => String(v))
-            : [],
-        )
-        const deadBookingIds = pendingHome
-          .filter((b) => ![b.proposed_slot_1, b.proposed_slot_2, b.proposed_slot_3].some((s) => s != null && liveIds.has(String(s))))
-          .map((b) => b.id)
-        if (deadBookingIds.length) {
-          await database('game_scheduling_bookings').whereIn('id', deadBookingIds).del()
-          orphans_deleted = deadBookingIds.length
-        }
-      }
+        return { total_created, orphans_deleted }
+      })
 
       res.json({ success: true, total_created, orphans_deleted })
     } catch (err) {
@@ -5139,6 +5248,11 @@ export function registerGameScheduling(router, { database, logger, services, get
       if (svrzManualSyncRunning) {
         return res.status(409).json({ status: 'skipped', reason: 'already-running' })
       }
+      // Same shared Volleymanager account as the crons and the admin sync buttons.
+      const releaseVm = claimVmAccount('terminplanung:svrz-sync')
+      if (!releaseVm) {
+        return res.status(409).json({ status: 'skipped', reason: 'already-running', holder: vmAccountHeldBy() })
+      }
 
       const { spawn } = await import('node:child_process')
       // Pipe child stdout + stderr to a persistent log so the run leaves a
@@ -5181,6 +5295,7 @@ export function registerGameScheduling(router, { database, logger, services, get
         settled = true
         clearTimeout(watchdog)
         svrzManualSyncRunning = false
+        releaseVm()
         await logCronRun(database, 'svrz_sync', { status, durationMs: Date.now() - startedAt, errorMessage: errorMessage || null }).catch(() => {})
       }
       child.on('error', (err) => {
@@ -5449,42 +5564,55 @@ export function registerGameScheduling(router, { database, logger, services, get
       const seasonRow = await database('game_scheduling_seasons').where('id', season).first()
       const created = []
       const existing = []
-      for (const r of rows) {
-        const email = (r.contact_email || '').toLowerCase().trim()
-        if (!email || !r.team_name) continue
-        // Dedupe by opponent TEAM NAME, not by exact contact_email. The resolved
-        // contact set legitimately changes over time (e.g. team responsibles got
-        // merged in alongside the club calendar responsible) — an email-string
-        // match then misses the existing invite and spawns a phantom duplicate
-        // (8 such rows accreted on DU23-1 after the 2026-06-15 contacts merge).
-        // One opponent team = one invite row per kscw_team+season; refresh its
-        // contacts in place instead of inserting a clone.
-        const existingRow = await database('game_scheduling_opponents')
-          .where({ kscw_team, season })
-          .whereIn('status', ACTIVE_INVITE_STATUSES)
-          .whereRaw('lower(trim(team_name)) = ?', [String(r.team_name).trim().toLowerCase()])
-          .first()
-        if (existingRow) {
-          // Never blank contacts; only refresh when the new set is non-empty and
-          // differs (keeps the richer merged list flowing onto the live invite).
-          const patch = {}
-          if (email && (existingRow.contact_email || '').toLowerCase().trim() !== email) patch.contact_email = email
-          if (r.contact_name && existingRow.contact_name !== r.contact_name) patch.contact_name = r.contact_name
-          if (Object.keys(patch).length) await database('game_scheduling_opponents').where('id', existingRow.id).update(patch)
-          existing.push({ id: existingRow.id, token: existingRow.token, email, team_name: existingRow.team_name })
-          continue
+      // ⚠ Concurrency: the dedupe below is a name-keyed SELECT-then-INSERT and
+      // game_scheduling_opponents carries no uniqueness on (kscw_team, season,
+      // team_name). Two callers for the same team+season — this endpoint racing the
+      // panel's auto-populate (ensure-from-svrz), or two spielplaner at season-open —
+      // both miss and both insert, so /invites/send mails the opponent club two
+      // different links and whichever they use leaves the twin at "not answered".
+      // Serialize per kscw_team on an advisory lock and do the check + insert inside
+      // one transaction; two DIFFERENT teams never block each other. Transaction-
+      // scoped, so a crashed request releases the lock with its connection.
+      const inviteLockKey = Number.isInteger(Number(kscw_team)) ? Number(kscw_team) : 0
+      await database.transaction(async (trx) => {
+        await trx.raw('SELECT pg_advisory_xact_lock(?, ?)', [GSCH_INVITE_LOCK_CLASS, inviteLockKey])
+        for (const r of rows) {
+          const email = (r.contact_email || '').toLowerCase().trim()
+          if (!email || !r.team_name) continue
+          // Dedupe by opponent TEAM NAME, not by exact contact_email. The resolved
+          // contact set legitimately changes over time (e.g. team responsibles got
+          // merged in alongside the club calendar responsible) — an email-string
+          // match then misses the existing invite and spawns a phantom duplicate
+          // (8 such rows accreted on DU23-1 after the 2026-06-15 contacts merge).
+          // One opponent team = one invite row per kscw_team+season; refresh its
+          // contacts in place instead of inserting a clone.
+          const existingRow = await trx('game_scheduling_opponents')
+            .where({ kscw_team, season })
+            .whereIn('status', ACTIVE_INVITE_STATUSES)
+            .whereRaw('lower(trim(team_name)) = ?', [String(r.team_name).trim().toLowerCase()])
+            .first()
+          if (existingRow) {
+            // Never blank contacts; only refresh when the new set is non-empty and
+            // differs (keeps the richer merged list flowing onto the live invite).
+            const patch = {}
+            if (email && (existingRow.contact_email || '').toLowerCase().trim() !== email) patch.contact_email = email
+            if (r.contact_name && existingRow.contact_name !== r.contact_name) patch.contact_name = r.contact_name
+            if (Object.keys(patch).length) await trx('game_scheduling_opponents').where('id', existingRow.id).update(patch)
+            existing.push({ id: existingRow.id, token: existingRow.token, email, team_name: existingRow.team_name })
+            continue
+          }
+          const token = crypto.randomBytes(16).toString('hex')
+          const expiresAt = newInviteExpiry(seasonRow?.season)
+          const inserted = await trx('game_scheduling_opponents').insert({
+            kscw_team, season, team_name: r.team_name, contact_email: email,
+            contact_name: r.contact_name || '', token, status: 'invited',
+            source: r.source || 'manual', created_by_admin: true, expires_at: expiresAt,
+            club_id: r.club_id || null,
+          }).returning(['id'])
+          const newId = Array.isArray(inserted) ? (inserted[0]?.id ?? inserted[0]) : inserted
+          created.push({ id: newId, token, email, team_name: r.team_name })
         }
-        const token = crypto.randomBytes(16).toString('hex')
-        const expiresAt = newInviteExpiry(seasonRow?.season)
-        const inserted = await database('game_scheduling_opponents').insert({
-          kscw_team, season, team_name: r.team_name, contact_email: email,
-          contact_name: r.contact_name || '', token, status: 'invited',
-          source: r.source || 'manual', created_by_admin: true, expires_at: expiresAt,
-          club_id: r.club_id || null,
-        }).returning(['id'])
-        const newId = Array.isArray(inserted) ? (inserted[0]?.id ?? inserted[0]) : inserted
-        created.push({ id: newId, token, email, team_name: r.team_name })
-      }
+      })
       res.json({ created: created.length, existing: existing.length, rows: [...created, ...existing] })
     } catch (err) {
       log.error({ msg: `invites create: ${err.message}`, endpoint: 'admin/terminplanung/invites', userId: req.accountability?.user || null, method: req.method, stack: err.stack })
@@ -6596,60 +6724,77 @@ export function registerGameScheduling(router, { database, logger, services, get
       // expired invite is never silently resurrected with a fresh token. To
       // bring a revoked opponent back, the admin uses Reissue (same row, new
       // token), not auto-populate.
-      const existing = await database('game_scheduling_opponents')
-        .where({ kscw_team, season })
-      const norm = (s) => String(s || '').trim().toLowerCase()
-      const existingByName = new Map(existing.map((e) => [norm(e.team_name), e]))
-      const insertedNames = new Set()
-
-      // A resolved contact list → comma-joined { names, emails }.
-      const joinContacts = (list) => ({
-        names: (list || []).map((c) => c.name).filter(Boolean).join(', '),
-        emails: (list || []).map((c) => c.email).filter(Boolean).join(', '),
-      })
-
+      // ⚠ Concurrency: the dedupe below is a name-keyed check-then-act and
+      // game_scheduling_opponents has no unique index behind it. The invites panel
+      // fires this endpoint from a mount effect, so two admins opening the setup
+      // page at season-open — or one navigating back while the first call is still
+      // walking its ~27 opponents — both read an opponent-free table and both insert
+      // the whole set: two invite rows, two tokens, two mails to the same opponent
+      // club, and their picks land under the row the coordinator is not watching.
+      // Serialize per kscw_team on an advisory lock and re-read `existing` INSIDE the
+      // same transaction, so the second caller sees the first caller's rows and only
+      // refreshes them (created stays 0 — a visible, honest no-op, not an error: this
+      // endpoint is called unprompted on mount and must not paint the page red).
+      // The slow resolveSyncedOpponents() walk above deliberately stays OUTSIDE the
+      // lock. The lock is transaction-scoped, so a crash or container restart
+      // releases it automatically — there is no claim left behind to clean up.
       let created = 0
       let refreshed = 0
-      for (const opp of opponents) {
-        const union = joinContacts(opp.suggested_contacts)
-        if (!union.emails) continue
-        const cal = joinContacts(opp.calendar_contacts)
-        const team = joinContacts(opp.team_responsible_contacts)
-        const teamName = opp.team_name || opp.club_name
-        // contact_email/contact_name stay the UNION (send path + everything else
-        // reads these); the split columns label who's a calendar vs team contact.
-        const contactFields = {
-          contact_email: union.emails, contact_name: union.names,
-          calendar_contact_email: cal.emails, calendar_contact_name: cal.names,
-          team_contact_email: team.emails, team_contact_name: team.names,
-          // club_id groups this opponent row under the per-club portal (season, club_id).
-          club_id: opp.club_id || null,
-        }
-        const existingRow = existingByName.get(norm(teamName))
-        if (existingRow) {
-          // Refresh contacts in place — this is what recovers per-team
-          // responsibles that were dropped before they'd been synced (they're
-          // matched by the opponent team's staticTeamIdentifier). Never touches
-          // token/status/expiry, so a revoked invite stays revoked. Only writes
-          // when the union (or a split group), or the club_id, actually changed.
-          const changed =
-            (existingRow.contact_email || '') !== contactFields.contact_email ||
-            (existingRow.calendar_contact_email || '') !== contactFields.calendar_contact_email ||
-            (existingRow.team_contact_email || '') !== contactFields.team_contact_email ||
-            (!!opp.club_id && (existingRow.club_id || '') !== String(opp.club_id))
-          if (changed) { await database('game_scheduling_opponents').where('id', existingRow.id).update(contactFields); refreshed++ }
-          continue
-        }
-        if (insertedNames.has(norm(teamName))) continue
-        await database('game_scheduling_opponents').insert({
-          kscw_team, season, team_name: teamName,
-          ...contactFields,
-          token: crypto.randomBytes(16).toString('hex'), status: 'invited',
-          source: 'svrz', created_by_admin: true, expires_at: newInviteExpiry(seasonRow.season),
+      await database.transaction(async (trx) => {
+        await trx.raw('SELECT pg_advisory_xact_lock(?, ?)', [GSCH_INVITE_LOCK_CLASS, kscwTeamRow.id])
+        const existing = await trx('game_scheduling_opponents')
+          .where({ kscw_team, season })
+        const norm = (s) => String(s || '').trim().toLowerCase()
+        const existingByName = new Map(existing.map((e) => [norm(e.team_name), e]))
+        const insertedNames = new Set()
+
+        // A resolved contact list → comma-joined { names, emails }.
+        const joinContacts = (list) => ({
+          names: (list || []).map((c) => c.name).filter(Boolean).join(', '),
+          emails: (list || []).map((c) => c.email).filter(Boolean).join(', '),
         })
-        insertedNames.add(norm(teamName))
-        created++
-      }
+
+        for (const opp of opponents) {
+          const union = joinContacts(opp.suggested_contacts)
+          if (!union.emails) continue
+          const cal = joinContacts(opp.calendar_contacts)
+          const team = joinContacts(opp.team_responsible_contacts)
+          const teamName = opp.team_name || opp.club_name
+          // contact_email/contact_name stay the UNION (send path + everything else
+          // reads these); the split columns label who's a calendar vs team contact.
+          const contactFields = {
+            contact_email: union.emails, contact_name: union.names,
+            calendar_contact_email: cal.emails, calendar_contact_name: cal.names,
+            team_contact_email: team.emails, team_contact_name: team.names,
+            // club_id groups this opponent row under the per-club portal (season, club_id).
+            club_id: opp.club_id || null,
+          }
+          const existingRow = existingByName.get(norm(teamName))
+          if (existingRow) {
+            // Refresh contacts in place — this is what recovers per-team
+            // responsibles that were dropped before they'd been synced (they're
+            // matched by the opponent team's staticTeamIdentifier). Never touches
+            // token/status/expiry, so a revoked invite stays revoked. Only writes
+            // when the union (or a split group), or the club_id, actually changed.
+            const changed =
+              (existingRow.contact_email || '') !== contactFields.contact_email ||
+              (existingRow.calendar_contact_email || '') !== contactFields.calendar_contact_email ||
+              (existingRow.team_contact_email || '') !== contactFields.team_contact_email ||
+              (!!opp.club_id && (existingRow.club_id || '') !== String(opp.club_id))
+            if (changed) { await trx('game_scheduling_opponents').where('id', existingRow.id).update(contactFields); refreshed++ }
+            continue
+          }
+          if (insertedNames.has(norm(teamName))) continue
+          await trx('game_scheduling_opponents').insert({
+            kscw_team, season, team_name: teamName,
+            ...contactFields,
+            token: crypto.randomBytes(16).toString('hex'), status: 'invited',
+            source: 'svrz', created_by_admin: true, expires_at: newInviteExpiry(seasonRow.season),
+          })
+          insertedNames.add(norm(teamName))
+          created++
+        }
+      })
 
       const invites = await database('game_scheduling_opponents')
         .where('kscw_team', kscw_team).where('season', season)

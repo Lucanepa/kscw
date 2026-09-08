@@ -383,17 +383,59 @@ export function registerDutyLate(router, ctx) {
       const late = parseLate(game.duty_late_json)
       const already = late[role]
 
+      // Claim the role in ONE statement, and only then fire the side effects.
+      //
+      // This used to be a read-modify-write: the WHOLE `duty_late_json` blob was
+      // read back in authorize() and the WHOLE blob written back here. Two people
+      // standing in the hall at kickoff — the coach flagging `scorer` while the
+      // team responsible flags `referee` — both wrote a blob built from a snapshot
+      // taken before the other's write, so the second one ERASED the first role's
+      // report together with its idempotency flag: the alarm button came back and
+      // the next press re-fired the whole mail chain. Two reports of the SAME role
+      // both saw `!already` and both emailed the official + TK + club admin.
+      //
+      // The "not already flagged" test and the merge are now a single conditional
+      // UPDATE. `||` merges server-side, so two DIFFERENT roles flagged at the same
+      // moment both survive (legitimate concurrent callers are never serialised),
+      // and the WHERE makes exactly one of two same-role racers the winner. Nothing
+      // here is a lease, so a crashed request strands nothing: the row only ever
+      // gains a finished report.
+      let claimed = 0
+      let reporterName = '—'
       if (!already) {
         const reporter = memberId
           ? await database('members').where('id', memberId).first('first_name', 'last_name')
           : null
-        const reporterName = reporter
+        reporterName = reporter
           ? `${reporter.first_name} ${reporter.last_name}`.trim()
           : (req.accountability?.admin ? 'Admin' : '—')
 
-        late[role] = { at: new Date().toISOString(), by_name: reporterName }
-        await database('games').where('id', game.id).update({ duty_late_json: JSON.stringify(late) })
+        const entry = { at: new Date().toISOString(), by_name: reporterName }
+        // jsonb_typeof() rather than a bare COALESCE: `||` would splice a stray
+        // JSON scalar into an ARRAY, and parseLate() has always recovered from
+        // one by starting over from {}. Constant SQL — the values are bound.
+        const baseJson = "CASE WHEN jsonb_typeof(duty_late_json) = 'object' THEN duty_late_json ELSE '{}'::jsonb END"
+        claimed = await database('games')
+          .where('id', game.id)
+          // jsonb_exists(), NOT the `?` operator — knex reads `?` as a binding.
+          .whereRaw(`NOT jsonb_exists(${baseJson}, ?)`, [role])
+          .update({
+            duty_late_json: database.raw(`${baseJson} || ?::jsonb`, [JSON.stringify({ [role]: entry })]),
+          })
 
+        if (claimed === 1) {
+          late[role] = entry
+        } else {
+          // Someone else flagged this role between our read and our write. Not an
+          // error — the report exists and this endpoint is idempotent by contract,
+          // so answer with THEIR report and send no second mail / fine / audit row.
+          const fresh = await database('games').where('id', game.id).first('duty_late_json')
+          late[role] = parseLate(fresh?.duty_late_json)[role] || entry
+          log.warn({ msg: 'duty-late: role was flagged by a concurrent report — no second alarm', gameId: game.id, role })
+        }
+      }
+
+      if (claimed === 1) {
         await writeUserLog(database, log, {
           accountability: req.accountability,
           action: 'duty-late',

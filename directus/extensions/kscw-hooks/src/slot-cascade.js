@@ -122,6 +122,74 @@ async function withTrainingsNotifySilenced(database, fn) {
   })
 }
 
+/** Postgres unique-violation SQLSTATE.
+ *
+ *  Migration 354 adds `trainings_hall_slot_date_uq` — UNIQUE (hall_slot, date)
+ *  WHERE hall_slot IS NOT NULL — because all three generators below decide what
+ *  is missing with a SELECT and then INSERT, holding no lock in between. Two
+ *  cascades on the SAME slot (two Hallenplan editors saving within the same few
+ *  hundred ms, or a slot edit landing while the 02:00 top-up runs) both read
+ *  "no training on that date" — READ COMMITTED hides the sibling's uncommitted
+ *  rows — and both insert, so the session renders twice in the calendar and the
+ *  Hallenplan and collects two independent RSVP sets.
+ *
+ *  The index now arbitrates that; the code's job is only to make the loser a
+ *  no-op. It must NOT let the violation escape: these generators run inside
+ *  Directus ACTION hooks, where a thrown error is not attached to the request
+ *  and would roll back the rest of the cascade (the date shift and the window
+ *  trims) as well, surfacing as a 500 on the slot save. */
+const PG_UNIQUE_VIOLATION = '23505'
+
+function isDuplicateTraining(err) {
+  return err?.code === PG_UNIQUE_VIOLATION || err?.original?.code === PG_UNIQUE_VIOLATION
+}
+
+/** Insert generated trainings, letting `trainings_hall_slot_date_uq` decide the
+ *  race the pre-read SELECT cannot.
+ *
+ *  Happy path is untouched: one bulk INSERT … RETURNING id, same as before.
+ *  Only when Postgres rejects the batch do we retry row by row, so the dates
+ *  that did NOT collide still land instead of the whole batch being lost to one
+ *  duplicate. Each attempt runs in its own SAVEPOINT (`trx.transaction()` on a
+ *  knex transaction) because a unique violation poisons the enclosing
+ *  transaction until it is rolled back — without the savepoint the caller's
+ *  earlier statements would die with it.
+ *
+ *  A skipped date is a deliberate no-op — the training exists, which is exactly
+ *  what the generator wanted — but it is logged at warn so the collision is
+ *  visible rather than silent. Returns only the ids this call actually created,
+ *  so `applyTrainingAutoRSVP` never runs against another writer's row. */
+async function insertTrainings(trx, inserts, slotId, log) {
+  const createdIds = []
+  try {
+    await trx.transaction(async (sp) => {
+      const rows = await sp('trainings').insert(inserts).returning('id')
+      for (const r of rows) createdIds.push(typeof r === 'object' ? r.id : r)
+    })
+    return createdIds
+  } catch (err) {
+    if (!isDuplicateTraining(err)) throw err
+    createdIds.length = 0
+  }
+  let skipped = 0
+  for (const row of inserts) {
+    try {
+      await trx.transaction(async (sp) => {
+        const rows = await sp('trainings').insert(row).returning('id')
+        for (const r of rows) createdIds.push(typeof r === 'object' ? r.id : r)
+      })
+    } catch (err) {
+      if (!isDuplicateTraining(err)) throw err
+      skipped += 1
+    }
+  }
+  log?.warn?.({
+    msg: `[slot-cascade] ${skipped} training(s) for slot ${slotId} already existed — a concurrent generator won the race; skipped as duplicates`,
+    event: 'slot_generate_duplicate_skipped', slot: slotId, skipped, created: createdIds.length,
+  })
+  return createdIds
+}
+
 /** Map our day_of_week (0=Mon … 6=Sun) to JS getDay() (0=Sun … 6=Sat). */
 function targetJsDay(dayOfWeek) {
   return (dayOfWeek + 1) % 7
@@ -286,9 +354,9 @@ export async function generateInitialTrainings(database, slotId, log) {
         cancelled: false,
       }))
     if (inserts.length === 0) return
-    const rows = await trx('trainings').insert(inserts).returning('id')
-    for (const r of rows) createdIds.push(typeof r === 'object' ? r.id : r)
-    log?.info?.({ msg: '[slot-cascade] generated initial trainings', slot: slotId, count: inserts.length, event: 'slot_generate' })
+    const ids = await insertTrainings(trx, inserts, slotId, log)
+    for (const id of ids) createdIds.push(id)
+    log?.info?.({ msg: '[slot-cascade] generated initial trainings', slot: slotId, count: ids.length, event: 'slot_generate' })
   })
   return createdIds
 }
@@ -347,7 +415,21 @@ export async function cascadeSlotUpdate(database, slotId, pre, log) {
           .andWhereNot('id', tr.id)
           .first()
         if (clash) continue
-        await trx('trainings').where('id', tr.id).update({ date: newDateStr })
+        // The `clash` SELECT above is a check-then-act like every other one in
+        // this module: a concurrent cascade on this same slot can put a row on
+        // `newDateStr` in between, and `trainings_hall_slot_date_uq` then
+        // rejects this UPDATE. Treat it exactly as the clash branch does —
+        // leave the row where it is, let steps 3+4 sort it out — but do it in a
+        // SAVEPOINT, or the violation would abort the whole cascade.
+        try {
+          await trx.transaction(async (sp) => {
+            await sp('trainings').where('id', tr.id).update({ date: newDateStr })
+          })
+        } catch (err) {
+          if (!isDuplicateTraining(err)) throw err
+          log?.warn?.({ msg: `[slot-cascade] training ${tr.id} not shifted to ${newDateStr} — a concurrent cascade already placed one there`, slot: slotId, event: 'slot_shift_duplicate_skipped' })
+          continue
+        }
       }
       dateShiftApplied = true
     }
@@ -426,9 +508,9 @@ export async function cascadeSlotUpdate(database, slotId, pre, log) {
           cancelled: false,
         }))
       if (inserts.length > 0) {
-        const rows = await trx('trainings').insert(inserts).returning('id')
-        for (const r of rows) createdIds.push(typeof r === 'object' ? r.id : r)
-        log?.info?.({ msg: '[slot-cascade] filled missing trainings', slot: slotId, count: inserts.length, event: 'slot_fill' })
+        const ids = await insertTrainings(trx, inserts, slotId, log)
+        for (const id of ids) createdIds.push(id)
+        log?.info?.({ msg: '[slot-cascade] filled missing trainings', slot: slotId, count: ids.length, event: 'slot_fill' })
       }
     }
   })
@@ -490,18 +572,21 @@ export async function topUpIndefiniteSlots(database, log, onCreated) {
           cancelled: false,
         }))
       if (inserts.length === 0) continue
-      const createdIds = []
+      // `existing` above was read OUTSIDE any transaction, so a slot edit that
+      // commits between that SELECT and this INSERT is invisible here. The
+      // unique index is what makes the top-up genuinely idempotent under
+      // concurrency; rows the other writer created are skipped, not duplicated.
+      let createdIds = []
       await withTrainingsNotifySilenced(database, async (trx) => {
-        const rows = await trx('trainings').insert(inserts).returning('id')
-        for (const r of rows) createdIds.push(typeof r === 'object' ? r.id : r)
+        createdIds = await insertTrainings(trx, inserts, slotRow.id, log)
       })
-      totalCreated += inserts.length
+      totalCreated += createdIds.length
       if (onCreated && createdIds.length) {
         try { await onCreated(createdIds) } catch (err) {
           log?.error?.({ msg: `[slot-cascade] onCreated callback failed for slot ${slotRow.id}: ${err.message}`, event: 'slot_topup_oncreated_failed', slot: slotRow.id, stack: err.stack })
         }
       }
-      log?.info?.({ msg: '[slot-cascade] rolling top-up', slot: slotRow.id, count: inserts.length, event: 'slot_topup' })
+      log?.info?.({ msg: '[slot-cascade] rolling top-up', slot: slotRow.id, count: createdIds.length, event: 'slot_topup' })
     } catch (err) {
       log?.error?.({ msg: `[slot-cascade] top-up failed for slot ${slotRow.id}: ${err.message}`, event: 'slot_topup_failed', slot: slotRow.id, stack: err.stack })
     }

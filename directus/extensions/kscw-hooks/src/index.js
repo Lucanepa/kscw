@@ -4461,6 +4461,48 @@ export default ({ action, filter, init, schedule }, { services, database, logger
   // it green is how a permanently-denied sync stayed invisible for a week.
   const DEFER_RETRY_CAP = 6
   let vmSyncRunning = false
+  // ── Shared Volleymanager account lock ──────────────────────────────────────
+  // vm-sync-check.mjs and svrz-scheduling-sync.mjs both log into the ONE
+  // Volleymanager account the club owns, and VM's ACTIVE ROLE is per-ACCOUNT and
+  // persists — svrz-scheduling-sync flips it to Spielplaner for its whole run.
+  // Two of them overlapping means one scrapes under the other's role, which VM
+  // answers with 403s / empty groups rather than an error (exactly the failure
+  // the "check the ACTIVE VM ROLE" hint further down was written for).
+  //
+  // They genuinely collide: the watchdog below ticks at :00/:30, so a
+  // watchdog-retry fires on the same minute the 04:30 SVRZ cron starts, and a
+  // VM sync may run for up to 10 min (SVRZ up to 15).
+  //
+  // Both runs are AWAITED children with SIGKILL timeouts, so this in-process
+  // holder covers a run's whole lifetime and cannot outlive a crash — a lost
+  // worker takes the container with it and a restart clears the flag.
+  // ⚠ Process-local: it would not survive multi-instance scaling, and it is
+  // invisible to the on-demand POST /admin/svrz-sync, which lives in the
+  // separate kscw-endpoints module with its own memory.
+  // ⚠ Shared with kscw-endpoints/src/vm-account-lock.js via globalThis — the two
+  // extension bundles cannot import from one another but run in the SAME Directus
+  // process, and `vmAccountHolder` being module-local is exactly why an admin
+  // pressing "Sync now" could collide with these crons on the one shared
+  // Volleymanager account (where the active role persists per ACCOUNT). Keep the
+  // key and the record shape identical to that file. Leased, so a lost run frees it.
+  const VM_ACCOUNT_KEY = '__kscw_vm_account_holder'
+  const VM_LEASE_MS = 20 * 60 * 1000
+  const vmAccountHeldBy = () => {
+    const held = globalThis[VM_ACCOUNT_KEY]
+    if (!held) return null
+    return Date.now() - held.at < VM_LEASE_MS ? held.who : null
+  }
+  const claimVmAccount = (who) => {
+    if (vmAccountHeldBy()) return null
+    const token = `${who}:${Date.now()}:${Math.round(Math.random() * 1e9)}`
+    globalThis[VM_ACCOUNT_KEY] = { who, at: Date.now(), token }
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      if (globalThis[VM_ACCOUNT_KEY]?.token === token) globalThis[VM_ACCOUNT_KEY] = null
+    }
+  }
   async function runVmSync(reason) {
     if (!process.env.VM_USERNAME || !process.env.VM_PASSWORD) {
       log.warn('VM sync skipped: VM_USERNAME or VM_PASSWORD not set')
@@ -4468,6 +4510,13 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     }
     if (vmSyncRunning) {
       log.info(`VM sync (${reason}) skipped: a run is already in progress`)
+      return
+    }
+    const releaseVmAccount = claimVmAccount('vm_sync')
+    if (!releaseVmAccount) {
+      // Deliberate skip, not a failure — do not record a cron error for it.
+      // The weekly run or the next watchdog tick picks it up.
+      log.warn(`VM sync (${reason}) skipped: the shared Volleymanager account is busy (${vmAccountHeldBy()})`)
       return
     }
     vmSyncRunning = true
@@ -4541,6 +4590,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       await logCronRun(database, 'vm_sync', { status: 'error', durationMs: Date.now() - startedAt, errorMessage: err.message })
     } finally {
       vmSyncRunning = false
+      releaseVmAccount()
     }
   }
 
@@ -4622,6 +4672,15 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       log.warn('SVRZ sync skipped: VM_USERNAME or VM_PASSWORD not set')
       return
     }
+    const releaseSvrzVmAccount = claimVmAccount('svrz_sync')
+    if (!releaseSvrzVmAccount) {
+      // Deliberate skip, not a failure: a VM sync is mid-run and would be
+      // scraped out from under by this run's role switch. Do NOT record a cron
+      // error here — that would paint the status card red for a healthy system.
+      // Tomorrow's 04:30 tick runs normally.
+      log.warn({ msg: `SVRZ sync skipped: the shared Volleymanager account is busy (${vmAccountHeldBy()})`, event: 'cron.svrz_sync_busy' })
+      return
+    }
     const startedAt = Date.now()
     try {
       const token = await getCronAccessToken(log, 'SVRZ sync')
@@ -4669,6 +4728,8 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       log.error({ msg: `SVRZ sync cron: ${err.message}`, exitCode: err.status, event: 'cron.svrz_sync' })
       logCronError('svrz_sync', new Error(err.message))
       await logCronRun(database, 'svrz_sync', { status: 'error', durationMs: Date.now() - startedAt, errorMessage: err.message })
+    } finally {
+      releaseSvrzVmAccount()
     }
   })
 
@@ -5647,10 +5708,33 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     }
   })
 
+  // Registration approvals currently being processed, keyed by registration id.
+  //
+  // Directus does not await action handlers, so two overlapping
+  // PATCH /items/registrations/:id {status:'approved'} run their handlers
+  // CONCURRENTLY — and the pending list is cached for 30s with no realtime, so a
+  // second sport admin's tab keeps rendering a live Approve button long after the
+  // first admin approved the row. Both handlers then miss each other's member
+  // (there is deliberately NO unique on members.email — families legitimately
+  // share an address, see createMemberFromRegistration), both INSERT one, and
+  // both mail the family and the sport admins.
+  //
+  // The claim cannot be a conditional UPDATE on registrations.status: this is an
+  // ACTION hook, so Directus has already committed status='approved' before we
+  // run and every claimant would lose. Keyed per registration, so two different
+  // registrations never block each other, and released in a finally — a thrown
+  // handler, or a container restart, leaves nothing stranded, so the deliberate
+  // re-approval the member-creation-failure alert below asks admins to perform
+  // still works exactly as before.
+  // ⚠ Process-local: it would not survive multi-instance scaling. Directus runs
+  // as a single container here.
+  const approvalsInFlight = new Set()
+
   action('items.update', async ({ collection, keys, payload }, { schema }) => {
     if (collection !== 'registrations') return
     if (payload.status !== 'approved' && payload.status !== 'rejected') return
 
+    const claimedApprovals = []
     try {
       const { ItemsService, MailService } = services
       const itemsService = new ItemsService('registrations', { schema, knex: database })
@@ -5671,6 +5755,20 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         ])
 
         if (payload.status === 'approved') {
+          // ── 0. Claim this approval (see approvalsInFlight above) ──
+          // String key: Directus may hand the PK through as a number or a
+          // string, and a Set compares by identity.
+          const claimKey = String(id)
+          if (approvalsInFlight.has(claimKey)) {
+            log.warn({
+              msg: 'Registration approval skipped: a concurrent approval of the same registration is already running',
+              event: 'registration.approve_in_flight', id,
+            })
+            continue
+          }
+          approvalsInFlight.add(claimKey)
+          claimedApprovals.push(claimKey)
+
           // ── 1. Gather coach/TR emails for CC ──
           let coachTrCc = []
           if (reg.team && reg.membership_type !== 'passive') {
@@ -5876,6 +5974,8 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       }
     } catch (err) {
       log.error({ msg: `Registration status email: ${err.message}`, event: 'registration.status', stack: err.stack })
+    } finally {
+      for (const claimKey of claimedApprovals) approvalsInFlight.delete(claimKey)
     }
   })
 
@@ -7000,6 +7100,38 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       // kickoff in JS — `games.date` + `games.time` are separate DST-naive columns,
       // so the instant has to come from gameStartMs(), not from date+time arithmetic
       // in Postgres.
+      // ── Reclaim stale leases, INDEPENDENTLY of the push window ──
+      //
+      // ⚠⚠ The lease alone is not enough, and this is the second time this shape
+      // has bitten. A claim taken at lead < 45 min whose worker dies expires at
+      // lead < 35 min — i.e. below NOMINATION_FLOOR_MS, so the `due` filter below
+      // will never offer that game again — while `vm_nomination_status='pending'`
+      // simultaneously hides the coach's "Push now" button, which only renders on
+      // 'failed'. The list would then be unreachable by cron AND by hand, for ever,
+      // in exactly the last minutes of the window where filing by hand is the whole
+      // fallback.
+      //
+      // So a lease that ran out is resolved to 'failed' rather than left 'pending':
+      // that is the state the UI offers a button for and the one the cron retries.
+      // Deliberately NOT restricted to `due` games or to today — a stranded row must
+      // be reachable whenever the tick runs. Losing a genuinely-still-running worker
+      // to this is not possible below the lease interval, and above it the worker is
+      // gone by definition (it is detached inside a container that has restarted).
+      const reclaimed = await database('games')
+        .whereRaw("COALESCE(vm_nomination_status, '') = 'pending'")
+        .whereRaw("COALESCE(vm_nomination_claimed_at, 'epoch'::timestamptz) < now() - interval '10 minutes'")
+        .update({
+          vm_nomination_status: 'failed',
+          vm_nomination_error: 'Push worker did not finish (claim expired) — file the list by hand or press Push now',
+          vm_nomination_claimed_at: null,
+        })
+      if (reclaimed) {
+        log.warn({
+          msg: `[vm-nomination] ${reclaimed} stale push claim(s) expired — reset to 'failed' so the cron and the coach's button can reach them`,
+          event: 'vm_nomination_claim_reclaimed', count: reclaimed,
+        })
+      }
+
       const rows = await database('games as g')
         .leftJoin('teams as t', 't.id', 'g.kscw_team')
         .whereRaw("g.game_id LIKE 'vb_%'")
@@ -7025,9 +7157,59 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       })
       if (!due.length) return
 
-      for (const g of due) await spawnNominationPush(g.id)
-      log.info({ msg: `[vm-nomination] spawned ${due.length} push(es)`, event: 'vm_nomination_cron_done', count: due.length })
-      await logCronRun(database, 'vm_nomination', { status: 'ok', durationMs: Date.now() - startedAt, rowsChanged: due.length })
+      // ── Claim each game before spawning (migration 354) ──
+      //
+      // The worker files an Einsatzliste into the REAL Swiss Volley production
+      // system, and it only writes vm_nomination_status at the very END of its
+      // run — so between spawn and finish the row still looks eligible and the
+      // next tick (or a coach's "Push now") spawns a SECOND worker on the same
+      // fixture. Two workers both read "no list exists" in VM and both create
+      // one, and whichever finishes last stamps its journal over the other's.
+      //
+      // One UPDATE is atomic under READ COMMITTED: a second claimant blocks on
+      // the row lock, re-evaluates its WHERE against the committed new version
+      // and matches 0 rows. Per-game, so two different fixtures never block
+      // each other.
+      //
+      // ⚠ The claim is a LEASE, not a flag. vm_nomination_claimed_at is the
+      // whole point: an earlier attempt claimed 'pending' with no expiry and a
+      // worker lost to an `ext:deploy` restart stranded the row for ever — the
+      // cron then skipped it AND the coach's manual push (which only renders
+      // for status 'failed') could not reach it, so the list could never be
+      // filed at all. Here a stale claim is taken back after 10 minutes, and
+      // NULL coalesces to 'epoch' on purpose so an unclaimed 'pending' (an
+      // older build's write) is reclaimable immediately rather than stranded.
+      //
+      // The candidate SELECT above is deliberately left alone — it must keep
+      // offering stale 'pending' rows for exactly that reason, and this
+      // predicate is the single place that decides. The worker overwrites
+      // vm_nomination_status in finish(), so the documented retry behaviour
+      // ('filled' / 'failed' are re-attempted on the next tick) is unchanged.
+      let spawned = 0
+      for (const g of due) {
+        const claimed = await database('games')
+          .where('id', g.id)
+          // Re-check the terminal states: a worker may have finished between
+          // the SELECT above and this UPDATE, and re-claiming a closed list
+          // would file it a second time.
+          .whereRaw("COALESCE(vm_nomination_status, '') NOT IN ('closed', 'skipped')")
+          .whereRaw(
+            "(COALESCE(vm_nomination_status, '') <> 'pending'"
+            + " OR COALESCE(vm_nomination_claimed_at, 'epoch'::timestamptz) < now() - interval '10 minutes')",
+          )
+          .update({ vm_nomination_status: 'pending', vm_nomination_claimed_at: database.fn.now() })
+        if (claimed !== 1) {
+          log.warn({
+            msg: `[vm-nomination] game ${g.id} skipped: a push is already in flight (claim lost)`,
+            event: 'vm_nomination_claim_lost', gameId: g.id,
+          })
+          continue
+        }
+        await spawnNominationPush(g.id)
+        spawned += 1
+      }
+      log.info({ msg: `[vm-nomination] spawned ${spawned} push(es) of ${due.length} due`, event: 'vm_nomination_cron_done', count: spawned })
+      await logCronRun(database, 'vm_nomination', { status: 'ok', durationMs: Date.now() - startedAt, rowsChanged: spawned })
     } catch (err) {
       log.error({ msg: `[vm-nomination] cron failed: ${err.message}`, event: 'vm_nomination_cron_failed', stack: err.stack })
       logCronError('vm_nomination', err)

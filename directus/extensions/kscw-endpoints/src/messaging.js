@@ -23,6 +23,54 @@ const stub = (name) => (req, res) => res.status(501).json({
   details: { route: name, method: req.method, path: req.path },
 })
 
+/**
+ * Process-local per-pair mutex for DM creation.
+ *
+ * POST /messaging/conversations/dm is a check-then-act: it reads "is there
+ * already a dm/dm_request between these two members?" and, several queries
+ * later (decline cooldown, shared-team lookup, getSchema), creates one. Two
+ * members tapping "Message" on each other within the same few milliseconds —
+ * or one member with the app open on phone and laptop — both read null, both
+ * fall past the 409 guard and both mint a conversation with its own two
+ * conversation_members rows. The pair then has two threads: each inbox lists
+ * the same person twice, later messages split across them, and in the
+ * no-shared-team case the recipient gets two pending requests.
+ *
+ * Postgres cannot arbitrate this one: the member pair lives in
+ * conversation_members, not in conversations, so there is no column a unique
+ * index could cover (unlike uq_conversations_one_per_team and
+ * uq_conversations_one_per_activity, which are exactly why the team-chat and
+ * activity-chat find-or-create paths are race-safe). So the critical section
+ * is serialized in-process, keyed by the ORDERED pair: two different pairs
+ * never wait on each other, and A→B collides with B→A. The loser runs only
+ * after the winner's writes are committed, finds the winner's conversation and
+ * gets the very same 409 the endpoint already returns for an existing DM —
+ * rejected visibly, with the conversation id, not silently.
+ *
+ * ⚠ Directus runs as a SINGLE container here, which is the only reason a
+ * process-local guard is sufficient. It would NOT survive scaling to multiple
+ * instances; that needs a normalized pair column on `conversations` plus a
+ * partial unique index (and a dedup backfill before it can be created).
+ *
+ * Nothing is persisted and the entry is released whether the holder resolves
+ * or throws, so no crash and no ext:deploy restart can strand a pair — the map
+ * dies with the process.
+ */
+const dmPairLocks = new Map() // `${lo}:${hi}` → promise that settles when the current holder is done
+
+function withDmPairLock(memberIdA, memberIdB, fn) {
+  // Canonical (order-independent) key, so both directions take the same lock.
+  const key = [String(memberIdA), String(memberIdB)].sort().join(':')
+  const prev = dmPairLocks.get(key) ?? Promise.resolve()
+  // Chain onto the predecessor whether it fulfilled or rejected — one caller's
+  // failure must never strand the pair for the next caller.
+  const result = prev.then(fn, fn)
+  const tail = result.then(() => {}, () => {})
+  dmPairLocks.set(key, tail)
+  tail.then(() => { if (dmPairLocks.get(key) === tail) dmPairLocks.delete(key) })
+  return result
+}
+
 export function registerMessaging(router, ctx) {
   const { database: db, logger, services, getSchema } = ctx
   const { ItemsService } = services
@@ -392,8 +440,51 @@ export function registerMessaging(router, ctx) {
       if (either.has(String(recipientId)))
         throw new MessagingError(403, 'messaging/blocked', 'Messaging is blocked between you and this member')
 
-      const existing = await findExistingDmConversation(db, me.id, recipientId)
-      if (existing) {
+      // The "already exists?" read and the writes that follow it are ONE
+      // critical section per member pair — see withDmPairLock above. Without
+      // it two simultaneous taps both read null and both create a thread.
+      const outcome = await withDmPairLock(me.id, recipientId, async () => {
+        const existing = await findExistingDmConversation(db, me.id, recipientId)
+        if (existing) return { existing }
+
+        await checkDeclineCooldown(db, me.id, recipientId)
+
+        const sharesTeam = await shareTeam(db, me.id, recipientId)
+        const convType = sharesTeam ? 'dm' : 'dm_request'
+
+        const schema = await getSchema()
+        const conversationsService = new ItemsService('conversations', { schema, knex: db })
+        const convMembersService   = new ItemsService('conversation_members', { schema, knex: db })
+        const requestsService      = new ItemsService('message_requests', { schema, knex: db })
+
+        const convId = crypto.randomUUID()
+        const nowIso = new Date().toISOString()
+
+        await conversationsService.createOne({
+          id: convId, type: convType, team: null, title: null,
+          created_by: me.id, created_at: nowIso,
+        })
+        await convMembersService.createMany([
+          { id: crypto.randomUUID(), conversation: convId, member: me.id,       archived: false, role: 'member', joined_at: nowIso },
+          { id: crypto.randomUUID(), conversation: convId, member: recipientId, archived: false, role: 'member', joined_at: nowIso },
+        ])
+
+        let requestStatus = null
+        if (convType === 'dm_request') {
+          await requestsService.createOne({
+            id: crypto.randomUUID(), conversation: convId,
+            sender: me.id, recipient: recipientId,
+            status: 'pending', created_at: nowIso,
+          })
+          requestStatus = 'pending'
+        }
+
+        return { convId, convType, requestStatus }
+      })
+
+      // Loser of a same-pair race lands here too: it saw the winner's row.
+      if (outcome.existing) {
+        const existing = outcome.existing
         const code = existing.type === 'dm' ? 'messaging/conversation_exists' : 'messaging/request_pending'
         return res.status(409).json({
           code,
@@ -403,43 +494,11 @@ export function registerMessaging(router, ctx) {
         })
       }
 
-      await checkDeclineCooldown(db, me.id, recipientId)
-
-      const sharesTeam = await shareTeam(db, me.id, recipientId)
-      const convType = sharesTeam ? 'dm' : 'dm_request'
-
-      const schema = await getSchema()
-      const conversationsService = new ItemsService('conversations', { schema, knex: db })
-      const convMembersService   = new ItemsService('conversation_members', { schema, knex: db })
-      const requestsService      = new ItemsService('message_requests', { schema, knex: db })
-
-      const convId = crypto.randomUUID()
-      const nowIso = new Date().toISOString()
-
-      await conversationsService.createOne({
-        id: convId, type: convType, team: null, title: null,
-        created_by: me.id, created_at: nowIso,
-      })
-      await convMembersService.createMany([
-        { id: crypto.randomUUID(), conversation: convId, member: me.id,       archived: false, role: 'member', joined_at: nowIso },
-        { id: crypto.randomUUID(), conversation: convId, member: recipientId, archived: false, role: 'member', joined_at: nowIso },
-      ])
-
-      let requestStatus = null
-      if (convType === 'dm_request') {
-        await requestsService.createOne({
-          id: crypto.randomUUID(), conversation: convId,
-          sender: me.id, recipient: recipientId,
-          status: 'pending', created_at: nowIso,
-        })
-        requestStatus = 'pending'
-      }
-
       res.json({
-        conversation_id: convId,
+        conversation_id: outcome.convId,
         created: true,
-        type: convType,
-        request_status: requestStatus,
+        type: outcome.convType,
+        request_status: outcome.requestStatus,
       })
     } catch (e) { sendError(res, log, e) }
   })
