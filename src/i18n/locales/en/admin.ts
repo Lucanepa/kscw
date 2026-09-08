@@ -638,7 +638,7 @@ export default {
   clubdeskGroupNoTeam: 'No team',
   clubdeskGroupOnTeamCount: '{{count}} on a team',
   clubdeskGroupRefresh: 'Refresh',
-  clubdeskGroupManualHint: 'ClubDesk groups can only be changed in ClubDesk — the CSV import ignores them. Use the export as a worklist.',
+  clubdeskGroupManualHint: 'ClubDesk groups are written by \'Fix groups\' or by hand in ClubDesk — the CSV import ignores them. These findings come from the last sync down, so a row a commit has just fixed only disappears once the mirror catches up.',
   clubdeskGroupExportFailed: 'Export failed',
   clubdeskStrayAutoRemovable: 'Fix groups can remove this',
   clubdeskStrayNeedsDecision: 'Needs a decision — probably a missing roster row',

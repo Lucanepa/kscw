@@ -638,7 +638,7 @@ export default {
   clubdeskGroupNoTeam: 'Kein Team',
   clubdeskGroupOnTeamCount: '{{count}} mit Team',
   clubdeskGroupRefresh: 'Aktualisieren',
-  clubdeskGroupManualHint: 'ClubDesk-Gruppen können nur in ClubDesk geändert werden — der CSV-Import ignoriert sie. Nutze den Export als Arbeitsliste.',
+  clubdeskGroupManualHint: 'ClubDesk-Gruppen schreibt \'Gruppen korrigieren\' — sonst setzt man sie von Hand in ClubDesk, der CSV-Import ignoriert sie. Diese Befunde stammen aus dem letzten Sync-Down: eine gerade korrigierte Zeile verschwindet erst, wenn die Kopie nachgezogen ist.',
   clubdeskGroupExportFailed: 'Export fehlgeschlagen',
   clubdeskStrayAutoRemovable: 'Gruppen korrigieren kann das entfernen',
   clubdeskStrayNeedsDecision: 'Braucht einen Entscheid — vermutlich ein fehlender Kadereintrag',
