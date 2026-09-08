@@ -748,6 +748,17 @@ export default {
   cdNeedsSyncDescription: 'Members out of step with ClubDesk since the last sync. "Departed" and "Name differs" are not cleared by the sync path — a departure is yours to decide, and a name can never be pushed.',
   cdNeedsSyncLastDown: 'Last sync down: {{time}}',
   cdNeedsSyncLastUp: 'Last sync up: {{time}}',
+  // ⚠ The confirm names the consequence, not just the count: the roster removal is
+  // the part nobody expects from a button called "deactivate".
+  cdNeedsSyncDeactivateBtn_one: 'Deactivate 1 departed member',
+  cdNeedsSyncDeactivateBtn_other: 'Deactivate {{count}} departed members',
+  cdNeedsSyncDeactivateConfirm_one: 'Deactivate 1 departed member in wiedisync? They are set to not a member and inactive, and removed from every active team roster. ClubDesk already records the departure.',
+  cdNeedsSyncDeactivateConfirm_other: 'Deactivate {{count}} departed members in wiedisync? They are set to not a member and inactive, and removed from every active team roster. ClubDesk already records the departures.',
+  cdNeedsSyncDeactivateDone_one: '1 member deactivated.',
+  cdNeedsSyncDeactivateDone_other: '{{count}} members deactivated.',
+  cdNeedsSyncDeactivateSkipped_one: '1 was skipped — its ClubDesk contact no longer reads as departed, or its link is shared. Rescan and check it.',
+  cdNeedsSyncDeactivateSkipped_other: '{{count}} were skipped — their ClubDesk contacts no longer read as departed, or their links are shared. Rescan and check them.',
+  cdNeedsSyncDeactivateNone: 'Nothing to deactivate.',
   cdNeedsSyncAllGood: 'Everyone is in step — {{count}} members in sync.',
   cdSyncColStatus: 'Status',
   cdColLastBill: 'Last bill',

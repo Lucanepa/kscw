@@ -953,6 +953,28 @@ export async function deactivateMember(issue: DataIssue): Promise<void> {
 }
 
 /**
+ * Deactivate every departed member in one call.
+ *
+ * ⚠ The server re-derives the departure PER MEMBER (linked, 1:1 link, still in a
+ * departed status with an Austritt date) and writes its own audit entry for each,
+ * so this is not a looser path than the single-row button — it is the same gate,
+ * applied N times. Partial success is normal and reported: a member whose link
+ * turned ambiguous since the scan is skipped while the rest proceed.
+ */
+export async function deactivateDepartedMembers(
+  memberIds: number[],
+): Promise<{ deactivated: number[]; skipped: { member_id: number; code: string }[]; rosters_dropped: number }> {
+  const r = await kscwApi<{
+    deactivated?: number[]; skipped?: { member_id: number; code: string }[]; rosters_dropped?: number
+  }>('/clubdesk-deactivate', { method: 'POST', body: { member_ids: memberIds } })
+  return {
+    deactivated: r?.deactivated || [],
+    skipped: r?.skipped || [],
+    rosters_dropped: Number(r?.rosters_dropped) || 0,
+  }
+}
+
+/**
  * Resolve a broken ClubDesk link (the contact was deleted register-side).
  *   'unlink'     — clear the dead clubdesk_id (+ clubdesk_pushed_at, or the member
  *                  would fall out of BOTH sync-up preview lists); they become

@@ -58,7 +58,7 @@ import {
 import { useReportPageLoading } from '../../hooks/usePageReady'
 import {
   runAllChecks, autoFix, autoFixAll, manualFix, linkClubdesk, deactivateMember, flagClubdeskDrift,
-  flagClubdeskDriftBulk, resolveStaleLink, eraseRetentionData,
+  flagClubdeskDriftBulk, resolveStaleLink, eraseRetentionData, deactivateDepartedMembers,
   type CollectionHealth, type DataIssue, type IssueKey,
 } from './utils/dataHealthChecks'
 
@@ -630,6 +630,9 @@ function CollectionCard({
 
 export default function DataHealthPage() {
   const { t } = useTranslation('admin')
+  // Bulk deactivation is a real deletion of roster rows — it asks first, through
+  // the app's own modal (never window.confirm).
+  const confirm = useConfirm()
   const [results, setResults] = useState<CollectionHealth[]>([])
   // Start in the loading state so the auto-scan shows the branded spinner
   // immediately rather than flashing the empty state for a frame.
@@ -646,6 +649,7 @@ export default function DataHealthPage() {
   // its mount-time snapshot. `runChecks` alone does not reach it — that table
   // owns its own fetch.
   const [proposalsReload, setProposalsReload] = useState(0)
+  const [deactivating, setDeactivating] = useState(false)
 
   // ── ClubDesk findings, owned here ──────────────────────────────────────────
   // One fetch feeds the group-check table AND the "Fix groups" button, so the
@@ -699,6 +703,36 @@ export default function DataHealthPage() {
     setLastCheck(formatTimeZurich(new Date()))
     setLoading(false)
   }, [])
+
+  /**
+   * Deactivate every departed member on the board in one confirm.
+   *
+   * ⚠ A departure is the one row on that board with a single correct answer —
+   * ClubDesk holds an Austritt date, so they are not a member any more — but it is
+   * still a real deletion of roster rows, so it goes through the app's confirm with
+   * `danger` and says what it does before it does it.
+   *
+   * ⚠ Partial success is reported, never rounded up: a member whose link turned
+   * ambiguous since the scan is skipped server-side, and a toast that said "12
+   * deactivated" over 10 would send nobody back to look at the other two.
+   */
+  const handleDeactivateDeparted = useCallback(async (departed: NeedsSyncRow[]) => {
+    const ids = departed.map((r) => r.member_id).filter((n) => Number.isInteger(n))
+    if (!ids.length) return
+    if (!(await confirm({ message: t('cdNeedsSyncDeactivateConfirm', { count: ids.length }), danger: true }))) return
+    setDeactivating(true)
+    try {
+      const r = await deactivateDepartedMembers(ids)
+      if (r.deactivated.length) toast.success(t('cdNeedsSyncDeactivateDone', { count: r.deactivated.length }))
+      if (r.skipped.length) toast.warning(t('cdNeedsSyncDeactivateSkipped', { count: r.skipped.length }))
+      if (!r.deactivated.length && !r.skipped.length) toast.info(t('cdNeedsSyncDeactivateNone'))
+      await runChecks()
+    } catch (e) {
+      toast.error((e as { body?: { error?: string } })?.body?.error || (e as Error).message)
+    } finally {
+      setDeactivating(false)
+    }
+  }, [confirm, t, runChecks])
 
   // A sync-down (directly, or as a step the path runs) is the ONE job that
   // rewrites the proposal queue, so it must refresh the queue as well as the
@@ -903,6 +937,8 @@ export default function DataHealthPage() {
                   lastDown={syncMeta.lastDown}
                   lastUp={syncMeta.lastUp}
                   loading={loading}
+                  onDeactivateDeparted={handleDeactivateDeparted}
+                  deactivating={deactivating}
                 />
                 <ClubdeskGroupCheck
                   data={groupData}
