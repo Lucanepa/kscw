@@ -109,6 +109,12 @@ export default function ClubdeskFixGroups({
   const [status, setStatus] = useState<FixStatus | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [classes, setClasses] = useState<Set<FixClass>>(new Set(FIX_CLASSES))
+  // ⚠ Which classes the preview on screen actually covered. The commit posts the
+  // CURRENT selection and the server recomputes the worklist from it, so ticking
+  // another class after a preview used to commit rows nobody had reviewed — with
+  // the confirm dialog still counting the old preview's rows. The server refuses
+  // that now (`preview_stale`); this is so the operator sees it before clicking.
+  const [previewedClasses, setPreviewedClasses] = useState<Set<FixClass> | null>(null)
   // Held in a ref so the poller can fire onDone exactly once per finished commit
   // without re-subscribing the interval on every status change.
   const lastFinished = useRef<string | null>(null)
@@ -156,9 +162,16 @@ export default function ClubdeskFixGroups({
     ? 'down'
     : BUSY.includes(status?.up_state as JobState) ? 'up' : null
   const totalAvailable = FIX_CLASSES.reduce((n, c) => n + (available[c] || 0), 0)
+  // The selection moved since the preview, so the preview no longer describes what
+  // a commit would write. Null = we did not run the preview in this page load, and
+  // the server's own row-level check is the backstop.
+  const selectionChanged = !!previewedClasses && (
+    previewedClasses.size !== classes.size || [...classes].some((c) => !previewedClasses.has(c))
+  )
   // A commit is only offered once a preview of the *current* job succeeded — the
   // server enforces this too (code 'preview_required'); this just makes it visible.
   const canCommit = status?.state === 'done' && status.mode === 'preview' && !!status.result
+    && !selectionChanged
   // ⚠ A finished commit had NO terminal state: the result table rendered, the
   // commit button greyed out (canCommit needs a FRESH preview), and the footer
   // still offered only "Run preview" / "Commit to ClubDesk" — so the operator
@@ -166,6 +179,17 @@ export default function ClubdeskFixGroups({
   // with the work already done. A commit that succeeded says so and offers the
   // way out.
   const committed = status?.state === 'done' && status.mode === 'commit'
+
+  // ⚠ THE DIALOG HAS THREE STAGES, and used to render as one flat panel that never
+  // moved: after a preview succeeded it still read "Preview first, then commit",
+  // still said "Review the preview before you commit", and still offered "Run
+  // preview" as a peer of the commit button — so the step you had just completed
+  // was still the instruction on screen (08.09.2026). Now exactly one action is
+  // the obvious next one at any moment.
+  //   choose  — pick the classes, run the preview. No commit offered.
+  //   review  — the preview is on screen and wrote nothing; commit or preview again.
+  //   done    — it is written; the only thing left is to close.
+  const stage: 'choose' | 'review' | 'done' = committed ? 'done' : canCommit ? 'review' : 'choose'
 
   const toggleClass = (c: FixClass) => {
     setClasses((prev) => {
@@ -210,6 +234,7 @@ export default function ClubdeskFixGroups({
         body: { mode, classes: [...classes] },
       })
       toast.success(mode === 'preview' ? t('cdFixQueuedPreview') : t('cdFixQueuedCommit'))
+      if (mode === 'preview') setPreviewedClasses(new Set(classes))
       await poll()
     } catch (e) {
       const body = (e as { body?: { error?: string; code?: string } })?.body
@@ -217,6 +242,7 @@ export default function ClubdeskFixGroups({
       if (code === 'empty_worklist') toast.info(t('cdFixNothingToDo'))
       else if (code === 'cap_exceeded') toast.error(body?.error || t('cdFixCapExceeded'))
       else if (code === 'preview_required') toast.warning(t('cdFixPreviewRequired'))
+      else if (code === 'preview_stale') toast.warning(t('cdFixPreviewStale'))
       else if (code === 'down_in_progress' || code === 'up_in_progress') toast.info(t('cdFixBlockedBySync'))
       else if (code === 'grp_in_progress') toast.info(t('cdFixAlreadyRunning'))
       else toast.error(body?.error || (e as Error)?.message || t('cdFixFailed'))
@@ -249,6 +275,19 @@ export default function ClubdeskFixGroups({
       dismissible={!busy}
     >
 
+          {/* Which of the three stages this is, said in words. The eyebrow says
+              "Step 5 of 5" — that is where you are in the PATH, not where you are
+              inside this job, and the two were being confused. */}
+          {stage !== 'done' && (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {stage === 'review' ? t('cdFixStage2Title') : t('cdFixStage1Title')}
+              </span>
+              {' — '}
+              {stage === 'review' ? t('cdFixStage2Hint') : t('cdFixStage1Hint')}
+            </p>
+          )}
+
           {/* What to act on. Counts come from the findings already on screen; the
               server recomputes the actual rows, so these are an estimate, not the
               payload. */}
@@ -277,11 +316,16 @@ export default function ClubdeskFixGroups({
               legal member register. */}
           <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            {t('cdFixRegisterWarning')}
+            {stage === 'review' ? t('cdFixRegisterWarningReview') : t('cdFixRegisterWarning')}
           </p>
 
           {blockedBy && (
             <p className="text-xs text-amber-700 dark:text-amber-300">{t('cdFixBlockedBySync')}</p>
+          )}
+
+          {/* The preview on screen no longer matches what a commit would write. */}
+          {selectionChanged && status?.state === 'done' && status.mode === 'preview' && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">{t('cdFixSelectionChanged')}</p>
           )}
 
           {/* The bar above carries the phase and the log; this says which of the
@@ -357,31 +401,38 @@ export default function ClubdeskFixGroups({
             </div>
           )}
 
+          {/* ⚠ ONE primary action per stage. The commit button is not rendered at
+              all before a preview — a permanently-disabled "Commit to ClubDesk"
+              next to an enabled "Run preview" reads as a choice, and the choice it
+              offers is the one that writes to the register. */}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { void run('preview') }}
-              disabled={submitting || busy || !!blockedBy || totalAvailable === 0 || classes.size === 0}
-              className="gap-1.5"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t('cdFixPreviewButton')}
-            </Button>
-            {committed ? (
+            {stage === 'done' ? (
               <Button type="button" onClick={() => setOpen(false)} className="gap-1.5">
                 {t('cdFixCloseButton')}
               </Button>
             ) : (
-              <Button
-                type="button"
-                onClick={() => { void run('commit') }}
-                disabled={submitting || busy || !!blockedBy || !canCommit}
-                className="gap-1.5"
-                title={canCommit ? undefined : t('cdFixPreviewRequired')}
-              >
-                {t('cdFixCommitButton')}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant={stage === 'review' ? 'outline' : 'default'}
+                  onClick={() => { void run('preview') }}
+                  disabled={submitting || busy || !!blockedBy || totalAvailable === 0 || classes.size === 0}
+                  className="gap-1.5"
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {stage === 'review' ? t('cdFixPreviewAgainButton') : t('cdFixPreviewButton')}
+                </Button>
+                {stage === 'review' && (
+                  <Button
+                    type="button"
+                    onClick={() => { void run('commit') }}
+                    disabled={submitting || busy || !!blockedBy}
+                    className="gap-1.5"
+                  >
+                    {t('cdFixCommitButton')}
+                  </Button>
+                )}
+              </>
             )}
           </div>
   </ClubdeskStepDialog>
