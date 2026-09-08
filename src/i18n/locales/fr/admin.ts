@@ -1339,7 +1339,7 @@ export default {
   clubdeskGroupNoTeam: 'Sans équipe',
   clubdeskGroupOnTeamCount: '{{count}} avec équipe',
   clubdeskGroupRefresh: 'Actualiser',
-  clubdeskGroupManualHint: 'Les groupes ClubDesk ne se modifient que dans ClubDesk — l\'import CSV les ignore. Utilise l\'export comme liste de travail.',
+  clubdeskGroupManualHint: 'Les groupes ClubDesk sont écrits par \'Corriger les groupes\', sinon à la main dans ClubDesk — l\'import CSV les ignore. Ces constats viennent de la dernière synchro descendante : une ligne qui vient d\'être corrigée ne disparaît qu\'une fois la copie mise à jour.',
   clubdeskGroupExportFailed: 'Échec de l\'export',
   clubdeskStrayAutoRemovable: 'Corriger les groupes peut le retirer',
   clubdeskStrayNeedsDecision: 'Décision nécessaire — probablement une entrée d\'effectif manquante',

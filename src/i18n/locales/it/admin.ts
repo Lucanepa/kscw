@@ -1338,7 +1338,7 @@ export default {
   clubdeskGroupNoTeam: 'Senza squadra',
   clubdeskGroupOnTeamCount: '{{count}} con squadra',
   clubdeskGroupRefresh: 'Aggiorna',
-  clubdeskGroupManualHint: 'I gruppi ClubDesk si possono modificare solo in ClubDesk — l\'importazione CSV li ignora. Usa l\'esportazione come lista di lavoro.',
+  clubdeskGroupManualHint: 'I gruppi ClubDesk li scrive \'Correggi gruppi\', altrimenti si impostano a mano in ClubDesk — l\'importazione CSV li ignora. Questi rilievi vengono dall\'ultima sincronizzazione in discesa: una riga appena corretta sparisce solo quando la copia è aggiornata.',
   clubdeskGroupExportFailed: 'Esportazione non riuscita',
   clubdeskStrayAutoRemovable: 'Correggi gruppi può rimuoverlo',
   clubdeskStrayNeedsDecision: 'Serve una decisione — probabilmente manca una riga di rosa',

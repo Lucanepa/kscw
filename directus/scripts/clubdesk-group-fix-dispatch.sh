@@ -69,6 +69,16 @@ else
   cdp() { :; }; cdp_reset() { :; }; cdp_fail() { :; }; cdp_stream() { cat; }; cdp_cleanup() { :; }
 fi
 
+# Write-through of the mirror the findings are computed from (see the script's own
+# header). Same best-effort framing as the progress helper: a run must never fail
+# because it could not refresh wiedisync's copy of the register.
+if [ -r "$DIR/clubdesk-mirror-patch.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$DIR/clubdesk-mirror-patch.sh"
+else
+  cd_mirror_patch() { :; }
+fi
+
 # Recover a stuck 'running' so it can't block the button forever. KEEP
 # grp_requested_at: the claim below requires it IS NOT NULL, so nulling it here
 # would silently drop a request that was queued while the run was wedged.
@@ -188,4 +198,13 @@ MSG="$MODE: $N_ADD add, $N_REM remove"
 cdp 100 "$MSG"
 psqlc "UPDATE clubdesk_member_sync SET grp_state='done', grp_requested_at=NULL, grp_finished_at=now(), grp_message=\$m\$$MSG\$m\$, grp_result=\$r\$$RESULT\$r\$, grp_worklist=NULL WHERE id=1" \
   || fail "write-back failed"
+
+# ── Keep our copy of the register in step ───────────────────────────────────────
+# Only after a real commit, and only for the rows the tools reported as written.
+# Without this the page recomputes its findings from a snapshot taken BEFORE the
+# run and lists everything it just fixed — which is what made the button look
+# broken and got it run three times over (08.09.2026).
+if [ "$MODE" = "commit" ]; then
+  cd_mirror_patch "$RESULT" | sed 's/^/  /'
+fi
 echo "=== group-fix: done ($MSG) $(date -u +%FT%TZ) ==="

@@ -189,4 +189,16 @@ echo "Mode: $MODE"
 SUMMARY=$(flock "$DIR/.sync.lock" docker run --rm -w /work -v "$DIR":/work --env-file "$DIR/.env" "$PW_IMG" \
   node clubdesk-remove-group.mjs "group-cleanup-worklist.json" "$MODE" | tail -1)
 echo "Result: $SUMMARY"
+
+# Bring wiedisync's copy of the register in step with what we just removed —
+# otherwise /admin/data-health keeps listing these strays (and offering them to the
+# "Fix groups" button) until the next sync down re-imports ClubDesk. See
+# clubdesk-mirror-patch.sh; commit-only, verified rows only, best effort.
+if [ "$MODE" = "commit" ] && [ -n "$SUMMARY" ]; then
+  if [ -r "$DIR/clubdesk-mirror-patch.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$DIR/clubdesk-mirror-patch.sh"
+    cd_mirror_patch "$(printf '{"mode":"commit","add":null,"remove":%s}' "$SUMMARY")" | sed 's/^/  /'
+  fi
+fi
 echo "=== group-cleanup done $(date -u +%FT%TZ) ==="
