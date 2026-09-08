@@ -159,6 +159,7 @@ export default {
   dhIssueMissingAwayTeam: 'Gastteam fehlt',
   dhIssueMissingTime: 'Zeit fehlt',
   dhIssueNonPaddedTime: 'Zeit ohne führende Null',
+  dhIssueDuplicateFixture: 'Mögliches doppeltes Spiel (manuell + synchronisiert)',
   dhIssueNoTeamAssignment: 'Keine Teamzuordnung',
   dhIssueMissingSex: 'Geschlecht fehlt',
   dhSetMale: 'Männlich',

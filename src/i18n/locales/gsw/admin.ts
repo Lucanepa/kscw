@@ -154,6 +154,7 @@ export default {
   dhIssueMissingAwayTeam: 'Gaschtteam fählt',
   dhIssueMissingTime: 'Ziit fählt',
   dhIssueNonPaddedTime: 'Ziit ohni füehrendi Null',
+  dhIssueDuplicateFixture: 'Mögleds doppelts Schpiel (manuell + synchronisiert)',
   dhIssueNoTeamAssignment: 'Käi Teamzuetäilig',
   dhIssueMissingSex: 'Gschlächt fählt',
   dhSetMale: 'Männlich',
