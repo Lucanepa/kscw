@@ -8,7 +8,11 @@
 // gone and this page renders the real lists.
 //
 // LAYOUT
-//   Header  — sync down / sync up / fix groups, and when each last ran.
+//   Header  — fix groups, and when the last push ran. The manual "Sync down"
+//             and "Sync up" buttons were REMOVED on 08.09.2026: the sync path
+//             below runs both in the only order that works, and having a second
+//             door onto the same one-login-one-lock job produced nothing but
+//             409s (four on 07.09.2026, both doors fired within 12 seconds).
 //   Tabs    — All · Volleyball · Basketball · Unassigned · Club-wide.
 //             The four member tabs bucket by SECTION; "Unassigned" is its own tab
 //             because a member whose section cannot be derived would otherwise
@@ -27,7 +31,7 @@ import { toast } from 'sonner'
 import { formatTimeZurich, formatDateTimeCompact } from '../../utils/dateHelpers'
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronRight,
-  Wrench, XCircle, RefreshCcw, ScrollText, Download, ArrowUpFromLine, ArrowDownToLine,
+  Wrench, XCircle, RefreshCcw, ScrollText, Download, ArrowUpFromLine,
 } from 'lucide-react'
 import { toXlsx, downloadBlob } from './utils/exportResults'
 import { Checkbox } from '../../components/ui/checkbox'
@@ -35,7 +39,6 @@ import { useConfirm } from '../../components/ConfirmProvider'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import ClubdeskSyncUpModal from './components/ClubdeskSyncUpModal'
-import ClubdeskMemberSyncButton from './components/ClubdeskMemberSyncButton'
 import ClubdeskProposals from './components/ClubdeskProposals'
 import ClubdeskSyncPath from './components/ClubdeskSyncPath'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -847,16 +850,17 @@ export default function DataHealthPage() {
                 your decision), what is queued to go UP, and the group allocations.
                 The registrations page no longer carries any of it. */}
             <TabsContent value="clubdesk" className="space-y-4">
+              {/* ⚠ Sync down / sync up are DELIBERATELY not buttons here — the path
+                  below owns them. The three ClubDesk jobs share one login and one
+                  server-side lock, so a manual button next to the runner is a way
+                  to 409 yourself out of the step the runner is mid-way through.
+                  Fix groups stays: it is the one job with its own preview→commit
+                  gate, and the path hands off to this very dialog for step 5. */}
               <div className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/30">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+                  <Wrench className="h-4 w-4" aria-hidden="true" />
                   {t('dhClubdeskActions')}
                 </span>
-                <ClubdeskMemberSyncButton onDone={afterSyncJob} />
-                <Button type="button" variant="outline" size="sm" onClick={() => setSyncUpOpen(true)} className="gap-1.5">
-                  <ArrowUpFromLine className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t('dhSyncUp')}
-                </Button>
                 <ClubdeskFixGroups
                   available={fixAvailable}
                   onDone={runChecks}

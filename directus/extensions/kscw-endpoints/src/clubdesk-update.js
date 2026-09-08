@@ -1635,7 +1635,12 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       if (!(await superGate(req))) return res.status(403).json({ error: 'Forbidden' })
       const s = await database('clubdesk_member_sync').where('id', 1).first('down_state', 'up_state')
       if (isBusy(s?.down_state)) {
-        return res.status(409).json({ error: 'A sync is already in progress', state: s.down_state })
+        // ⚠ `code` alongside `state`. The other two lock refusals below carry one
+        // and this one did not, so the caller had to INFER the direction from a
+        // bare state — and the sync path's toast, unable to name it, showed
+        // `API /clubdesk-member-sync: 409` instead (07.09.2026). The state stays
+        // for older frontends that read it.
+        return res.status(409).json({ error: 'A sync is already in progress', state: s.down_state, code: 'down_in_progress' })
       }
       // A down run between the up's dry-run preview and its commit (hazard (b)
       // above) would refresh clubdesk_export under a push that already passed
