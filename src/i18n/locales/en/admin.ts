@@ -677,6 +677,7 @@ export default {
   dhPathStep3Empty: '3. Sync up (nothing to push)',
   dhPathStep5Empty: '5. Fix groups (nothing to fix)',
   dhPathStep4: '4. Sync down again',
+  dhPathGroupsWritten: 'Done — ClubDesk was written. The findings below refresh on the next sync down.',
   dhPathStep5: '5. Fix groups ({{count}})',
 
   // ── The step dialog: one shell for all five steps (08.09.2026) ──
@@ -739,7 +740,12 @@ export default {
   dhProposalAlreadyDecided: 'Those decisions were already made — showing the current list.',
 
   cdNeedsSyncTitle: 'Needs syncing',
-  cdNeedsSyncDescription: 'Members out of step with ClubDesk since the last sync.',
+  // ⚠ The second sentence exists because the board survives a complete, correct
+  // run of all five steps and then reads as unfinished work (asked on 08.09.2026,
+  // with 12 departed + 11 name differences left after a clean pass). Neither class
+  // is pushable: a departure is a decision, and the ClubDesk import is name-less by
+  // design, so no sync in either direction can reconcile a name.
+  cdNeedsSyncDescription: 'Members out of step with ClubDesk since the last sync. "Departed" and "Name differs" are not cleared by the sync path — a departure is yours to decide, and a name can never be pushed.',
   cdNeedsSyncLastDown: 'Last sync down: {{time}}',
   cdNeedsSyncLastUp: 'Last sync up: {{time}}',
   cdNeedsSyncAllGood: 'Everyone is in step — {{count}} members in sync.',
@@ -821,6 +827,7 @@ export default {
   cdFixResultPreview: 'Preview result — nothing was written yet',
   cdFixResultCommit: 'Commit result',
   cdFixCommitted_one: 'Done — 1 group allocation written to ClubDesk. Nothing else to do here.',
+  cdFixCommittedStale: 'ClubDesk is written. The group findings on this page still show the old allocations until the next sync down re-reads them.',
   cdFixCommitted_other: 'Done — {{count}} group allocations written to ClubDesk. Nothing else to do here.',
   cdFixCloseButton: 'Close',
   cdFixSkippedCount: '{{count}} skipped',
