@@ -183,6 +183,17 @@ export default function ClubdeskSyncPath({
   const [active, setActive] = useState(false)
   /** The last sync-down this runner drove finished cleanly — drives the footer. */
   const [downDone, setDownDone] = useState(false)
+  /**
+   * A group-fix COMMIT has landed in this session.
+   *
+   * ⚠⚠ Step 5 cannot be gated on its findings going away, because they cannot: the
+   * group checks read `clubdesk_export.gruppen_bracketed`, which is written by the
+   * sync DOWN, and the commit writes to ClubDesk. Our copy of the register is one
+   * sync behind until the next down — so a run that did exactly what was asked
+   * (08.09.2026: 7 assigned, 2 removed, no skips) left the path reading
+   * "5. Fix groups (9)" with no way to finish. The commit itself is the signal.
+   */
+  const [groupsCommitted, setGroupsCommitted] = useState(false)
   /** Wall-clock start of the step this runner is polling — drives the elapsed read-out. */
   const [startedAt, setStartedAt] = useState<number | null>(null)
   /** Ticks only while a step is in flight — `elapsed` is derived from it below. */
@@ -317,9 +328,9 @@ export default function ClubdeskSyncPath({
     let c = s
     if (c === 'decide' && pendingProposals === 0) c = 'up'
     if (c === 'up' && pendingPush === 0) c = 'down2'
-    if (c === 'groups' && fixableCount === 0) c = 'done'
+    if (c === 'groups' && (fixableCount === 0 || groupsCommitted)) c = 'done'
     return c
-  }, [pendingProposals, pendingPush, fixableCount])
+  }, [pendingProposals, pendingPush, fixableCount, groupsCommitted])
   const current = resolve(step)
 
   /**
@@ -446,7 +457,7 @@ export default function ClubdeskSyncPath({
         {current === 'done' ? (
           <Button
             type="button" size="sm" variant="outline"
-            onClick={() => { setStep('down1'); setActive(false); setDownDone(false) }}
+            onClick={() => { setStep('down1'); setActive(false); setDownDone(false); setGroupsCommitted(false) }}
             className="gap-1.5"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -528,7 +539,12 @@ export default function ClubdeskSyncPath({
               />
             </div>
             <p className="mt-1.5 text-xs" aria-live="polite">
-              {upHolding ? (
+              {/* ⚠ First, because it is the one state that looks like a failure and
+                  is not: ClubDesk has been written, and the group findings keep
+                  showing the old allocations until a sync down re-reads them. */}
+              {groupsCommitted && fixableCount > 0 ? (
+                <span className="text-gray-500 dark:text-gray-400">{t('dhPathGroupsWritten')}</span>
+              ) : upHolding ? (
                 <span className="text-amber-700 dark:text-amber-300">{t('clubdeskSyncBlockedByUp')}</span>
               ) : lock.message ? (
                 // Explanation AND the raw line: a classifier that swallowed the
@@ -632,6 +648,7 @@ export default function ClubdeskSyncPath({
         title={label.groups}
         description={stepHint.groups}
         available={fixAvailable}
+        onCommitted={() => setGroupsCommitted(true)}
         onDone={onDone}
       />
     </div>

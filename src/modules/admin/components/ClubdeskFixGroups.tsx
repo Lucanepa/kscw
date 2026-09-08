@@ -80,6 +80,16 @@ interface Props {
   available: Record<FixClass, number>
   /** Re-run the page's checks once a commit settles. */
   onDone?: () => void | Promise<void>
+  /**
+   * A commit finished. ⚠ The sync path needs this as its OWN signal that step 5 is
+   * done, because the findings it would otherwise wait on CANNOT change: they are
+   * computed from `clubdesk_export.gruppen_bracketed`, i.e. from the last sync-DOWN,
+   * and a commit writes to ClubDesk. Until the next sync down, wiedisync's copy of
+   * the register still shows the old groups — so a step gated on "no findings left"
+   * stays open forever after a run that did exactly what was asked (08.09.2026:
+   * 7 assigned, 2 removed, zero skips, and the path still read "5. Fix groups (9)").
+   */
+  onCommitted?: () => void
   /** Open state — owned by the sync path, which is the only thing that opens it. */
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -91,7 +101,7 @@ interface Props {
 }
 
 export default function ClubdeskFixGroups({
-  available, onDone, open, onOpenChange, step, total, title, description,
+  available, onDone, onCommitted, open, onOpenChange, step, total, title, description,
 }: Props) {
   const { t } = useTranslation('admin')
   const confirm = useConfirm()
@@ -102,6 +112,11 @@ export default function ClubdeskFixGroups({
   // Held in a ref so the poller can fire onDone exactly once per finished commit
   // without re-subscribing the interval on every status change.
   const lastFinished = useRef<string | null>(null)
+  // ⚠ The FIRST poll only records where things stood; it never fires. Without this
+  // a commit finished days ago (the row keeps its last result) reads as one that
+  // just landed the moment the page opens — a spurious rescan before, and now a
+  // spurious "step 5 complete".
+  const primed = useRef(false)
 
   const poll = useCallback(async () => {
     try {
@@ -121,9 +136,11 @@ export default function ClubdeskFixGroups({
       if (!alive || !s) return
       // Refresh the page's findings when a COMMIT lands: the rows it fixed should
       // disappear. A preview changes nothing, so it must not trigger a rescan.
+      if (!primed.current) { primed.current = true; lastFinished.current = s.finished_at; return }
       if (s.state === 'done' && s.mode === 'commit' && s.finished_at
         && s.finished_at !== lastFinished.current) {
         lastFinished.current = s.finished_at
+        onCommitted?.()
         void onDone?.()
       }
     }
@@ -132,7 +149,7 @@ export default function ClubdeskFixGroups({
     // and a ten-second gap between lines reads as a stall in a live log.
     const id = setInterval(() => { void tick() }, open ? 3_000 : 10_000)
     return () => { alive = false; clearInterval(id) }
-  }, [poll, onDone, open])
+  }, [poll, onDone, onCommitted, open])
 
   const busy = BUSY.includes(status?.state as JobState)
   const blockedBy = BUSY.includes(status?.down_state as JobState)
@@ -278,7 +295,14 @@ export default function ClubdeskFixGroups({
           {committed && (
             <p className="flex items-start gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
               <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              {t('cdFixCommitted', { count: okRows.length })}
+              <span>
+                {t('cdFixCommitted', { count: okRows.length })}
+                {/* ⚠ Said out loud, because the page appears not to have changed: the
+                    findings are computed from the last sync DOWN and a commit writes
+                    to ClubDesk, so wiedisync's copy of the groups is one sync behind
+                    until the next one. */}
+                <span className="mt-1 block text-xs opacity-90">{t('cdFixCommittedStale')}</span>
+              </span>
             </p>
           )}
 

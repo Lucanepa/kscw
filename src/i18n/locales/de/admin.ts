@@ -677,6 +677,7 @@ export default {
   dhPathStep3Empty: '3. Sync up (nichts zu senden)',
   dhPathStep5Empty: '5. Gruppen korrigieren (nichts zu tun)',
   dhPathStep4: '4. Nochmals Sync down',
+  dhPathGroupsWritten: 'Fertig — ClubDesk wurde geschrieben. Die Befunde unten aktualisieren sich beim nächsten Sync down.',
   dhPathStep5: '5. Gruppen korrigieren ({{count}})',
 
   // ── Der Schritt-Dialog: eine Hülle für alle fünf Schritte (08.09.2026) ──
@@ -733,7 +734,7 @@ export default {
   dhProposalAlreadyDecided: 'Diese Entscheide wurden bereits getroffen — die aktuelle Liste wird angezeigt.',
 
   cdNeedsSyncTitle: 'Muss synchronisiert werden',
-  cdNeedsSyncDescription: 'Mitglieder, die seit der letzten Synchronisation nicht mit ClubDesk übereinstimmen.',
+  cdNeedsSyncDescription: 'Mitglieder, die seit der letzten Synchronisation nicht mit ClubDesk übereinstimmen. "Ausgetreten" und "Name weicht ab" erledigt der Sync-Ablauf nicht — über einen Austritt entscheidest du, und ein Name kann nie gepusht werden.',
   cdNeedsSyncLastDown: 'Letzter Download: {{time}}',
   cdNeedsSyncLastUp: 'Letzter Upload: {{time}}',
   cdNeedsSyncAllGood: 'Alles im Einklang — {{count}} Mitglieder synchron.',
@@ -815,6 +816,7 @@ export default {
   cdFixResultPreview: 'Vorschau-Ergebnis — es wurde noch nichts geschrieben',
   cdFixResultCommit: 'Ergebnis der Übernahme',
   cdFixCommitted_one: 'Fertig — 1 Gruppenzuteilung in ClubDesk geschrieben. Hier ist nichts weiter zu tun.',
+  cdFixCommittedStale: 'ClubDesk ist geschrieben. Die Gruppen-Befunde auf dieser Seite zeigen bis zum nächsten Sync down noch den alten Stand.',
   cdFixCommitted_other: 'Fertig — {{count}} Gruppenzuteilungen in ClubDesk geschrieben. Hier ist nichts weiter zu tun.',
   cdFixCloseButton: 'Schliessen',
   cdFixSkippedCount: '{{count}} übersprungen',
