@@ -6,7 +6,7 @@
 
 import { buildEmailLayout, buildInfoCard, formatDateCH, bucketEmailsByLocale, escHtml } from './email-template.js'
 import { normalizePhone, normalizeIban, normalizeAhv, normalizeEmail, titleCaseName } from './normalize.js'
-import { BB_SITUATIONS, bbRequiredDocs, fibaNatCode } from './bb-docs.js'
+import { BB_SITUATIONS, bbRequiredDocs, bbRequiredDocsAfterWaiver, fibaNatCode } from './bb-docs.js'
 import { BB_PDF_TEMPLATES, fillBbForm } from './bb-pdf-fill.js'
 import { federationName } from './federations.js'
 import { writeUserLog } from './activity-log.js'
@@ -1318,6 +1318,9 @@ export function registerRegistration(router, { database, logger, services, getSc
     'geburtsdatum', 'bb_situation', 'bb_recent_licence', 'reference_number',
     'id_upload_front', 'id_upload_back', 'bb_doc_lizenz', 'bb_doc_freibrief',
     'bb_doc_selfdecl', 'bb_doc_natdecl', 'bb_doc_u18parents', 'bb_doc_schoolcert',
+    // Migration 358 — a waived document is not owed, so the nachreichen page
+    // must not list it and the prefilled-form route must not serve it.
+    'bb_docs_waived',
   ]
 
   // GET /kscw/registration/doc-status — document completeness for the public
@@ -1336,7 +1339,7 @@ export function registerRegistration(router, { database, logger, services, getSc
       // missing which the create route never required of them.
       const natCode = fibaNatCode(reg.nationalitaet_codes, reg.nationalitaet_code)
       const required = reg.membership_type === 'basketball'
-        ? bbRequiredDocs(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence)
+        ? bbRequiredDocsAfterWaiver(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence, reg.bb_docs_waived)
         : []
       return res.json({
         id: reg.id,
@@ -1423,7 +1426,7 @@ export function registerRegistration(router, { database, logger, services, getSc
       // holding the pair, including forms their situation never required.
       const natCode = fibaNatCode(reg.nationalitaet_codes, reg.nationalitaet_code)
       const required = reg.membership_type === 'basketball'
-        ? bbRequiredDocs(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence)
+        ? bbRequiredDocsAfterWaiver(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence, reg.bb_docs_waived)
         : []
       if (!required.includes(field) || reg[field]) {
         return res.status(404).json({ error: 'No template for this document' })
@@ -1530,7 +1533,7 @@ export function registerRegistration(router, { database, logger, services, getSc
       const reg = await database('registrations').where('id', id)
         .first('id', 'status', 'email', 'vorname', 'nachname', 'locale', 'membership_type',
           'reference_number', 'nationalitaet_code', 'nationalitaet_codes', 'geburtsdatum',
-          'bb_situation', 'bb_recent_licence',
+          'bb_situation', 'bb_recent_licence', 'bb_docs_waived',
           'id_upload_front', 'id_upload_back', 'bb_doc_lizenz', 'bb_doc_freibrief',
           'bb_doc_selfdecl', 'bb_doc_natdecl', 'bb_doc_u18parents', 'bb_doc_schoolcert')
       if (!reg) return res.status(404).json({ error: 'Registration not found' })
@@ -1562,7 +1565,7 @@ export function registerRegistration(router, { database, logger, services, getSc
       // applicant does not owe.
       const natCode = fibaNatCode(reg.nationalitaet_codes, reg.nationalitaet_code)
       const required = reg.membership_type === 'basketball'
-        ? bbRequiredDocs(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence)
+        ? bbRequiredDocsAfterWaiver(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence, reg.bb_docs_waived)
         : []
       const missing = required.filter((f) => !reg[f])
       if (!missing.length) {
@@ -1656,13 +1659,14 @@ export function registerRegistration(router, { database, logger, services, getSc
         reg = await database('registrations').where('id', Number(req.body.registration_id))
           .first('id', 'vorname', 'email', 'reference_number', 'membership_type', 'nationalitaet_code',
             'nationalitaet_codes', 'geburtsdatum', 'bb_situation', 'bb_recent_licence',
+            'bb_docs_waived',
             'id_upload_front', 'id_upload_back', 'bb_doc_lizenz', 'bb_doc_freibrief',
             'bb_doc_selfdecl', 'bb_doc_natdecl', 'bb_doc_u18parents', 'bb_doc_schoolcert')
       }
       let missing
       if (reg) {
         const natCode = fibaNatCode(reg.nationalitaet_codes, reg.nationalitaet_code)
-        const required = bbRequiredDocs(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence)
+        const required = bbRequiredDocsAfterWaiver(reg.bb_situation, natCode, reg.geburtsdatum, reg.bb_recent_licence, reg.bb_docs_waived)
         missing = required.filter((f) => !reg[f])
       }
       if (!reg || !missing?.length) {

@@ -79,6 +79,14 @@ interface Registration extends BaseRecord {
   id_upload_front: string | null
   id_upload_back: string | null
   sektion_choice: string | null
+  /** Required documents an approver waived for THIS row (migration 358) —
+   *  comma-separated column names, subtracted from the required set. The
+   *  server keeps the same list, so the gate, the nachreichen page and the
+   *  docs-request email all stop asking for them together. */
+  bb_docs_waived: string | null
+  bb_docs_waived_reason: string | null
+  bb_docs_waived_by_name: string | null
+  bb_docs_waived_at: string | null
 }
 
 // All document fields a registration can carry (BB docs + ID front/back)
@@ -179,8 +187,18 @@ const countDocs = (reg: Registration): number => DOC_FIELDS.filter((k) => reg[k]
 // component-scope closure here makes the React Compiler bail on the whole page.
 const missingRequiredDocs = (reg: Registration): (keyof Registration)[] => {
   if (reg.membership_type !== 'basketball') return []
-  return bbRequiredDocs(reg.bb_situation, fibaNatCode(reg), reg.geburtsdatum).filter((k) => !reg[k])
+  const waived = waivedDocs(reg)
+  return bbRequiredDocs(reg.bb_situation, fibaNatCode(reg), reg.geburtsdatum)
+    .filter((k) => !reg[k] && !waived.includes(k))
 }
+
+// Documents an approver waived on this row. Mirrors parseWaivedDocs in
+// bb-docs.js — unknown names are dropped rather than trusted.
+const waivedDocs = (reg: Registration): (keyof Registration)[] =>
+  String(reg.bb_docs_waived || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x in DOC_LABEL_KEYS) as (keyof Registration)[]
 
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected'
@@ -283,6 +301,11 @@ export default function AnmeldungenPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [rejectTarget, setRejectTarget] = useState<Registration | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  // Document waiver (migration 358) — a deliberate second action, never the
+  // result of clicking Approve. The gate keeps its meaning: Approve still
+  // refuses and says what is missing; this is the documented way past it.
+  const [waiveTarget, setWaiveTarget] = useState<Registration | null>(null)
+  const [waiveReason, setWaiveReason] = useState('')
   const [previewFile, setPreviewFile] = useState<{ fileId: string; label: string } | null>(null)
 
   const allowedSports = useMemo(() => {
@@ -508,6 +531,27 @@ export default function AnmeldungenPage() {
   }
 
   const [bulkRequesting, setBulkRequesting] = useState(false)
+
+  // Waive the documents this row is still missing AND approve, in one PATCH —
+  // the server gate reads the waiver from the payload for exactly this reason,
+  // so there is no window where the row is waived but not yet approved.
+  const confirmWaiveAndApprove = () => {
+    if (!waiveTarget || !waiveReason.trim()) return
+    const missing = missingRequiredDocs(waiveTarget)
+    if (!missing.length) { setWaiveTarget(null); return }
+    updateReg({
+      id: waiveTarget.id,
+      data: {
+        status: 'approved',
+        bb_docs_waived: missing.join(','),
+        bb_docs_waived_reason: waiveReason.trim(),
+      },
+    }, {
+      onSuccess: () => toast.success(t('anmeldungenDocsWaivedToast', { count: missing.length })),
+    })
+    setWaiveTarget(null)
+    setWaiveReason('')
+  }
 
   const confirmReject = () => {
     if (!rejectTarget || !rejectReason.trim()) return
@@ -782,6 +826,7 @@ export default function AnmeldungenPage() {
                                     onReject={() => openRejectModal(reg)}
                                     onResendInvite={() => handleResendInvite(reg)}
                                     onRequestDocs={() => handleRequestDocs(reg)}
+                                    onWaiveDocs={() => { setWaiveTarget(reg); setWaiveReason('') }}
                                     onPreviewFile={setPreviewFile}
                                     onMerged={refetchDupFlags}
                                     isUpdating={isUpdating}
@@ -839,6 +884,56 @@ export default function AnmeldungenPage() {
               className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
             >
               {t('anmeldungenConfirmReject')}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Waive-and-approve modal */}
+      <Dialog open={!!waiveTarget} onOpenChange={(open) => { if (!open) setWaiveTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('anmeldungenDocsWaiveTitle')}</DialogTitle>
+            <DialogDescription>
+              {waiveTarget && `${waiveTarget.vorname} ${waiveTarget.nachname} — ${waiveTarget.reference_number}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950">
+              <div className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                {t('anmeldungenDocsWaiveIntro')}
+              </div>
+              <ul className="mt-1 list-inside list-disc text-sm text-amber-700 dark:text-amber-400">
+                {waiveTarget && missingRequiredDocs(waiveTarget).map((k) => (
+                  <li key={String(k)}>{t(DOC_LABEL_KEYS[k] ?? String(k))}</li>
+                ))}
+              </ul>
+            </div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('anmeldungenDocsWaiveReasonLabel')} *
+            </label>
+            <textarea
+              value={waiveReason}
+              onChange={(e) => setWaiveReason(e.target.value)}
+              rows={3}
+              className="w-full rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm dark:border-gray-600 dark:text-gray-100"
+              placeholder={t('anmeldungenDocsWaiveReasonPlaceholder')}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setWaiveTarget(null)}
+              className="rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              {t('cancel')}
+            </button>
+            <button
+              onClick={confirmWaiveAndApprove}
+              disabled={!waiveReason.trim() || isUpdating}
+              className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-40"
+            >
+              {t('anmeldungenDocsWaiveConfirm')}
             </button>
           </DialogFooter>
         </DialogContent>
@@ -948,6 +1043,7 @@ function ExpandedDetails({
   onReject,
   onResendInvite,
   onRequestDocs,
+  onWaiveDocs,
   onPreviewFile,
   onMerged,
   isUpdating,
@@ -962,6 +1058,7 @@ function ExpandedDetails({
   onReject: () => void
   onResendInvite: () => void
   onRequestDocs: () => void
+  onWaiveDocs: () => void
   onPreviewFile: (file: { fileId: string; label: string }) => void
   onMerged: () => void
   isUpdating: boolean
@@ -1333,6 +1430,25 @@ function ExpandedDetails({
           component hides itself for non-superadmins) */}
       {reg.status === 'approved' && <ClubdeskRegistrationZone registrationId={String(reg.id)} />}
 
+      {/* A waiver is the one thing that let this dossier through incomplete, so
+          it is stated on the row rather than buried in Data Studio. */}
+      {waivedDocs(reg).length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950">
+          <div className="text-xs font-medium text-amber-800 dark:text-amber-300">
+            {t('anmeldungenDocsWaivedLabel')}: {waivedDocs(reg).map((k) => t(DOC_LABEL_KEYS[k] ?? String(k))).join(', ')}
+          </div>
+          {reg.bb_docs_waived_reason && (
+            <div className="mt-0.5 text-sm text-amber-700 dark:text-amber-400">{reg.bb_docs_waived_reason}</div>
+          )}
+          {reg.bb_docs_waived_by_name && (
+            <div className="mt-0.5 text-xs text-amber-600 dark:text-amber-500">
+              {reg.bb_docs_waived_by_name}
+              {reg.bb_docs_waived_at ? ` — ${formatDate(reg.bb_docs_waived_at)}` : ''}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Rejection reason display */}
       {reg.status === 'rejected' && reg.rejection_reason && (
         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800 dark:bg-red-950">
@@ -1398,6 +1514,19 @@ function ExpandedDetails({
           >
             <Upload className="h-3.5 w-3.5" />
             {t('anmeldungenDocsRequest')}
+          </button>
+        )}
+        {/* The way past the gate. Pending only — a waiver exists to let an
+            approval through, and an approved row is already through. */}
+        {missingDocCount > 0 && reg.status === 'pending' && (
+          <button
+            onClick={onWaiveDocs}
+            disabled={isUpdating}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-amber-300 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-40 sm:min-h-0 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+            title={t('anmeldungenDocsWaiveTitle')}
+          >
+            <CircleAlert className="h-3.5 w-3.5" />
+            {t('anmeldungenDocsWaive')}
           </button>
         )}
       </div>

@@ -2,6 +2,16 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.8.0 — 2026-09-09
+
+### Features
+
+- **A required document can now be waived, on the record.** *Admin → Anmeldungen, basketball registrations.* Swiss Basketball's document list is enforced at every step, which is right until the federation says a licence can be issued without one of them — and then the only ways past it were to upload a placeholder file or to edit the row in the database, both of which leave the dossier lying about what it holds. A blocked approval now offers "Approve anyway": it names the documents it would waive, asks why, and records the answer with your name and the date on the registration. The waiver is per document and per registration — a different document going missing later still blocks the approval — and it applies everywhere the requirement did, so the applicant is no longer emailed for a document the club has agreed to do without.
+
+### Fixes
+
+- **A blocked approval says which document it is waiting for.** It used to count them — "1 required document(s) missing" on a row showing eight tiles, three of which that player never owed — leaving you to work out which one by eye. It now names them. The buttons under a registration are also one size again: "Request documents" was taller than Approve and Reject, and on a phone the three of them ran off the edge of the row.
+
 ## v2.7.2 — 2026-09-08
 
 ### Fixes

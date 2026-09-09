@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.7.2'
+const APP_VERSION = '2.8.0'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,24 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.8.0',
+    date: '09.09.2026',
+    sections: [
+      {
+        title: "Features",
+        items: [
+          "A required document can now be waived, on the record. Admin \u2192 Anmeldungen, basketball registrations. Swiss Basketball's document list is enforced at every step, which is right until the federation says a licence can be issued without one of them \u2014 and then the only ways past it were to upload a placeholder file or to edit the row in the database, both of which leave the dossier lying about what it holds. A blocked approval now offers \"Approve anyway\": it names the documents it would waive, asks why, and records the answer with your name and the date on the registration. The waiver is per document and per registration \u2014 a different document going missing later still blocks the approval \u2014 and it applies everywhere the requirement did, so the applicant is no longer emailed for a document the club has agreed to do without.",
+        ],
+      },
+      {
+        title: "Fixes",
+        items: [
+          "A blocked approval says which document it is waiting for. It used to count them \u2014 \"1 required document(s) missing\" on a row showing eight tiles, three of which that player never owed \u2014 leaving you to work out which one by eye. It now names them. The buttons under a registration are also one size again: \"Request documents\" was taller than Approve and Reject, and on a phone the three of them ran off the edge of the row.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.7.2',
     date: '08.09.2026',
