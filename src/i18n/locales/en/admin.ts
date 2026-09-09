@@ -494,7 +494,7 @@ export default {
   anmeldungenDocsRequestConfirm: 'Send a document request email to {{count}} applicant(s)?',
   anmeldungenDocsRequestBulkSent: 'Document request sent to {{count}} applicant(s)',
   anmeldungenDocsRequestBulkFailed: 'Could not send to: {{names}}',
-  anmeldungenDocsMissingBlock: 'Cannot approve — {{count}} required document(s) missing. The family must upload them first (website → submit documents).',
+  anmeldungenDocsMissingBlock: 'Cannot approve — still missing: {{docs}}. The applicant must upload them first (website → submit documents).',
   anmeldungenInviteSent: 'Invite sent to {{email}}',
   anmeldungenInviteAlreadyClaimed: 'This person already has an account',
   anmeldungenInviteNoEmail: 'This registration has no email address',
