@@ -3073,7 +3073,7 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
   async function stageConflictProposals() {
     const drift = await computeClubdeskDrift()
     const NAME_FIELDS = new Set(['first_name', 'last_name'])
-    const wanted = []
+    let wanted = []
     for (const c of drift) {
       for (const d of c.conflicts) {
         if (NAME_FIELDS.has(d.field)) continue
@@ -3091,6 +3091,37 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
       }
     }
     if (!wanted.length) return { staged: 0, considered: 0, capped: false }
+
+    // ⚠⚠ A field with a STAGED, UNPUSHED change is not a disagreement to decide —
+    // it is a push waiting to happen, and ClubDesk simply has not been told yet.
+    // Staging it as a conflict asks the operator to adjudicate their own pending
+    // edit against the value it is about to replace, and the only correct answer
+    // ("refuse") is the one that reads like undoing the work. Worse, ACCEPTING is
+    // offered, and accept writes ClubDesk's value over the edit that was queued.
+    // Surfaced 08.09.2026: six departures were staged (register_status + austritt)
+    // and the very next sync-down proposed reverting all six to Aktivmitglied.
+    // The item is not lost by skipping it — the member stays
+    // `clubdesk_push_pending`, so it is counted by step 3 instead of step 2, which
+    // is where it belongs. If the push is refused or the value comes back
+    // different afterwards, the next detection stages it for real.
+    const pushStaged = new Map()
+    for (const r of await database('members')
+      .whereIn('id', [...new Set(wanted.map((w) => w.member_id))])
+      .where('clubdesk_push_pending', true)
+      .select('id', 'clubdesk_push_changes')) {
+      pushStaged.set(r.id, changedPushFields(r.clubdesk_push_changes))
+    }
+    if (pushStaged.size) {
+      const before = wanted.length
+      wanted = wanted.filter((w) => !pushStaged.get(w.member_id)?.has(w.field))
+      // Counted BEFORE the cap, so a queue of pending pushes can never push a
+      // normal run over it and stage nothing at all.
+      if (before !== wanted.length) {
+        log.info(`ClubDesk conflict staging: skipped ${before - wanted.length} field(s) with an unpushed change already staged`)
+      }
+      if (!wanted.length) return { staged: 0, considered: 0, capped: false }
+    }
+
     if (wanted.length > CONFLICT_STAGING_CAP) {
       // Loud, not silent: this is the one outcome where "0 staged" would read as
       // "nothing to decide" while the truth is "everything disagrees".
