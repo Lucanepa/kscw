@@ -751,7 +751,7 @@ export default {
   anmeldungenDocsRequestConfirm: 'Inviare una richiesta di documenti a {{count}} persona/e?',
   anmeldungenDocsRequestBulkSent: 'Richiesta di documenti inviata a {{count}} persona/e',
   anmeldungenDocsRequestBulkFailed: 'Invio non riuscito a: {{names}}',
-  anmeldungenDocsMissingBlock: 'Approvazione non possibile — {{count}} documento/i richiesto/i mancante/i. La famiglia deve prima caricarli (sito web).',
+  anmeldungenDocsMissingBlock: 'Approvazione non possibile — mancano ancora: {{docs}}. I documenti devono prima essere caricati tramite il sito web.',
   anmeldungenInviteSent: 'Invito inviato a {{email}}',
   anmeldungenInviteAlreadyClaimed: 'Questa persona ha già un account',
   anmeldungenInviteNoEmail: 'Questa iscrizione non ha un indirizzo e-mail',

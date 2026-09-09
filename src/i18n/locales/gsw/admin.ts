@@ -886,7 +886,7 @@ export default {
   anmeldungenDocsRequestConfirm: 'Dokumänt-Aafrog a {{count}} Person(e) schicke?',
   anmeldungenDocsRequestBulkSent: 'Dokumänt-Aafrog a {{count}} Person(e) gschickt',
   anmeldungenDocsRequestBulkFailed: 'Het nöd chöne gschickt werde a: {{names}}',
-  anmeldungenDocsMissingBlock: 'Freigab nöd möglich — {{count}} nötigi Dokumänt fähled. Bitte zerst über d Website nachereiche lah.',
+  anmeldungenDocsMissingBlock: 'Freigab nöd möglich — es fähled no: {{docs}}. Bitte zerst über d Website nachereiche lah.',
   anmeldungenInviteSent: 'Yladig an {{email}} gschickt',
   anmeldungenInviteAlreadyClaimed: 'Die Person hät scho es Konto',
   anmeldungenInviteNoEmail: 'Die Aamäldig hät kei E-Mail-Adrässe',

@@ -99,6 +99,21 @@ const DOC_FIELDS: (keyof Registration)[] = [
   'id_upload_back',
 ]
 
+// Document field → its label key, so a blocked approval can NAME what it is
+// waiting for instead of only counting it ("1 document missing" sends the
+// approver back to the grid to diff it by eye). Same labels the document grid
+// renders, so the toast and the row read alike.
+const DOC_LABEL_KEYS: Record<string, string> = {
+  bb_doc_lizenz: 'anmeldungenDocLizenz',
+  bb_doc_freibrief: 'anmeldungenDocFreibrief',
+  bb_doc_selfdecl: 'anmeldungenDocSelfDecl',
+  bb_doc_natdecl: 'anmeldungenDocNatDecl',
+  bb_doc_u18parents: 'anmeldungenDocU18Parents',
+  bb_doc_schoolcert: 'anmeldungenDocSchoolCert',
+  id_upload_front: 'anmeldungenDocIdFront',
+  id_upload_back: 'anmeldungenDocIdBack',
+}
+
 // Required basketball documents for a licensing situation. Mirrors bbRequiredDocs
 // in the Directus extension (wiedisync bb-docs.js) and the kscw-website client —
 // keep the four in sync. School certificate stays optional (never required).
@@ -428,7 +443,8 @@ export default function AnmeldungenPage() {
   const handleApprove = (reg: Registration) => {
     const missing = missingRequiredDocs(reg)
     if (missing.length) {
-      toast.error(t('anmeldungenDocsMissingBlock', { count: missing.length }))
+      const docs = missing.map((k) => t(DOC_LABEL_KEYS[k] ?? String(k))).join(', ')
+      toast.error(t('anmeldungenDocsMissingBlock', { count: missing.length, docs }))
       return
     }
     updateReg({ id: reg.id, data: { status: 'approved' } }, {
@@ -1325,13 +1341,17 @@ function ExpandedDetails({
         </div>
       )}
 
-      {/* Action bar: save first if edited, then approve/reject */}
-      <div className="mt-3 flex items-center justify-end gap-2">
+      {/* Action bar: save first if edited, then approve/reject. Every button
+          here carries the same min-h-[44px] … sm:min-h-0 pair, so the touch
+          target is a uniform 44px on a phone and the row does not look ragged
+          — "Request documents" used to be the only tall one. flex-wrap because
+          approve + reject + request do not fit one phone line. */}
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {hasChanges ? (
           <button
             onClick={handleSave}
             disabled={isUpdating}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 sm:min-h-0"
           >
             <Save className="h-3.5 w-3.5" />
             {t('save')}
@@ -1341,7 +1361,7 @@ function ExpandedDetails({
             <button
               onClick={onApprove}
               disabled={isUpdating}
-              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40 sm:min-h-0"
             >
               <Check className="h-3.5 w-3.5" />
               {t('anmeldungenApprove')}
@@ -1349,7 +1369,7 @@ function ExpandedDetails({
             <button
               onClick={onReject}
               disabled={isUpdating}
-              className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40 sm:min-h-0"
             >
               <X className="h-3.5 w-3.5" />
               {t('anmeldungenReject')}
@@ -1359,7 +1379,7 @@ function ExpandedDetails({
           <button
             onClick={onResendInvite}
             disabled={isResending || isUpdating}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 sm:min-h-0 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
             title={t('anmeldungenResendInvite')}
           >
             <Send className="h-3.5 w-3.5" />
@@ -1373,7 +1393,7 @@ function ExpandedDetails({
           <button
             onClick={onRequestDocs}
             disabled={isRequestingDocs || isUpdating}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-40"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-40 sm:min-h-0"
             title={t('anmeldungenDocsRequestTitle')}
           >
             <Upload className="h-3.5 w-3.5" />

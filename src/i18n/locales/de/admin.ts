@@ -494,7 +494,7 @@ export default {
   anmeldungenDocsRequestConfirm: 'Dokumentenanfrage an {{count}} Person(en) senden?',
   anmeldungenDocsRequestBulkSent: 'Dokumentenanfrage an {{count}} Person(en) gesendet',
   anmeldungenDocsRequestBulkFailed: 'Konnte nicht gesendet werden an: {{names}}',
-  anmeldungenDocsMissingBlock: 'Freigabe nicht möglich — {{count}} erforderliche(s) Dokument(e) fehlen. Bitte zuerst über die Website nachreichen lassen.',
+  anmeldungenDocsMissingBlock: 'Freigabe nicht möglich — es fehlt noch: {{docs}}. Bitte zuerst über die Website nachreichen lassen.',
   anmeldungenInviteSent: 'Einladung an {{email}} gesendet',
   anmeldungenInviteAlreadyClaimed: 'Diese Person hat bereits ein Konto',
   anmeldungenInviteNoEmail: 'Diese Anmeldung hat keine E-Mail-Adresse',

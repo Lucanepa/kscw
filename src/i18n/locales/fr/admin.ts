@@ -751,7 +751,7 @@ export default {
   anmeldungenDocsRequestConfirm: 'Envoyer une demande de documents à {{count}} personne(s) ?',
   anmeldungenDocsRequestBulkSent: 'Demande de documents envoyée à {{count}} personne(s)',
   anmeldungenDocsRequestBulkFailed: 'Envoi impossible à : {{names}}',
-  anmeldungenDocsMissingBlock: 'Approbation impossible — {{count}} document(s) requis manquant(s). La famille doit d\'abord les téléverser (site web).',
+  anmeldungenDocsMissingBlock: 'Approbation impossible — il manque encore : {{docs}}. Les documents doivent d\'abord être téléversés via le site web.',
   anmeldungenInviteSent: 'Invitation envoyée à {{email}}',
   anmeldungenInviteAlreadyClaimed: 'Cette personne a déjà un compte',
   anmeldungenInviteNoEmail: 'Cette inscription n\'a pas d\'adresse e-mail',
