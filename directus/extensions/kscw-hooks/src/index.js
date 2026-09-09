@@ -24,7 +24,7 @@ import { initSentry } from '../../kscw-endpoints/src/sentry.js'
 import { buildEmailLayout, buildNewsletterEmail, buildInfoCard, buildAlertBox, bucketEmailsByLocale } from '../../kscw-endpoints/src/email-template.js'
 import { sendLocalizedPush, bucketMembersByLocale, tPush } from '../../kscw-endpoints/src/push-i18n.js'
 import { mintSignupToken, signupInviteUrl, buildGuideHtml } from '../../kscw-endpoints/src/signup-invites.js'
-import { bbRequiredDocs, fibaNatCode } from '../../kscw-endpoints/src/bb-docs.js'
+import { bbRequiredDocsAfterWaiver, parseWaivedDocs, fibaNatCode } from '../../kscw-endpoints/src/bb-docs.js'
 import { TEMPLATE_FIELDS, validateTemplate, sanitizeTemplateHtml } from '../../kscw-endpoints/src/email-templates.js'
 import { gameStartMs } from '../../kscw-endpoints/src/scorer-roster.js'
 import { teamPeopleSql, notGuestAnywhereSql } from '../../kscw-endpoints/src/activity-roster-sql.js'
@@ -5554,6 +5554,7 @@ export default ({ action, filter, init, schedule }, { services, database, logger
     for (const key of keys) {
       const reg = await database('registrations').where('id', key)
         .first('id', 'membership_type', 'nationalitaet_code', 'nationalitaet_codes', 'geburtsdatum', 'bb_situation', 'bb_recent_licence', 'reference_number',
+          'bb_docs_waived',
           'id_upload_front', 'id_upload_back', 'bb_doc_lizenz', 'bb_doc_freibrief', 'bb_doc_selfdecl', 'bb_doc_natdecl', 'bb_doc_u18parents', 'bb_doc_schoolcert')
       if (!reg || reg.membership_type !== 'basketball') continue
       // The same PATCH may edit situation/nationality/DOB *and* approve — evaluate
@@ -5576,7 +5577,11 @@ export default ({ action, filter, init, schedule }, { services, database, logger
       // it must reach the gate — otherwise approving a waived transfer_ch would
       // demand a release letter the create route rightly never asked for.
       const recentLicence = payload.bb_recent_licence !== undefined ? payload.bb_recent_licence : reg.bb_recent_licence
-      const required = bbRequiredDocs(situation, natCode, dob, recentLicence)
+      // Waiver (migration 358) — payload wins, because the admin page waives and
+      // approves in ONE patch: the approver could not otherwise set a waiver on a
+      // row this same filter is about to refuse.
+      const waived = payload.bb_docs_waived !== undefined ? payload.bb_docs_waived : reg.bb_docs_waived
+      const required = bbRequiredDocsAfterWaiver(situation, natCode, dob, recentLicence, waived)
       // The same update may attach a doc and approve in one call — payload wins.
       const missing = required.filter((k) => (payload[k] === undefined ? !reg[k] : !payload[k]))
       if (missing.length) {
@@ -5588,6 +5593,57 @@ export default ({ action, filter, init, schedule }, { services, database, logger
         )
       }
     }
+    return payload
+  })
+
+  // ── Document waiver: canonicalize, demand a reason, stamp the approver ──────
+  //
+  // The waiver is the one way past the gate above, so it has to carry its own
+  // evidence. Three things happen here and nowhere else:
+  //
+  //   - the stored list is rewritten to the recognised column names only, so a
+  //     typo waives nothing rather than something adjacent
+  //   - a waiver with no reason is refused with a readable 400 (the CHECK in
+  //     migration 358 would refuse it too, as an unreadable constraint error)
+  //   - who and when are stamped from accountability, never from the payload —
+  //     a self-declared "waived by" is not evidence
+  //
+  // Clearing the waiver (empty/null) is allowed and clears the stamps with it:
+  // re-imposing a requirement is always safe.
+  filter('registrations.items.update', async (payload, _meta, { accountability, database: db }) => {
+    if (payload?.bb_docs_waived === undefined) return payload
+
+    const waived = parseWaivedDocs(payload.bb_docs_waived)
+    if (!waived.length) {
+      payload.bb_docs_waived = null
+      payload.bb_docs_waived_reason = null
+      payload.bb_docs_waived_by_name = null
+      payload.bb_docs_waived_by_email = null
+      payload.bb_docs_waived_at = null
+      return payload
+    }
+
+    const reason = String(payload.bb_docs_waived_reason ?? '').trim()
+    if (!reason) {
+      throw kscwScopeError(
+        'A document waiver needs a reason: say why the licence can be issued without it.',
+        400, 'WAIVER_REASON_REQUIRED',
+      )
+    }
+
+    payload.bb_docs_waived = waived.join(',')
+    payload.bb_docs_waived_reason = reason
+    payload.bb_docs_waived_by_name = null
+    payload.bb_docs_waived_by_email = null
+    if (accountability?.user) {
+      try {
+        const m = await db('members').where('user', accountability.user)
+          .first('first_name', 'last_name', 'email')
+        payload.bb_docs_waived_by_name = m ? [m.first_name, m.last_name].filter(Boolean).join(' ') || null : null
+        payload.bb_docs_waived_by_email = m?.email ?? null
+      } catch { /* stamping is best-effort; the reason check above is not */ }
+    }
+    payload.bb_docs_waived_at = new Date()
     return payload
   })
 

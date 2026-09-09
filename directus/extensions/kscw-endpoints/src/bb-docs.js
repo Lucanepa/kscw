@@ -92,6 +92,35 @@ export function fibaNatCode(codes, fallback) {
   return list[0] || String(fallback || '').trim().toUpperCase().slice(0, 2)
 }
 
+// Documents an approver has waived for ONE registration (migration 358), parsed
+// from the stored comma list. Unknown names are dropped rather than trusted: the
+// column is admin-writable, and a typo that silently waived nothing is safer than
+// a typo that silently waived something.
+export function parseWaivedDocs(waived) {
+  const known = new Set([
+    'id_upload_front', 'id_upload_back', 'bb_doc_lizenz', 'bb_doc_freibrief',
+    'bb_doc_selfdecl', 'bb_doc_natdecl', 'bb_doc_u18parents', 'bb_doc_schoolcert',
+  ])
+  return String(waived || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => known.has(s))
+}
+
+// What this registration must still produce: the procedure's required set minus
+// what an approver waived on the record. Subtractive by construction — a waiver
+// can only ever remove a requirement — so a row with no waiver is unchanged.
+//
+// Every reader of the required set goes through here, NOT bbRequiredDocs, or the
+// club waives a document on the approval screen and the docs-request email keeps
+// asking the applicant for it. bbRequiredDocs stays the pure statement of what
+// Swiss Basketball's procedure demands; the create route uses it directly,
+// because a submission that does not exist yet cannot carry a waiver.
+export function bbRequiredDocsAfterWaiver(situation, natCode, dob, recentLicence, waived) {
+  const w = parseWaivedDocs(waived)
+  return bbRequiredDocs(situation, natCode, dob, recentLicence).filter((k) => !w.includes(k))
+}
+
 // Required document COLUMNS (registrations table) for a basketball registration.
 // A falsy/unknown situation falls back to the legacy nationality-only rule so
 // rows created before the situation field existed keep a sane required set.
