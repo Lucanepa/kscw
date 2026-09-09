@@ -70,6 +70,10 @@ interface Registration extends BaseRecord {
    *  member row. Null until then — nothing to hang a licence status on. */
   member: number | null
   bb_situation: string | null
+  /** transfer_ch only: did the applicant hold a Swiss Basketball licence in the
+   *  last two seasons? 'ja' | 'nein' | null (unanswered). Only 'nein' waives the
+   *  Freibrief — see bbFreibriefWaived. */
+  bb_recent_licence: string | null
   bb_doc_lizenz: string | null
   bb_doc_freibrief: string | null
   bb_doc_selfdecl: string | null
@@ -126,23 +130,42 @@ const DOC_LABEL_KEYS: Record<string, string> = {
 // in the Directus extension (wiedisync bb-docs.js) and the kscw-website client —
 // keep the four in sync. School certificate stays optional (never required).
 const BB_SITUATIONS = ['neu', 'transfer_ch', 'transfer_intl', 'rueckkehr']
-const bbIsMinor = (dob: string | null): boolean => {
-  if (!dob) return false
+const bbAgeAtSeasonStart = (dob: string | null): number | null => {
+  if (!dob) return null
   const m = dob.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!m) return false
+  if (!m) return null
   const now = new Date()
   // ⚠ Jul 1 with a Sep 1 age reference, NOT the club's Jun 1 cutover (utils/season.ts)
-  // — deliberate. Licence AGE-BAND rule, matched pair with bbAgeForSeason() in
+  // — deliberate. Licence AGE-BAND rule, matched pair with bbAgeAtSeasonStart() in
   // directus/extensions/kscw-endpoints/src/bb-docs.js. Change both or neither.
   const seasonStartYear = now.getUTCMonth() + 1 >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
   let age = seasonStartYear - Number(m[1])
   if (9 < Number(m[2]) || (9 === Number(m[2]) && 1 < Number(m[3]))) age--
-  return age < 18
+  return age
+}
+const bbIsMinor = (dob: string | null): boolean => {
+  const age = bbAgeAtSeasonStart(dob)
+  return age !== null && age < 18
+}
+// Swiss Basketball waives the Freibrief for a transfer out of another Swiss club
+// when the player held no licence in the last two seasons (the former club has
+// nothing to release) or is U12 — "Verfahren Lizenz SWB" §3. Only an explicit
+// 'nein' waives: null means unanswered, which must stay strict.
+//
+// ⚠ This page went eight weeks without it while the server had it, so the admin
+// blocked approvals the backend would have accepted, with no way out but to
+// chase a document the applicant did not owe. Matched pair with
+// bbFreibriefWaived() in bb-docs.js — change both or neither.
+const bbFreibriefWaived = (dob: string | null, recentLicence: string | null): boolean => {
+  if (String(recentLicence || '').toLowerCase() === 'nein') return true
+  const age = bbAgeAtSeasonStart(dob)
+  return age !== null && age < 12
 }
 const bbRequiredDocs = (
   situation: string | null,
   natCode: string,
   dob: string | null,
+  recentLicence: string | null,
 ): (keyof Registration)[] => {
   const base: (keyof Registration)[] = ['id_upload_front', 'id_upload_back', 'bb_doc_lizenz']
   const foreign = !!natCode && natCode !== 'CH'
@@ -153,7 +176,7 @@ const bbRequiredDocs = (
   }
   switch (situation) {
     case 'transfer_ch':
-      base.push('bb_doc_freibrief')
+      if (!bbFreibriefWaived(dob, recentLicence)) base.push('bb_doc_freibrief')
       break
     case 'transfer_intl':
     case 'rueckkehr':
@@ -188,7 +211,7 @@ const countDocs = (reg: Registration): number => DOC_FIELDS.filter((k) => reg[k]
 const missingRequiredDocs = (reg: Registration): (keyof Registration)[] => {
   if (reg.membership_type !== 'basketball') return []
   const waived = waivedDocs(reg)
-  return bbRequiredDocs(reg.bb_situation, fibaNatCode(reg), reg.geburtsdatum)
+  return bbRequiredDocs(reg.bb_situation, fibaNatCode(reg), reg.geburtsdatum, reg.bb_recent_licence)
     .filter((k) => !reg[k] && !waived.includes(k))
 }
 
@@ -1194,7 +1217,7 @@ function ExpandedDetails({
   // Editable <select> variant of field() — used for the passive-member Sektion
   // choice (Volleyball/Basketball/KSCW), which the approver picks and the
   // ClubDesk create-push then sends as the Sektion column.
-  const selectField = (key: keyof Registration, label: string, choices: string[]) => {
+  const selectField = (key: keyof Registration, label: string, choices: string[], labels?: Record<string, string>) => {
     const original = (reg[key] as string) ?? ''
     const value = edits[key] ?? original
     return (
@@ -1212,7 +1235,7 @@ function ExpandedDetails({
           className="w-full rounded-md border border-gray-200 bg-transparent px-2.5 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
         >
           <option value="">—</option>
-          {choices.map((c) => <option key={c} value={c}>{c}</option>)}
+          {choices.map((c) => <option key={c} value={c}>{labels?.[c] ?? c}</option>)}
         </select>
       </div>
     )
@@ -1224,7 +1247,7 @@ function ExpandedDetails({
 
     // The coded columns carry CHECK constraints that accept NULL but not '' —
     // a cleared picker must send null or the PATCH fails.
-    for (const key of ['nationalitaet_codes', 'federation_of_origin']) {
+    for (const key of ['nationalitaet_codes', 'federation_of_origin', 'bb_recent_licence']) {
       if (data[key] === '') data[key] = null
     }
 
@@ -1398,6 +1421,16 @@ function ExpandedDetails({
             </div>
           </div>
         )}
+        {/* The answer that decides whether this row owes a Freibrief. Editable
+            because it is often settled after submission — the applicant is
+            unsure, the club asks Swiss Basketball, and the answer arrives by
+            email. Recording it here is the honest fix; waiving the document
+            would say the club decided to do without one it never owed. */}
+        {reg.membership_type === 'basketball' && reg.bb_situation === 'transfer_ch' &&
+          selectField('bb_recent_licence', t('anmeldungenRecentLicence'), ['ja', 'nein'], {
+            ja: t('anmeldungenRecentLicenceYes'),
+            nein: t('anmeldungenRecentLicenceNo'),
+          })}
         <div>
           <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">{t('anmeldungenRef')}</label>
           <div className="px-2.5 py-1.5 text-sm text-gray-500 dark:text-gray-400">{reg.reference_number}</div>

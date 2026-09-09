@@ -4,7 +4,7 @@ import { Coffee, ScrollText } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { useDonateVisible } from '../support/donateConfig'
 
-const APP_VERSION = '2.8.0'
+const APP_VERSION = '2.8.1'
 
 interface ChangelogEntry {
   version: string
@@ -13,6 +13,18 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '2.8.1',
+    date: '09.09.2026',
+    sections: [
+      {
+        title: "Fixes",
+        items: [
+          "A Swiss-club transfer is no longer asked for a Freibrief it does not owe. Swiss Basketball waives the release letter when the player held no licence in the last two seasons \u2014 the former club has nothing to release \u2014 and the server has applied that rule since July. The Anmeldungen page never did: it demanded the document from every transfer, so an approval the backend would have accepted was blocked on screen with no way out but to chase a document that was never required. The page now applies the same rule, and the applicant's own answer to \"licence in the last two seasons?\" is shown on the registration and can be corrected there, since it is often settled by email after the form is submitted.",
+        ],
+      },
+    ],
+  },
   {
     version: '2.8.0',
     date: '09.09.2026',
