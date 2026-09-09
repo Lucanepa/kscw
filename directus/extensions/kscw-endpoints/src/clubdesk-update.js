@@ -3213,7 +3213,24 @@ export function registerClubdeskUpdate(router, { database, logger, services, get
           // register's value back), so it would set a pending flag with nothing to
           // send AND suppress this member's other proposals until it cleared.
           if (p.member_id && String(p.current_value ?? '').trim()) {
-            const changes = [{ field: p.field, old_value: p.proposed_value, new_value: p.current_value }]
+            // ⚠⚠ MERGE, never replace. This used to assign a single-element array,
+            // which silently dropped every other field already staged on that
+            // member — and `clubdesk_push_changes` is not bookkeeping, it is the
+            // LICENCE the sync-up needs to write a register cell at all
+            // (registerCell / CD_REGISTER_FIELDS). Concretely (08.09.2026): six
+            // departures staged `register_status` + `austritt` together, the next
+            // sync-down proposed reverting the status, and refusing that proposal
+            // would have rewritten the array to `register_status` alone — leaving
+            // the exit date set on our side and unpushable forever. Same
+            // filter-then-append the members.items.update hook uses.
+            const prev = await database('members').where('id', p.member_id).first('clubdesk_push_changes')
+            let changes = []
+            try {
+              changes = Array.isArray(prev?.clubdesk_push_changes) ? prev.clubdesk_push_changes
+                : (prev?.clubdesk_push_changes ? JSON.parse(prev.clubdesk_push_changes) : [])
+            } catch { changes = [] }
+            changes = changes.filter((c) => c?.field !== p.field)
+            changes.push({ field: p.field, old_value: p.proposed_value, new_value: p.current_value })
             await database('members').where('id', p.member_id).update({
               clubdesk_push_pending: true,
               clubdesk_push_changes: JSON.stringify(changes),
