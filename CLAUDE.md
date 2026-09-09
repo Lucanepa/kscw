@@ -122,9 +122,9 @@ See `INFRA.md → Domains & Hosting Overview` for full map.
 <!-- Last few dev/deploy entries only, for at-a-glance recent context. Full history → docs/DEVLOG.md
      (append new dev/deploy entries THERE, not here). User-facing release notes → CHANGELOG.md.
      Keep this list pruned to ~5 entries. -->
+- **2026-09-09** A dialog announcing yesterday's commit beside a step that still had nine things to fix (no migration, dev+prod)
 - **2026-09-08** Fix groups wrote the register, then listed everything it had fixed — plus every junior swept out of the Classics umbrellas (no migration, prod data)
 - **2026-09-08** The home page knew every RSVP and the modal asked again — plus three date formats in one News list (migration 357, dev+prod)
 - **2026-09-08** Five steps, three interfaces, and a progress bar that measured the wrong thing (migrations 355-356, dev+prod)
 - **2026-09-08** Volleyball needed no port of the Basketplan sweep — it has had the real fixture key all along (no migration, dev)
-- **2026-09-08** Basketplan has not published 26/27 yet, and the day it does every fixture would have landed twice (no migration, dev)
 **Full history → [`docs/DEVLOG.md`](docs/DEVLOG.md)** · **pre-1.0 → [`docs/DEVLOG-archive.md`](docs/DEVLOG-archive.md)** (v1.0.0 baseline consolidated 2026-06-19).
