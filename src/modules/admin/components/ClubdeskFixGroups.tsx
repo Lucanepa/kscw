@@ -123,6 +123,15 @@ export default function ClubdeskFixGroups({
   // just landed the moment the page opens — a spurious rescan before, and now a
   // spurious "step 5 complete".
   const primed = useRef(false)
+  // ⚠⚠ `finished_at` of a run THIS dialog watched finish. The job row keeps its
+  // last result forever, so without this every render below described a run from
+  // days ago as if it had just happened: opening the dialog showed yesterday's
+  // "Done — 4 group allocations written to ClubDesk. Nothing else to do here."
+  // over yesterday's log, next to a path still reading "5. Fix groups (9)"
+  // (09.09.2026 — the two on screen at once is what made it obvious). The
+  // completion notice, the result table and the log all belong to a run you
+  // watched; a stale one is not a notice, it is a claim that the work is done.
+  const [sessionRunAt, setSessionRunAt] = useState<string | null>(null)
 
   const poll = useCallback(async () => {
     try {
@@ -143,9 +152,12 @@ export default function ClubdeskFixGroups({
       // Refresh the page's findings when a COMMIT lands: the rows it fixed should
       // disappear. A preview changes nothing, so it must not trigger a rescan.
       if (!primed.current) { primed.current = true; lastFinished.current = s.finished_at; return }
-      if (s.state === 'done' && s.mode === 'commit' && s.finished_at
-        && s.finished_at !== lastFinished.current) {
+      if (s.state === 'done' && s.finished_at && s.finished_at !== lastFinished.current) {
         lastFinished.current = s.finished_at
+        // Every finish this dialog witnessed, preview or commit — that is what
+        // makes the panels below this run's rather than some earlier one's.
+        setSessionRunAt(s.finished_at)
+        if (s.mode !== 'commit') return
         onCommitted?.()
         void onDone?.()
       }
@@ -168,17 +180,23 @@ export default function ClubdeskFixGroups({
   const selectionChanged = !!previewedClasses && (
     previewedClasses.size !== classes.size || [...classes].some((c) => !previewedClasses.has(c))
   )
+  /** Did THIS dialog watch the run whose result is on the row right now? */
+  const ownRun = !!status?.finished_at && status.finished_at === sessionRunAt
   // A commit is only offered once a preview of the *current* job succeeded — the
-  // server enforces this too (code 'preview_required'); this just makes it visible.
+  // server enforces this too ('preview_required', and row-by-row 'preview_stale');
+  // this just makes it visible. ⚠ `ownRun` is part of that: a preview from an
+  // earlier session enabled the commit button off results the operator had not
+  // watched being produced, and the server would then refuse the write as stale —
+  // a button that is offered and then bounces is worse than one that is not there.
   const canCommit = status?.state === 'done' && status.mode === 'preview' && !!status.result
-    && !selectionChanged
+    && ownRun && !selectionChanged
   // ⚠ A finished commit had NO terminal state: the result table rendered, the
   // commit button greyed out (canCommit needs a FRESH preview), and the footer
   // still offered only "Run preview" / "Commit to ClubDesk" — so the operator
   // was left asking "why doesn't it say complete, what do I click?" (2026-08-30)
   // with the work already done. A commit that succeeded says so and offers the
   // way out.
-  const committed = status?.state === 'done' && status.mode === 'commit'
+  const committed = status?.state === 'done' && status.mode === 'commit' && ownRun
 
   // ⚠ THE DIALOG HAS THREE STAGES, and used to render as one flat panel that never
   // moved: after a preview succeeded it still read "Preview first, then commit",
@@ -262,7 +280,7 @@ export default function ClubdeskFixGroups({
       icon={Wrench}
       // ⚠ Only while a run is in flight or has just finished. A bar over the class
       // checkboxes would be a progress claim about a person choosing what to fix.
-      job={busy || status?.state === 'done' || status?.state === 'failed'
+      job={busy || ((status?.state === 'done' || status?.state === 'failed') && ownRun)
         ? {
           running: busy,
           done: status?.state === 'done',
@@ -351,7 +369,7 @@ export default function ClubdeskFixGroups({
           )}
 
           {/* Per-row outcome — this IS what the operator approves before committing. */}
-          {status?.state === 'done' && resultRows.length > 0 && (
+          {status?.state === 'done' && ownRun && resultRows.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">
                 {status.mode === 'commit' ? t('cdFixResultCommit') : t('cdFixResultPreview')}
