@@ -2,6 +2,12 @@
 
 All notable changes to Wiedisync, the KSC Wiedikon members' platform. This file is the curated, user-facing release record (English, semver), mirrored in the in-app "What's New" (`src/modules/changelog/ChangelogPage.tsx`). For commit-level detail see `git log`; for the operator/deploy history see `docs/DEVLOG.md`.
 
+## v2.8.1 — 2026-09-09
+
+### Fixes
+
+- **A Swiss-club transfer is no longer asked for a Freibrief it does not owe.** Swiss Basketball waives the release letter when the player held no licence in the last two seasons — the former club has nothing to release — and the server has applied that rule since July. The Anmeldungen page never did: it demanded the document from every transfer, so an approval the backend would have accepted was blocked on screen with no way out but to chase a document that was never required. The page now applies the same rule, and the applicant's own answer to "licence in the last two seasons?" is shown on the registration and can be corrected there, since it is often settled by email after the form is submitted.
+
 ## v2.8.0 — 2026-09-09
 
 ### Features
