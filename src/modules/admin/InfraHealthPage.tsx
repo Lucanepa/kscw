@@ -25,12 +25,23 @@ interface HealthCheck {
 
 // Manually-triggerable data sources → their /kscw/admin/<endpoint> route.
 // SV / BP / GCal run in-process (fast); VM / SVRZ spawn a child and return 202.
-const SYNC_SOURCES: { key: string; labelKey: string; endpoint: string }[] = [
-  { key: 'sv_sync', labelKey: 'infraSvSync', endpoint: 'sv-sync' },
-  { key: 'bp_sync', labelKey: 'infraBpSync', endpoint: 'bp-sync' },
-  { key: 'vm_sync', labelKey: 'infraVmSync', endpoint: 'vm-sync' },
-  { key: 'svrz_sync', labelKey: 'infraSvrzSync', endpoint: 'svrz-sync' },
-  { key: 'gcal_sync', labelKey: 'infraGcalSync', endpoint: 'gcal-sync' },
+const DAY = 24 * 3600000
+
+/**
+ * ⚠ `staleHours` is per source because these jobs do NOT share a cadence, and one
+ * threshold for all of them turns a healthy job amber for most of its cycle.
+ * Volleymanager syncs WEEKLY (`0 4 * * 1` in kscw-hooks — deliberately, the
+ * account is shared with svrz_rc and a backoff exists so an outage cannot hammer
+ * volleyball.ch all week), so against the old flat 48h it read "Stale" from every
+ * Wednesday morning until the following Monday. Pressing "Run now" turned it green
+ * and it drifted back two days later, every week (09.09.2026).
+ */
+const SYNC_SOURCES: { key: string; labelKey: string; endpoint: string; staleMs: number }[] = [
+  { key: 'sv_sync', labelKey: 'infraSvSync', endpoint: 'sv-sync', staleMs: 2 * DAY },      // daily 06:00
+  { key: 'bp_sync', labelKey: 'infraBpSync', endpoint: 'bp-sync', staleMs: 2 * DAY },      // daily 06:05
+  { key: 'vm_sync', labelKey: 'infraVmSync', endpoint: 'vm-sync', staleMs: 8 * DAY },      // WEEKLY, Mondays 04:00
+  { key: 'svrz_sync', labelKey: 'infraSvrzSync', endpoint: 'svrz-sync', staleMs: 2 * DAY },// daily 04:30
+  { key: 'gcal_sync', labelKey: 'infraGcalSync', endpoint: 'gcal-sync', staleMs: 2 * DAY },// daily 04:00
 ]
 
 function statusColor(s: Status) {
@@ -201,7 +212,6 @@ export default function InfraHealthPage() {
   // instead of copied into state by an effect.
   const syncs = useMemo<HealthCheck[]>(() => {
     const byKey = new Map(infraHealth.runs.map(r => [r.source, r]))
-    const SYNC_STALE = 48 * 3600000
     return SYNC_SOURCES.map(src => {
       const run = byKey.get(src.key)
       const ranAt = run?.last_run_at && new Date(run.last_run_at).getTime() > new Date('2000-01-01').getTime()
@@ -210,7 +220,7 @@ export default function InfraHealthPage() {
       let detail = t('infraNoData')
       if (ranAt) {
         const ageMs = (run!.age_seconds ?? 0) * 1000
-        status = run!.status === 'error' ? 'down' : ageMs > SYNC_STALE ? 'stale' : 'healthy'
+        status = run!.status === 'error' ? 'down' : ageMs > src.staleMs ? 'stale' : 'healthy'
         detail = run!.status === 'error'
           ? (run!.error_message?.slice(0, 60) || timeAgo(ranAt, t))
           : timeAgo(ranAt, t)
@@ -339,7 +349,14 @@ export default function InfraHealthPage() {
     const CRON_STALE = 48 * 3600000 // 48h
 
     // Notification-heartbeat card for a given notification type (or all).
-    const notifCard = async (labelKey: string, type?: string, emptyOk = false): Promise<HealthCheck> => {
+    // ⚠ `staleMs` per card, for the same reason SYNC_SOURCES carries one: these
+    // are heartbeats over notifications that are EVENT-DRIVEN, not periodic. A
+    // deadline reminder only exists when an RSVP deadline is actually approaching,
+    // so a quiet Monday and Tuesday leaves the newest row two days old with the
+    // cron running perfectly (09.09.2026: 27 sent in the preceding week, newest on
+    // the Sunday, card amber). Judge each on how often its kind of thing happens.
+    const notifCard = async (labelKey: string, type?: string, emptyOk = false,
+      staleMs: number = CRON_STALE): Promise<HealthCheck> => {
       try {
         const rows = await fetchItems<{ date_created: string }>('notifications', {
           limit: 1,
@@ -350,7 +367,7 @@ export default function InfraHealthPage() {
         if (rows.length) {
           const last = rows[0].date_created
           const diff = Date.now() - new Date(last).getTime()
-          return { name: t(labelKey), status: diff > CRON_STALE ? 'stale' : 'healthy', detail: timeAgo(last, t) }
+          return { name: t(labelKey), status: diff > staleMs ? 'stale' : 'healthy', detail: timeAgo(last, t) }
         }
         // No matching notifications. For reminder crons this is a normal idle
         // state (nothing currently due — e.g. off-season), not a fault: show it
@@ -366,8 +383,10 @@ export default function InfraHealthPage() {
     const cronResults = await Promise.all<HealthCheck>([
       // Notifications (created by Postgres triggers on game/training/event CRUD)
       notifCard('infraNotifCron'),
-      // Participation Reminders (deadline_reminder notifications from 07:00 UTC cron)
-      notifCard('infraParticipationCron', 'deadline_reminder', true),
+      // Participation Reminders (deadline_reminder notifications from 07:00 UTC cron).
+      // 7 days: the cron runs daily but only emits when a deadline is approaching — a week
+      // with no deadlines due is a quiet week, not a broken cron.
+      notifCard('infraParticipationCron', 'deadline_reminder', true, 7 * DAY),
       // Upcoming Activity Reminders (06:30 UTC cron)
       notifCard('infraUpcomingCron', 'upcoming_activity', true),
       // Shell Expiry (02:00 UTC — check if any expired shells remain active)
